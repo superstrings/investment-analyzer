@@ -1,0 +1,81 @@
+# {{ title }}
+
+生成时间: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+## 持仓变动
+
+{% if data.trades %}
+| 类型 | 数量 | 金额 |
+|------|------|------|
+| 买入 | {{ data.trades.buy_count or 0 }} 笔 | {{ data.trades.buy_amount|format_currency if data.trades.buy_amount else '-' }} |
+| 卖出 | {{ data.trades.sell_count or 0 }} 笔 | {{ data.trades.sell_amount|format_currency if data.trades.sell_amount else '-' }} |
+| 净买入 | - | {{ data.trades.net_buy|format_currency if data.trades.net_buy else '-' }} |
+
+{% if data.trades.details and data.trades.details|length > 0 %}
+### 交易明细
+
+| 时间 | 股票 | 方向 | 数量 | 价格 | 金额 |
+|------|------|------|------|------|------|
+{% for trade in data.trades.details %}
+| {{ trade.time or '-' }} | {{ trade.code }} | {{ trade.side }} | {{ trade.qty|format_number(0) }} | {{ trade.price|format_currency }} | {{ trade.amount|format_currency }} |
+{% endfor %}
+{% endif %}
+{% else %}
+今日无交易记录
+{% endif %}
+
+## 持仓盈亏
+
+{% if data.pl %}
+| 指标 | 值 |
+|------|-----|
+| 今日盈亏 | {{ data.pl.today_pl|format_currency if data.pl.today_pl else '-' }} |
+| 今日盈亏率 | {{ data.pl.today_pl_pct|format_percent if data.pl.today_pl_pct is defined else '-' }} |
+| 累计盈亏 | {{ data.pl.total_pl|format_currency if data.pl.total_pl else '-' }} |
+| 累计盈亏率 | {{ data.pl.total_pl_pct|format_percent if data.pl.total_pl_pct is defined else '-' }} |
+
+{% if data.pl.by_position and data.pl.by_position|length > 0 %}
+### 各持仓今日表现
+
+| 股票 | 今日涨跌 | 盈亏金额 |
+|------|----------|----------|
+{% for pos in data.pl.by_position %}
+| {{ pos.code }} | {{ pos.change_pct|format_percent }} | {{ pos.pl_today|format_currency }} |
+{% endfor %}
+{% endif %}
+{% else %}
+无盈亏数据
+{% endif %}
+
+## 重点关注
+
+{% if data.watchlist_alerts and data.watchlist_alerts|length > 0 %}
+{% for alert in data.watchlist_alerts %}
+- {{ alert }}
+{% endfor %}
+{% else %}
+无特别关注事项
+{% endif %}
+
+## 技术信号
+
+{% if data.technical_signals and data.technical_signals|length > 0 %}
+{% for signal in data.technical_signals %}
+- {{ signal }}
+{% endfor %}
+{% else %}
+无技术信号
+{% endif %}
+
+{% if data.market_summary %}
+## 市场概况
+
+| 指数 | 收盘 | 涨跌 |
+|------|------|------|
+{% for market in data.market_summary %}
+| {{ market.name }} | {{ market.close|format_number }} | {{ market.change_pct|format_percent }} |
+{% endfor %}
+{% endif %}
+
+---
+*本报告由 Investment Analyzer 自动生成*

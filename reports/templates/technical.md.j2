@@ -1,0 +1,212 @@
+# {{ title }}
+
+生成时间: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+{% if data.chart_path %}
+## K线图
+
+![K线图]({{ data.chart_path }})
+{% endif %}
+
+## 基本信息
+
+{% if data.price_info %}
+| 指标 | 值 |
+|------|-----|
+| 股票代码 | {{ code }} |
+{% if data.price_info.name %}
+| 股票名称 | {{ data.price_info.name }} |
+{% endif %}
+| 最新价 | {{ data.price_info.close|format_currency if data.price_info.close else '-' }} |
+| 开盘价 | {{ data.price_info.open|format_currency if data.price_info.open else '-' }} |
+| 最高价 | {{ data.price_info.high|format_currency if data.price_info.high else '-' }} |
+| 最低价 | {{ data.price_info.low|format_currency if data.price_info.low else '-' }} |
+| 成交量 | {{ data.price_info.volume|format_number(0) if data.price_info.volume else '-' }} |
+{% if data.price_info.change_pct is defined %}
+| 涨跌幅 | {{ data.price_info.change_pct|format_percent }} |
+{% endif %}
+{% else %}
+| 股票代码 | {{ code }} |
+{% endif %}
+
+## 均线系统
+
+{% if data.indicators and data.indicators.ma %}
+| 均线 | 值 | 与现价比 |
+|------|-----|----------|
+{% for name, value in data.indicators.ma.items() %}
+{% set close_price = data.price_info.close if data.price_info and data.price_info.close else 0 %}
+{% set diff_pct = ((close_price - value) / value * 100) if value and value != 0 and close_price else 0 %}
+| {{ name }} | {{ value|format_currency }} | {{ diff_pct|format_percent }} |
+{% endfor %}
+
+{% if data.indicators.ma_alignment %}
+**均线排列**: {{ data.indicators.ma_alignment }}
+{% endif %}
+{% else %}
+暂无均线数据
+{% endif %}
+
+## RSI 指标
+
+{% if data.indicators and data.indicators.rsi %}
+| RSI周期 | 值 | 信号 |
+|---------|-----|------|
+{% for name, value in data.indicators.rsi.items() %}
+| {{ name }} | {{ value|format_number }} | {% if value > 70 %}⚠️ 超买{% elif value < 30 %}⚠️ 超卖{% elif value > 60 %}📈 强势{% elif value < 40 %}📉 弱势{% else %}➖ 中性{% endif %} |
+{% endfor %}
+{% else %}
+暂无 RSI 数据
+{% endif %}
+
+## MACD 指标
+
+{% if data.indicators and data.indicators.macd %}
+| 指标 | 值 |
+|------|-----|
+| MACD | {{ data.indicators.macd.macd|format_number if data.indicators.macd.macd else '-' }} |
+| Signal | {{ data.indicators.macd.signal|format_number if data.indicators.macd.signal else '-' }} |
+| Histogram | {{ data.indicators.macd.histogram|format_number if data.indicators.macd.histogram else '-' }} |
+{% if data.indicators.macd.crossover is defined %}
+| 交叉信号 | {% if data.indicators.macd.crossover == 1 %}🟢 金叉{% elif data.indicators.macd.crossover == -1 %}🔴 死叉{% else %}➖ 无{% endif %} |
+{% endif %}
+{% if data.indicators.macd.position is defined %}
+| 位置 | {% if data.indicators.macd.position == 'above' %}零轴上方{% elif data.indicators.macd.position == 'below' %}零轴下方{% else %}零轴附近{% endif %} |
+{% endif %}
+{% else %}
+暂无 MACD 数据
+{% endif %}
+
+## 布林带
+
+{% if data.indicators and data.indicators.bollinger %}
+| 指标 | 值 |
+|------|-----|
+| 上轨 | {{ data.indicators.bollinger.upper|format_currency if data.indicators.bollinger.upper else '-' }} |
+| 中轨 | {{ data.indicators.bollinger.middle|format_currency if data.indicators.bollinger.middle else '-' }} |
+| 下轨 | {{ data.indicators.bollinger.lower|format_currency if data.indicators.bollinger.lower else '-' }} |
+{% if data.indicators.bollinger.width is defined %}
+| 带宽 | {{ data.indicators.bollinger.width|format_percent }} |
+{% endif %}
+{% if data.indicators.bollinger.position is defined %}
+| 价格位置 | {{ data.indicators.bollinger.position }} |
+{% endif %}
+{% if data.indicators.bollinger.squeeze is defined %}
+| 挤压状态 | {% if data.indicators.bollinger.squeeze %}🔸 挤压中{% else %}➖ 正常{% endif %} |
+{% endif %}
+{% else %}
+暂无布林带数据
+{% endif %}
+
+## OBV (能量潮)
+
+{% if data.indicators and data.indicators.obv %}
+| 指标 | 值 |
+|------|-----|
+| OBV | {{ data.indicators.obv.value|format_number(0) if data.indicators.obv.value else '-' }} |
+{% if data.indicators.obv.trend is defined %}
+| 趋势 | {{ data.indicators.obv.trend }} |
+{% endif %}
+{% if data.indicators.obv.divergence is defined %}
+| 背离 | {% if data.indicators.obv.divergence == 'bullish' %}🟢 看涨背离{% elif data.indicators.obv.divergence == 'bearish' %}🔴 看跌背离{% else %}➖ 无{% endif %} |
+{% endif %}
+{% else %}
+暂无 OBV 数据
+{% endif %}
+
+## VCP 形态分析
+
+{% if data.vcp %}
+| 指标 | 值 |
+|------|-----|
+| 状态 | {% if data.vcp.is_vcp %}✅ 检测到VCP{% else %}❌ 未检测到VCP{% endif %} |
+| 得分 | {{ data.vcp.score|format_number }}/100 |
+| 收缩次数 | {{ data.vcp.contraction_count }} |
+{% if data.vcp.depth_sequence and data.vcp.depth_sequence|length > 0 %}
+| 深度序列 | {{ data.vcp.depth_sequence|map('format_percent')|join(' → ') }} |
+{% endif %}
+{% if data.vcp.pivot_price %}
+| 枢轴价 | {{ data.vcp.pivot_price|format_currency }} |
+| 距枢轴 | {{ data.vcp.pivot_distance_pct|format_percent }} |
+{% endif %}
+{% if data.vcp.volume_trend is defined %}
+| 成交量趋势 | {{ data.vcp.volume_trend|format_percent }} |
+{% endif %}
+{% if data.vcp.range_contraction is defined %}
+| 波幅收缩 | {{ data.vcp.range_contraction|format_percent }} |
+{% endif %}
+
+{% if data.vcp.signals and data.vcp.signals|length > 0 %}
+### VCP 信号
+{% for signal in data.vcp.signals %}
+- {{ signal }}
+{% endfor %}
+{% endif %}
+
+### VCP 得分解读
+{% if data.vcp.score >= 85 %}
+🌟 **优秀VCP** - 高度符合经典VCP形态，关注突破机会
+{% elif data.vcp.score >= 70 %}
+✅ **良好VCP** - 较好的VCP形态，可以关注
+{% elif data.vcp.score >= 50 %}
+⚡ **一般VCP** - 部分符合，需谨慎
+{% else %}
+❌ **弱VCP** - 不符合标准VCP形态
+{% endif %}
+{% else %}
+暂无 VCP 数据
+{% endif %}
+
+## 综合评估
+
+{% if data.summary %}
+| 维度 | 评分 | 信号 |
+|------|------|------|
+{% if data.summary.trend_score is defined %}
+| 趋势 | {{ data.summary.trend_score }}/100 | {{ data.summary.trend_signal or '-' }} |
+{% endif %}
+{% if data.summary.momentum_score is defined %}
+| 动量 | {{ data.summary.momentum_score }}/100 | {{ data.summary.momentum_signal or '-' }} |
+{% endif %}
+{% if data.summary.volatility_score is defined %}
+| 波动 | {{ data.summary.volatility_score }}/100 | {{ data.summary.volatility_signal or '-' }} |
+{% endif %}
+{% if data.summary.volume_score is defined %}
+| 成交量 | {{ data.summary.volume_score }}/100 | {{ data.summary.volume_signal or '-' }} |
+{% endif %}
+{% if data.summary.overall_score is defined %}
+| **综合** | **{{ data.summary.overall_score }}/100** | **{{ data.summary.overall_signal or '-' }}** |
+{% endif %}
+{% else %}
+暂无综合评估数据
+{% endif %}
+
+{% if data.support_resistance %}
+## 支撑/阻力位
+
+| 类型 | 价格 | 说明 |
+|------|------|------|
+{% for level in data.support_resistance %}
+| {{ level.type }} | {{ level.price|format_currency }} | {{ level.note or '-' }} |
+{% endfor %}
+{% endif %}
+
+{% if data.signals and data.signals|length > 0 %}
+## 交易信号
+
+{% for signal in data.signals %}
+- {{ signal }}
+{% endfor %}
+{% endif %}
+
+---
+
+**技术指标说明:**
+- RSI > 70: 超买区域，可能回调
+- RSI < 30: 超卖区域，可能反弹
+- MACD 金叉: 潜在买入信号
+- MACD 死叉: 潜在卖出信号
+- 布林带挤压: 波动即将放大
+
+---
+*本报告由 Investment Analyzer 自动生成*

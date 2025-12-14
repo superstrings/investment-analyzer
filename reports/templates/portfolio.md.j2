@@ -1,0 +1,112 @@
+# {{ title }}
+
+生成时间: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+
+## 组合概览
+
+{% if data.summary %}
+| 指标 | 值 |
+|------|-----|
+| 持仓数量 | {{ data.summary.position_count }} |
+| 总市值 | {{ data.summary.total_market_value|format_currency }} |
+| 总成本 | {{ data.summary.total_cost_value|format_currency }} |
+| 总盈亏 | {{ data.summary.total_pl_value|format_currency }} |
+| 盈亏比例 | {{ data.summary.total_pl_ratio|format_percent }} |
+| 盈利持仓 | {{ data.summary.profitable_count }} |
+| 亏损持仓 | {{ data.summary.losing_count }} |
+| 胜率 | {{ data.summary.win_rate|format_percent(0) }} |
+{% if data.summary.cash_balance is defined and data.summary.cash_balance is not none %}
+| 现金余额 | {{ data.summary.cash_balance|format_currency }} |
+| 总资产 | {{ data.summary.total_assets|format_currency if data.summary.total_assets is defined and data.summary.total_assets else '-' }} |
+| 现金占比 | {{ data.summary.cash_weight|format_percent if data.summary.cash_weight is defined and data.summary.cash_weight else '-' }} |
+{% endif %}
+{% else %}
+暂无数据
+{% endif %}
+
+## 市场配比
+
+{% if data.market_allocation and data.market_allocation|length > 0 %}
+| 市场 | 持仓数 | 市值 | 权重 | 盈亏 | 盈亏% |
+|------|--------|------|------|------|-------|
+{% for alloc in data.market_allocation %}
+| {{ alloc.market }} | {{ alloc.position_count }} | {{ alloc.market_value|format_currency }} | {{ alloc.weight|format_percent }} | {{ alloc.pl_value|format_currency }} | {{ alloc.pl_ratio|format_percent }} |
+{% endfor %}
+{% else %}
+暂无市场配比数据
+{% endif %}
+
+## 持仓明细
+
+{% if data.positions and data.positions|length > 0 %}
+| 股票代码 | 名称 | 数量 | 成本价 | 现价 | 市值 | 盈亏 | 盈亏% | 权重 |
+|----------|------|------|--------|------|------|------|-------|------|
+{% for pos in data.positions %}
+| {{ pos.code }} | {{ pos.name or '-' }} | {{ pos.qty|format_number(0) }} | {{ pos.cost_price|format_currency }} | {{ pos.market_price|format_currency }} | {{ pos.market_value|format_currency }} | {{ pos.pl_value|format_currency }} | {{ pos.pl_ratio|format_percent }} | {{ pos.weight|format_percent }} |
+{% endfor %}
+{% else %}
+暂无持仓数据
+{% endif %}
+
+{% if data.top_performers and data.top_performers|length > 0 %}
+## 表现最佳
+
+| 排名 | 股票代码 | 名称 | 盈亏% |
+|------|----------|------|-------|
+{% for pos in data.top_performers %}
+| {{ loop.index }} | {{ pos.code }} | {{ pos.name or '-' }} | {{ pos.pl_ratio|format_percent }} |
+{% endfor %}
+{% endif %}
+
+{% if data.bottom_performers and data.bottom_performers|length > 0 %}
+## 表现最差
+
+| 排名 | 股票代码 | 名称 | 盈亏% |
+|------|----------|------|-------|
+{% for pos in data.bottom_performers %}
+| {{ loop.index }} | {{ pos.code }} | {{ pos.name or '-' }} | {{ pos.pl_ratio|format_percent }} |
+{% endfor %}
+{% endif %}
+
+## 风险评估
+
+{% if data.risk_metrics %}
+| 风险指标 | 值 | 状态 |
+|----------|-----|------|
+| 集中度风险 | {{ data.risk_metrics.concentration_risk|upper }} | {% if data.risk_metrics.concentration_risk in ['high', 'very_high'] %}⚠️ 需关注{% else %}✅ 正常{% endif %} |
+| HHI指数 | {{ data.risk_metrics.hhi_index|format_number(0) }} | {% if data.risk_metrics.hhi_index > 2500 %}⚠️ 高度集中{% elif data.risk_metrics.hhi_index > 1500 %}⚡ 中等集中{% else %}✅ 分散{% endif %} |
+| 分散化得分 | {{ data.risk_metrics.diversification_score|format_number(0) }}/100 | {% if data.risk_metrics.diversification_score < 30 %}⚠️ 较低{% elif data.risk_metrics.diversification_score < 60 %}⚡ 中等{% else %}✅ 良好{% endif %} |
+{% if data.risk_metrics.largest_loss_position %}
+| 最大亏损持仓 | {{ data.risk_metrics.largest_loss_position }} | {{ data.risk_metrics.largest_loss_ratio|format_percent }} |
+{% endif %}
+| 总浮亏 | {{ data.risk_metrics.total_unrealized_loss|format_currency }} | {% if data.risk_metrics.total_unrealized_loss < -10000 %}⚠️{% else %}✅{% endif %} |
+| 亏损持仓比例 | {{ data.risk_metrics.positions_at_loss_ratio|format_percent }} | {% if data.risk_metrics.positions_at_loss_ratio > 50 %}⚠️{% else %}✅{% endif %} |
+{% else %}
+暂无风险数据
+{% endif %}
+
+## 信号提醒
+
+{% if data.signals and data.signals|length > 0 %}
+{% for signal in data.signals %}
+- {{ signal }}
+{% endfor %}
+{% else %}
+无特别信号
+{% endif %}
+
+---
+
+**集中度指标说明:**
+- HHI指数 < 1500: 分散投资
+- HHI指数 1500-2500: 中等集中
+- HHI指数 > 2500: 高度集中
+
+**风险等级说明:**
+- LOW: 低风险，分散良好
+- MEDIUM: 中等风险，关注集中度
+- HIGH: 高风险，最大持仓 > 20%
+- VERY_HIGH: 极高风险，最大持仓 > 30%
+
+---
+*本报告由 Investment Analyzer 自动生成*

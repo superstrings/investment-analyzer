@@ -1,0 +1,135 @@
+# {{ title }}
+
+生成时间: {{ generated_at.strftime('%Y-%m-%d %H:%M:%S') }}
+统计周期: {{ week_start.strftime('%Y-%m-%d') }} ~ {{ week_end.strftime('%Y-%m-%d') }}
+
+## 本周交易汇总
+
+{% if data.trades %}
+| 指标 | 值 |
+|------|-----|
+| 总交易笔数 | {{ data.trades.total_count or 0 }} |
+| 买入笔数 | {{ data.trades.buy_count or 0 }} |
+| 卖出笔数 | {{ data.trades.sell_count or 0 }} |
+| 买入金额 | {{ data.trades.buy_amount|format_currency if data.trades.buy_amount else '-' }} |
+| 卖出金额 | {{ data.trades.sell_amount|format_currency if data.trades.sell_amount else '-' }} |
+| 净买入 | {{ data.trades.net_buy|format_currency if data.trades.net_buy else '-' }} |
+
+{% if data.trades.by_day and data.trades.by_day|length > 0 %}
+### 每日交易
+
+| 日期 | 买入 | 卖出 | 净额 |
+|------|------|------|------|
+{% for day in data.trades.by_day %}
+| {{ day.date }} | {{ day.buy_amount|format_currency }} | {{ day.sell_amount|format_currency }} | {{ day.net|format_currency }} |
+{% endfor %}
+{% endif %}
+{% else %}
+本周无交易记录
+{% endif %}
+
+## 本周盈亏
+
+{% if data.pl %}
+| 指标 | 值 |
+|------|-----|
+| 实现盈亏 | {{ data.pl.realized_pl|format_currency if data.pl.realized_pl else '-' }} |
+| 浮动盈亏变化 | {{ data.pl.unrealized_change|format_currency if data.pl.unrealized_change else '-' }} |
+| 总盈亏变化 | {{ data.pl.total_change|format_currency if data.pl.total_change else '-' }} |
+| 周收益率 | {{ data.pl.weekly_return_pct|format_percent if data.pl.weekly_return_pct is defined else '-' }} |
+
+{% if data.pl.top_gainers and data.pl.top_gainers|length > 0 %}
+### 本周涨幅榜
+
+| 排名 | 股票 | 涨跌幅 | 盈亏 |
+|------|------|--------|------|
+{% for stock in data.pl.top_gainers %}
+| {{ loop.index }} | {{ stock.code }} | {{ stock.change_pct|format_percent }} | {{ stock.pl|format_currency }} |
+{% endfor %}
+{% endif %}
+
+{% if data.pl.top_losers and data.pl.top_losers|length > 0 %}
+### 本周跌幅榜
+
+| 排名 | 股票 | 涨跌幅 | 亏损 |
+|------|------|--------|------|
+{% for stock in data.pl.top_losers %}
+| {{ loop.index }} | {{ stock.code }} | {{ stock.change_pct|format_percent }} | {{ stock.pl|format_currency }} |
+{% endfor %}
+{% endif %}
+{% else %}
+无盈亏数据
+{% endif %}
+
+## 持仓变化
+
+{% if data.position_changes and data.position_changes|length > 0 %}
+| 股票 | 变化类型 | 数量变化 | 备注 |
+|------|----------|----------|------|
+{% for change in data.position_changes %}
+| {{ change.code }} | {{ change.type }} | {{ change.qty_change|format_number(0) if change.qty_change else '-' }} | {{ change.note or '-' }} |
+{% endfor %}
+{% else %}
+无持仓变化
+{% endif %}
+
+{% if data.portfolio_summary %}
+## 组合概况
+
+| 指标 | 周初 | 周末 | 变化 |
+|------|------|------|------|
+| 总市值 | {{ data.portfolio_summary.start_value|format_currency if data.portfolio_summary.start_value else '-' }} | {{ data.portfolio_summary.end_value|format_currency if data.portfolio_summary.end_value else '-' }} | {{ data.portfolio_summary.value_change|format_currency if data.portfolio_summary.value_change else '-' }} |
+| 持仓数量 | {{ data.portfolio_summary.start_positions or '-' }} | {{ data.portfolio_summary.end_positions or '-' }} | {{ data.portfolio_summary.positions_change or '-' }} |
+| 现金比例 | {{ data.portfolio_summary.start_cash_pct|format_percent if data.portfolio_summary.start_cash_pct is defined else '-' }} | {{ data.portfolio_summary.end_cash_pct|format_percent if data.portfolio_summary.end_cash_pct is defined else '-' }} | - |
+{% endif %}
+
+## 下周计划
+
+{% if data.next_week %}
+### 关注突破
+{% if data.next_week.breakout_candidates and data.next_week.breakout_candidates|length > 0 %}
+{% for candidate in data.next_week.breakout_candidates %}
+- {{ candidate }}
+{% endfor %}
+{% else %}
+无
+{% endif %}
+
+### 止盈目标
+{% if data.next_week.profit_targets and data.next_week.profit_targets|length > 0 %}
+{% for target in data.next_week.profit_targets %}
+- {{ target }}
+{% endfor %}
+{% else %}
+无
+{% endif %}
+
+### 止损预警
+{% if data.next_week.stop_loss_alerts and data.next_week.stop_loss_alerts|length > 0 %}
+{% for alert in data.next_week.stop_loss_alerts %}
+- {{ alert }}
+{% endfor %}
+{% else %}
+无
+{% endif %}
+
+### 关注列表
+{% if data.next_week.watchlist and data.next_week.watchlist|length > 0 %}
+{% for stock in data.next_week.watchlist %}
+- {{ stock }}
+{% endfor %}
+{% else %}
+无
+{% endif %}
+{% else %}
+暂无下周计划
+{% endif %}
+
+{% if data.notes %}
+## 本周备注
+
+{{ data.notes }}
+{% endif %}
+
+---
+*本报告由 Investment Analyzer 自动生成*
