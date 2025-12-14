@@ -624,6 +624,205 @@
 
 ---
 
+## 阶段 M7: 质量保障
+
+```json
+{
+  "phase": "M7_quality",
+  "description": "集成测试、真实数据验证、CLI优化",
+  "tasks": [
+    {
+      "id": "T020",
+      "category": "testing",
+      "title": "端到端集成测试",
+      "description": "实现完整数据流程的集成测试",
+      "priority": "P0",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "创建 tests/integration/ 目录",
+        "实现数据采集→存储→分析→图表完整流程测试",
+        "实现报告生成集成测试",
+        "实现数据一致性验证测试",
+        "实现错误处理和恢复测试",
+        "创建测试数据固件 (fixtures)",
+        "创建集成测试 CI 配置"
+      ],
+      "files": [
+        "tests/integration/__init__.py",
+        "tests/integration/test_data_flow.py",
+        "tests/integration/test_report_flow.py",
+        "tests/integration/conftest.py"
+      ]
+    },
+    {
+      "id": "T021",
+      "category": "testing",
+      "title": "富途 API 真实数据测试",
+      "description": "使用真实富途 API 进行端到端验证",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "创建富途连接测试脚本",
+        "验证持仓数据同步准确性",
+        "验证交易记录同步完整性",
+        "验证账户资金数据准确性",
+        "测试断线重连机制",
+        "测试 API 限流处理",
+        "创建真实数据测试报告"
+      ],
+      "files": [
+        "scripts/test_futu_live.py",
+        "tests/live/__init__.py",
+        "tests/live/test_futu_connection.py"
+      ],
+      "note": "需要富途 OpenD 运行环境"
+    },
+    {
+      "id": "T022",
+      "category": "cli",
+      "title": "CLI 增强优化",
+      "description": "改进 CLI 交互体验和功能",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "添加进度条显示 (tqdm/rich)",
+        "添加彩色输出 (rich)",
+        "改进错误提示信息",
+        "添加 --dry-run 选项",
+        "添加 --output-format 选项 (table/json/csv)",
+        "实现命令自动补全",
+        "添加交互式配置向导"
+      ],
+      "files": [
+        "main.py",
+        "cli/__init__.py",
+        "cli/utils.py"
+      ]
+    }
+  ]
+}
+```
+
+---
+
+## 阶段 M8: 功能增强
+
+```json
+{
+  "phase": "M8_enhancement",
+  "description": "新功能开发",
+  "tasks": [
+    {
+      "id": "T023",
+      "category": "feature",
+      "title": "价格提醒系统",
+      "description": "实现股票价格提醒功能",
+      "priority": "P2",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "设计提醒规则数据模型 (price_alerts 表)",
+        "实现提醒规则 CRUD",
+        "实现价格监控服务",
+        "实现提醒触发逻辑 (突破/跌破/涨跌幅)",
+        "实现提醒通知 (终端/文件/webhook)",
+        "添加 CLI 命令 (alert add/list/delete)",
+        "创建测试用例"
+      ],
+      "files": [
+        "db/models.py",
+        "db/migrations/add_price_alerts.sql",
+        "services/alert_service.py",
+        "main.py",
+        "tests/test_alerts.py"
+      ]
+    },
+    {
+      "id": "T024",
+      "category": "feature",
+      "title": "回测框架",
+      "description": "实现简单的策略回测功能",
+      "priority": "P2",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "设计回测引擎架构",
+        "实现 Strategy 基类",
+        "实现 Backtest 引擎",
+        "实现回测结果计算 (收益率/夏普/最大回撤)",
+        "实现 MA 交叉策略示例",
+        "实现 VCP 突破策略示例",
+        "实现回测报告生成",
+        "添加 CLI 命令 (backtest run/report)"
+      ],
+      "files": [
+        "backtest/__init__.py",
+        "backtest/engine.py",
+        "backtest/strategy.py",
+        "backtest/strategies/ma_cross.py",
+        "backtest/strategies/vcp_breakout.py",
+        "backtest/report.py",
+        "main.py",
+        "tests/test_backtest.py"
+      ]
+    },
+    {
+      "id": "T025",
+      "category": "analysis",
+      "title": "更多技术形态识别",
+      "description": "扩展技术形态识别能力",
+      "priority": "P2",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "实现杯柄形态 (Cup and Handle)",
+        "实现头肩顶/底形态",
+        "实现双顶/双底形态",
+        "实现三角形整理形态",
+        "实现支撑阻力位识别",
+        "实现趋势线自动绘制",
+        "创建形态扫描器",
+        "创建测试用例"
+      ],
+      "files": [
+        "analysis/indicators/patterns.py",
+        "analysis/indicators/support_resistance.py",
+        "analysis/indicators/trendline.py",
+        "analysis/scanner.py",
+        "tests/test_patterns.py"
+      ]
+    },
+    {
+      "id": "T026",
+      "category": "feature",
+      "title": "数据导出功能",
+      "description": "实现多格式数据导出",
+      "priority": "P3",
+      "status": "pending",
+      "progress": 0,
+      "pending_items": [
+        "实现 CSV 导出 (持仓/交易/K线)",
+        "实现 Excel 导出 (多工作表)",
+        "实现 JSON 导出",
+        "实现数据筛选和时间范围选择",
+        "添加 CLI 命令 (export positions/trades/klines)",
+        "创建测试用例"
+      ],
+      "files": [
+        "services/export_service.py",
+        "main.py",
+        "tests/test_export.py"
+      ]
+    }
+  ]
+}
+```
+
+---
+
 ## 快速查看
 
 ### 按优先级
@@ -640,6 +839,7 @@
 | T009 | 数据同步服务 | P0 | ✅ completed | 100% |
 | T011 | K线图生成器 | P0 | ✅ completed | 100% |
 | T013 | 技术指标计算 | P0 | ✅ completed | 100% |
+| T020 | 端到端集成测试 | P0 | ⏳ pending | 0% |
 | T006 | 主程序入口 | P1 | ✅ completed | 100% |
 | T010 | CSV 数据导入 | P1 | ✅ completed | 100% |
 | T012 | 批量图表生成 | P1 | ✅ completed | 100% |
@@ -649,12 +849,18 @@
 | T017 | Technical Analyzer Skill | P1 | ✅ completed | 100% |
 | T018 | Report Generator Skill | P1 | ✅ completed | 100% |
 | T019 | 报告生成器 | P1 | ✅ completed | 100% |
+| T021 | 富途 API 真实数据测试 | P1 | ⏳ pending | 0% |
+| T022 | CLI 增强优化 | P1 | ⏳ pending | 0% |
+| T023 | 价格提醒系统 | P2 | ⏳ pending | 0% |
+| T024 | 回测框架 | P2 | ⏳ pending | 0% |
+| T025 | 更多技术形态识别 | P2 | ⏳ pending | 0% |
+| T026 | 数据导出功能 | P3 | ⏳ pending | 0% |
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015, T016, T017, T018, T019
+- **已完成**: T001-T019 (19个任务)
 - **进行中**: 无
-- **待开始**: 无
+- **待开始**: T020, T021, T022, T023, T024, T025, T026 (7个任务)
 - **已阻塞**: 无
 
 ### 参考文档

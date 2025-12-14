@@ -28,11 +28,17 @@
 
 ```
 docs/
-├── investment-analyzer-design.md  # 需求与设计文档
-├── api/                          # API 接口文档
-├── database/                     # 数据库设计
-│   └── schema.md
-└── reports/                      # 生成的分析报告
+├── investment-analyzer-design.md  # 原始需求设计 (历史)
+├── design/                        # 设计文档
+│   ├── requirements.md            # 需求规格
+│   └── architecture.md            # 架构设计
+├── database/                      # 数据库设计
+│   └── schema.md                  # 表结构设计
+├── api/                           # API 文档
+│   └── README.md                  # Python API 参考
+└── development/                   # 开发文档
+    ├── README.md                  # 开发指南
+    └── claude-code.md             # Claude Code 集成指南
 ```
 
 ## 标准开发流程
@@ -155,12 +161,14 @@ python -m pytest tests/ -v
 
 | 阶段 | 内容 | 状态 |
 |------|------|------|
-| **M1: 基础框架** | 项目结构、数据库、配置管理 | pending |
-| **M2: 数据采集** | 富途Fetcher、K线Fetcher、数据同步 | pending |
-| **M3: 图表生成** | K线图生成、技术指标叠加 | pending |
-| **M4: 分析模块** | 技术指标计算、组合分析 | pending |
-| **M5: Claude Skills** | 技能定义、集成测试 | pending |
-| **M6: 完善优化** | 多用户测试、文档、优化 | pending |
+| **M1: 基础框架** | 项目结构、数据库、配置管理 | ✅ completed |
+| **M2: 数据采集** | 富途Fetcher、K线Fetcher、数据同步 | ✅ completed |
+| **M3: 图表生成** | K线图生成、技术指标叠加 | ✅ completed |
+| **M4: 分析模块** | 技术指标计算、VCP形态、组合分析 | ✅ completed |
+| **M5: Claude Skills** | 技能定义、SKILL.md文档 | ✅ completed |
+| **M6: 报告生成** | Jinja2模板、4种报告类型 | ✅ completed |
+| **M7: 质量保障** | 集成测试、真实数据验证、CLI优化 | pending |
+| **M8: 功能增强** | 价格提醒、回测框架、更多形态识别 | pending |
 
 ---
 
