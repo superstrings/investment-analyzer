@@ -351,9 +351,7 @@ def chart_single(
 )
 def chart_watchlist(user: str, days: int, style: str):
     """为关注列表生成图表"""
-    from charts import ChartConfig, ChartGenerator
-    from db import WatchlistItem
-    from fetchers import KlineFetcher
+    from services import BatchChartConfig, ChartService
 
     click.echo(f"Generating charts for {user}'s watchlist...")
 
@@ -362,49 +360,28 @@ def chart_watchlist(user: str, days: int, style: str):
         click.echo(f"Error: User '{user}' not found in database.", err=True)
         sys.exit(1)
 
-    # Get watchlist items
-    with get_session() as session:
-        watchlist = session.query(WatchlistItem).filter_by(user_id=db_user.id).all()
-        codes = [item.code for item in watchlist]
-
-    if not codes:
-        click.echo(f"No items in watchlist for user '{user}'")
-        return
-
-    click.echo(f"Found {len(codes)} stocks in watchlist")
-
     try:
-        fetcher = KlineFetcher()
-        generator = ChartGenerator(style=style)
-        config = ChartConfig(
-            ma_periods=[5, 10, 20, 60],
-            show_volume=True,
-            last_n_days=days,
+        config = BatchChartConfig(days=days, style=style, output_subdir=user)
+        service = ChartService(output_dir=settings.chart.output_dir)
+        result = service.generate_watchlist_charts(
+            user_id=db_user.id,
+            config=config,
         )
 
-        output_dir = settings.chart.output_dir / user
-        output_dir.mkdir(parents=True, exist_ok=True)
+        if result.charts_generated == 0 and result.error_message:
+            click.echo(f"No charts generated: {result.error_message}")
+            return
 
-        success_count = 0
-        for code in codes:
-            result = fetcher.fetch(code, days=days)
-            if result.success and result.df is not None and not result.df.empty:
-                output_path = output_dir / f"{code.replace('.', '_')}.png"
-                chart_path = generator.generate(
-                    df=result.df,
-                    title=code,
-                    output_path=output_path,
-                    config=config,
-                )
-                if chart_path:
-                    success_count += 1
-                    click.echo(f"  Generated: {code}")
-            else:
-                click.echo(f"  Skipped: {code} (no data)")
+        # Show progress
+        for path in result.generated_files:
+            click.echo(f"  Generated: {path.stem}")
+        for code in result.failed_codes:
+            click.echo(f"  Skipped: {code} (no data)")
 
+        total = result.charts_generated + result.charts_failed
         click.echo(
             click.style("Done: ", fg="green")
-            + f"Generated {success_count}/{len(codes)} charts in {output_dir}"
+            + f"Generated {result.charts_generated}/{total} charts in {result.output_dir}"
         )
 
     except Exception as e:
@@ -423,8 +400,7 @@ def chart_watchlist(user: str, days: int, style: str):
 )
 def chart_positions(user: str, days: int, style: str):
     """为持仓股票生成图表"""
-    from charts import ChartConfig, ChartGenerator
-    from fetchers import KlineFetcher
+    from services import BatchChartConfig, ChartService
 
     click.echo(f"Generating charts for {user}'s positions...")
 
@@ -433,54 +409,30 @@ def chart_positions(user: str, days: int, style: str):
         click.echo(f"Error: User '{user}' not found in database.", err=True)
         sys.exit(1)
 
-    # Get position codes
-    with get_session() as session:
-        positions = (
-            session.query(Position)
-            .join(Account)
-            .filter(Account.user_id == db_user.id)
-            .all()
-        )
-        codes = list(set(p.code for p in positions if p.qty > 0))
-
-    if not codes:
-        click.echo(f"No active positions for user '{user}'")
-        return
-
-    click.echo(f"Found {len(codes)} stocks in positions")
-
     try:
-        fetcher = KlineFetcher()
-        generator = ChartGenerator(style=style)
-        config = ChartConfig(
-            ma_periods=[5, 10, 20, 60],
-            show_volume=True,
-            last_n_days=days,
+        config = BatchChartConfig(
+            days=days, style=style, output_subdir=f"{user}/positions"
+        )
+        service = ChartService(output_dir=settings.chart.output_dir)
+        result = service.generate_position_charts(
+            user_id=db_user.id,
+            config=config,
         )
 
-        output_dir = settings.chart.output_dir / user / "positions"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        if result.charts_generated == 0 and result.error_message:
+            click.echo(f"No charts generated: {result.error_message}")
+            return
 
-        success_count = 0
-        for code in codes:
-            result = fetcher.fetch(code, days=days)
-            if result.success and result.df is not None and not result.df.empty:
-                output_path = output_dir / f"{code.replace('.', '_')}.png"
-                chart_path = generator.generate(
-                    df=result.df,
-                    title=code,
-                    output_path=output_path,
-                    config=config,
-                )
-                if chart_path:
-                    success_count += 1
-                    click.echo(f"  Generated: {code}")
-            else:
-                click.echo(f"  Skipped: {code} (no data)")
+        # Show progress
+        for path in result.generated_files:
+            click.echo(f"  Generated: {path.stem}")
+        for code in result.failed_codes:
+            click.echo(f"  Skipped: {code} (no data)")
 
+        total = result.charts_generated + result.charts_failed
         click.echo(
             click.style("Done: ", fg="green")
-            + f"Generated {success_count}/{len(codes)} charts in {output_dir}"
+            + f"Generated {result.charts_generated}/{total} charts in {result.output_dir}"
         )
 
     except Exception as e:

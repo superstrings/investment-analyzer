@@ -41,6 +41,7 @@
 | ID | 任务 | 完成日期 | 主要产出 |
 |----|------|---------|---------|
 | T011 | K线图生成器 | 2025-12-14 | charts/generator.py, styles.py (mplfinance), 38 tests |
+| T012 | 批量图表生成 | 2025-12-14 | services/chart_service.py (ChartService), 重构main.py, 20 tests |
 
 ---
 

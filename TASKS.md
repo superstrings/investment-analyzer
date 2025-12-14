@@ -367,15 +367,25 @@
       "title": "批量图表生成",
       "description": "支持批量生成多只股票图表",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "subtasks": [
-        "实现批量生成接口",
-        "实现关注列表图表",
-        "实现持仓股票图表"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 ChartService 服务类",
+        "实现 ChartResult 和 BatchChartConfig 数据类",
+        "实现 generate_watchlist_charts() 关注列表图表生成",
+        "实现 generate_position_charts() 持仓股票图表生成",
+        "实现 generate_charts_for_codes() 通用批量生成",
+        "实现 create_chart_service() 工厂函数",
+        "更新 services/__init__.py 导出 ChartService",
+        "重构 main.py chart watchlist/positions 使用 ChartService",
+        "创建 tests/test_chart_service.py (20个测试用例)",
+        "验证所有测试通过 (386 passed)"
       ],
       "files": [
-        "charts/generator.py"
+        "services/chart_service.py",
+        "services/__init__.py",
+        "main.py",
+        "tests/test_chart_service.py"
       ]
     }
   ]
@@ -567,7 +577,7 @@
 | T013 | 技术指标计算 | P0 | ✅ completed | 100% |
 | T006 | 主程序入口 | P1 | ✅ completed | 100% |
 | T010 | CSV 数据导入 | P1 | ✅ completed | 100% |
-| T012 | 批量图表生成 | P1 | pending | 0% |
+| T012 | 批量图表生成 | P1 | ✅ completed | 100% |
 | T014 | VCP 形态识别 | P1 | pending | 0% |
 | T015 | 组合分析 | P1 | pending | 0% |
 | T016 | Portfolio Analyzer Skill | P1 | pending | 0% |
@@ -577,9 +587,9 @@
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T013
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013
 - **进行中**: 无
-- **待开始**: T012, T014-T019
+- **待开始**: T014-T019
 - **已阻塞**: 无
 
 ### 参考文档
