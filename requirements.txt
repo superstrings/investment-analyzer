@@ -1,0 +1,43 @@
+# Investment Analyzer Dependencies
+# Python 3.12.x
+
+# Database
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+
+# Futu API
+futu-api>=9.0.0
+
+# Market Data
+akshare>=1.10.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Charts
+mplfinance>=0.12.0
+matplotlib>=3.7.0
+
+# Reports
+jinja2>=3.1.0
+
+# CLI
+click>=8.1.0
+
+# Configuration
+pyyaml>=6.0
+python-dotenv>=1.0.0
+
+# Security (password encryption)
+cryptography>=40.0.0
+
+# Development
+pytest>=7.0.0
+pytest-cov>=4.0.0
+black>=23.0.0
+isort>=5.12.0
+flake8>=6.0.0
+
+# Type checking (optional)
+mypy>=1.0.0

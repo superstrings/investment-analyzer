@@ -50,6 +50,7 @@
 | ID | 任务 | 完成日期 | 主要产出 |
 |----|------|---------|---------|
 | T013 | 技术指标计算 | 2025-12-14 | analysis/indicators/ (MA,MACD,RSI,BB,OBV), technical.py, 69 tests |
+| T014 | VCP 形态识别 | 2025-12-14 | analysis/indicators/vcp.py (VCP,VCPScanner,VCPConfig), 43 tests |
 
 ---
 

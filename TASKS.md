@@ -441,15 +441,30 @@
       "title": "VCP 形态识别",
       "description": "实现 VCP (波动收缩形态) 识别",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "subtasks": [
-        "定义 VCP 识别规则",
-        "实现形态扫描",
-        "实现评分系统"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "定义 VCP 识别规则 (波动收缩检测)",
+        "实现 Contraction 和 VCPResult 数据类",
+        "实现 VCPConfig 配置类",
+        "实现 VCP 类 (swing detection, contraction detection)",
+        "实现深度递减检测 (depth decrease)",
+        "实现成交量趋势分析 (volume dry-up)",
+        "实现波动幅度收缩分析",
+        "实现 pivot 价格检测",
+        "实现 VCP 评分系统 (0-100)",
+        "实现 VCPScanner 扫描器",
+        "实现便捷函数 (detect_vcp, scan_vcp)",
+        "创建 tests/test_vcp.py (43个测试用例)",
+        "更新 analysis/indicators/__init__.py 导出",
+        "更新 analysis/__init__.py 导出",
+        "验证所有测试通过 (429 passed)"
       ],
       "files": [
-        "analysis/indicators/vcp.py"
+        "analysis/indicators/vcp.py",
+        "analysis/indicators/__init__.py",
+        "analysis/__init__.py",
+        "tests/test_vcp.py"
       ]
     },
     {
@@ -578,7 +593,7 @@
 | T006 | 主程序入口 | P1 | ✅ completed | 100% |
 | T010 | CSV 数据导入 | P1 | ✅ completed | 100% |
 | T012 | 批量图表生成 | P1 | ✅ completed | 100% |
-| T014 | VCP 形态识别 | P1 | pending | 0% |
+| T014 | VCP 形态识别 | P1 | ✅ completed | 100% |
 | T015 | 组合分析 | P1 | pending | 0% |
 | T016 | Portfolio Analyzer Skill | P1 | pending | 0% |
 | T017 | Technical Analyzer Skill | P1 | pending | 0% |
@@ -587,9 +602,9 @@
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014
 - **进行中**: 无
-- **待开始**: T014-T019
+- **待开始**: T015-T019
 - **已阻塞**: 无
 
 ### 参考文档

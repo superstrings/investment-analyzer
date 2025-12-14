@@ -65,6 +65,17 @@ from .obv import (
     calculate_obv,
 )
 
+# VCP (Volatility Contraction Pattern)
+from .vcp import (
+    VCP,
+    VCPScanner,
+    VCPConfig,
+    VCPResult,
+    Contraction,
+    detect_vcp,
+    scan_vcp,
+)
+
 __all__ = [
     # Base
     "BaseIndicator",
@@ -96,4 +107,12 @@ __all__ = [
     "OBV",
     "OBVDivergence",
     "calculate_obv",
+    # VCP
+    "VCP",
+    "VCPScanner",
+    "VCPConfig",
+    "VCPResult",
+    "Contraction",
+    "detect_vcp",
+    "scan_vcp",
 ]

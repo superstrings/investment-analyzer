@@ -1,0 +1,89 @@
+[project]
+name = "investment-analyzer"
+version = "0.1.0"
+description = "投资分析自动化系统"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Dyson", email = "dyson@example.com"}
+]
+keywords = ["investment", "analysis", "trading", "stocks"]
+
+dependencies = [
+    "psycopg2-binary>=2.9.0",
+    "sqlalchemy>=2.0.0",
+    "futu-api>=9.0.0",
+    "akshare>=1.10.0",
+    "pandas>=2.0.0",
+    "numpy>=1.24.0",
+    "mplfinance>=0.12.0",
+    "matplotlib>=3.7.0",
+    "jinja2>=3.1.0",
+    "click>=8.1.0",
+    "pyyaml>=6.0",
+    "python-dotenv>=1.0.0",
+    "cryptography>=40.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "isort>=5.12.0",
+    "flake8>=6.0.0",
+    "mypy>=1.0.0",
+]
+
+[project.scripts]
+investment-analyzer = "main:cli"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.black]
+line-length = 88
+target-version = ['py312']
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+    | \.venv
+    | __pycache__
+    | \.mypy_cache
+    | \.pytest_cache
+    | build
+    | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+line_length = 88
+skip = [".venv", "__pycache__"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.12"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+
+[tool.coverage.run]
+source = ["config", "db", "fetchers", "analysis", "charts", "reports", "services"]
+omit = ["tests/*", "*.pyc", "__pycache__/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]

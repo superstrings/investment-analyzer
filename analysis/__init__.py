@@ -3,6 +3,7 @@ Technical analysis module for Investment Analyzer.
 
 This module provides comprehensive technical analysis capabilities including:
 - Technical indicators (MA, MACD, RSI, Bollinger Bands, OBV)
+- VCP (Volatility Contraction Pattern) detection
 - Unified analysis framework (TechnicalAnalyzer)
 - Signal generation and divergence detection
 
@@ -11,6 +12,13 @@ Usage:
     from analysis.indicators import RSI, MACD, BollingerBands
 
     rsi_result = RSI(period=14).calculate(df)
+
+    # Use VCP pattern detection
+    from analysis import detect_vcp, scan_vcp
+
+    vcp_result = detect_vcp(df)
+    if vcp_result.is_vcp:
+        print(f"VCP Score: {vcp_result.score}")
 
     # Use the unified analyzer
     from analysis import TechnicalAnalyzer, AnalysisConfig
@@ -51,6 +59,14 @@ from .indicators import (
     # OBV
     OBV,
     OBVDivergence,
+    # VCP
+    VCP,
+    VCPScanner,
+    VCPConfig,
+    VCPResult,
+    Contraction,
+    detect_vcp,
+    scan_vcp,
 )
 
 __all__ = [
@@ -82,4 +98,12 @@ __all__ = [
     # OBV
     "OBV",
     "OBVDivergence",
+    # VCP
+    "VCP",
+    "VCPScanner",
+    "VCPConfig",
+    "VCPResult",
+    "Contraction",
+    "detect_vcp",
+    "scan_vcp",
 ]
