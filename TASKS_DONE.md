@@ -21,6 +21,7 @@
 | T003 | 配置管理模块 | 2025-12-14 | config/settings.py, config/users.py, users.yaml, 22 tests |
 | T004 | 数据库模型定义 | 2025-12-14 | db/database.py, db/models.py (8个ORM模型), 22 tests |
 | T005 | 数据库初始化脚本 | 2025-12-14 | init_schema.sql, scripts/init_db.py (7命令), 11 tests |
+| T006 | 主程序入口 | 2025-12-14 | main.py CLI (sync/chart/report/account/db/config), 42 tests |
 
 ---
 

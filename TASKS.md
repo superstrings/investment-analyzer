@@ -171,17 +171,24 @@
       "title": "主程序入口",
       "description": "创建 CLI 主程序入口",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "subtasks": [
-        "实现 main.py CLI 框架",
-        "实现 sync 命令",
-        "实现 chart 命令",
-        "实现 report 命令",
-        "实现 account 命令"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 main.py CLI 框架 (Click)",
+        "实现 sync 命令组 (all/positions/trades/klines)",
+        "实现 chart 命令组 (single/watchlist/positions)",
+        "实现 report 命令组 (portfolio/technical)",
+        "实现 account 命令组 (list/info)",
+        "实现 db 命令组 (check/init/seed/migrate)",
+        "实现 config 命令组 (show/users)",
+        "实现用户验证 (validate_user callback)",
+        "实现 verbose 模式 (-v flag)",
+        "创建 tests/test_main.py (42个测试用例)",
+        "验证所有测试通过 (293 passed)"
       ],
       "files": [
-        "main.py"
+        "main.py",
+        "tests/test_main.py"
       ]
     }
   ]
@@ -546,7 +553,7 @@
 | T009 | 数据同步服务 | P0 | ✅ completed | 100% |
 | T011 | K线图生成器 | P0 | ✅ completed | 100% |
 | T013 | 技术指标计算 | P0 | ✅ completed | 100% |
-| T006 | 主程序入口 | P1 | pending | 0% |
+| T006 | 主程序入口 | P1 | ✅ completed | 100% |
 | T010 | CSV 数据导入 | P1 | pending | 0% |
 | T012 | 批量图表生成 | P1 | pending | 0% |
 | T014 | VCP 形态识别 | P1 | pending | 0% |
@@ -558,9 +565,9 @@
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T007, T008, T009, T011, T013
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T011, T013
 - **进行中**: 无
-- **待开始**: T006, T010, T012, T014-T019
+- **待开始**: T010, T012, T014-T019
 - **已阻塞**: 无
 
 ### 参考文档
