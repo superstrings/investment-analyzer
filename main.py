@@ -13,7 +13,7 @@ from typing import Optional
 import click
 
 from config import ConfigurationError, get_users_config, settings
-from db import User, Account, Position, get_session, check_connection, init_db
+from db import Account, Position, User, check_connection, get_session, init_db
 
 # Configure logging
 logging.basicConfig(
@@ -84,7 +84,10 @@ def sync_all(user: str, days: int, kline_days: int):
     # Get user from database
     db_user = get_user_by_name(user)
     if not db_user:
-        click.echo(f"Error: User '{user}' not found in database. Run 'db seed' first.", err=True)
+        click.echo(
+            f"Error: User '{user}' not found in database. Run 'db seed' first.",
+            err=True,
+        )
         sys.exit(1)
 
     try:
@@ -108,7 +111,11 @@ def sync_all(user: str, days: int, kline_days: int):
             # Display results
             click.echo("\n--- Sync Results ---")
             for sync_type, result in results.items():
-                status = click.style("OK", fg="green") if result.success else click.style("FAILED", fg="red")
+                status = (
+                    click.style("OK", fg="green")
+                    if result.success
+                    else click.style("FAILED", fg="red")
+                )
                 click.echo(
                     f"{sync_type}: {status} "
                     f"(synced: {result.records_synced}, skipped: {result.records_skipped})"
@@ -151,11 +158,13 @@ def sync_positions(user: str):
 
             if result.success:
                 click.echo(
-                    click.style("Success: ", fg="green") +
-                    f"Synced {result.records_synced} positions, skipped {result.records_skipped}"
+                    click.style("Success: ", fg="green")
+                    + f"Synced {result.records_synced} positions, skipped {result.records_skipped}"
                 )
             else:
-                click.echo(click.style(f"Error: {result.error_message}", fg="red"), err=True)
+                click.echo(
+                    click.style(f"Error: {result.error_message}", fg="red"), err=True
+                )
                 sys.exit(1)
 
     except Exception as e:
@@ -194,11 +203,13 @@ def sync_trades(user: str, days: int):
 
             if result.success:
                 click.echo(
-                    click.style("Success: ", fg="green") +
-                    f"Synced {result.records_synced} trades, skipped {result.records_skipped}"
+                    click.style("Success: ", fg="green")
+                    + f"Synced {result.records_synced} trades, skipped {result.records_skipped}"
                 )
             else:
-                click.echo(click.style(f"Error: {result.error_message}", fg="red"), err=True)
+                click.echo(
+                    click.style(f"Error: {result.error_message}", fg="red"), err=True
+                )
                 sys.exit(1)
 
     except Exception as e:
@@ -228,11 +239,13 @@ def sync_klines(codes: str, days: int):
 
         if result.success:
             click.echo(
-                click.style("Success: ", fg="green") +
-                f"Synced {result.records_synced} K-lines, skipped {result.records_skipped}"
+                click.style("Success: ", fg="green")
+                + f"Synced {result.records_synced} K-lines, skipped {result.records_skipped}"
             )
         else:
-            click.echo(click.style(f"Error: {result.error_message}", fg="red"), err=True)
+            click.echo(
+                click.style(f"Error: {result.error_message}", fg="red"), err=True
+            )
             sys.exit(1)
 
     except Exception as e:
@@ -254,13 +267,22 @@ def chart():
 @chart.command("single")
 @click.option("--code", "-c", required=True, help="股票代码")
 @click.option("--days", default=120, help="K线天数")
-@click.option("--style", default="dark", type=click.Choice(["dark", "light", "chinese", "western"]), help="图表样式")
-@click.option("--indicators", "-i", default="ma", help="技术指标 (ma,obv,macd,rsi,bb 逗号分隔)")
+@click.option(
+    "--style",
+    default="dark",
+    type=click.Choice(["dark", "light", "chinese", "western"]),
+    help="图表样式",
+)
+@click.option(
+    "--indicators", "-i", default="ma", help="技术指标 (ma,obv,macd,rsi,bb 逗号分隔)"
+)
 @click.option("--output", "-o", default=None, help="输出文件路径")
-def chart_single(code: str, days: int, style: str, indicators: str, output: Optional[str]):
+def chart_single(
+    code: str, days: int, style: str, indicators: str, output: Optional[str]
+):
     """生成单只股票K线图"""
+    from charts import ChartConfig, ChartGenerator
     from fetchers import KlineFetcher
-    from charts import ChartGenerator, ChartConfig
 
     click.echo(f"Generating chart for {code} ({days} days, style={style})...")
 
@@ -304,9 +326,13 @@ def chart_single(code: str, days: int, style: str, indicators: str, output: Opti
         )
 
         if chart_path:
-            click.echo(click.style("Success: ", fg="green") + f"Chart saved to {chart_path}")
+            click.echo(
+                click.style("Success: ", fg="green") + f"Chart saved to {chart_path}"
+            )
         else:
-            click.echo(click.style("Error: ", fg="red") + "Failed to generate chart", err=True)
+            click.echo(
+                click.style("Error: ", fg="red") + "Failed to generate chart", err=True
+            )
             sys.exit(1)
 
     except Exception as e:
@@ -317,12 +343,17 @@ def chart_single(code: str, days: int, style: str, indicators: str, output: Opti
 @chart.command("watchlist")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--days", default=120, help="K线天数")
-@click.option("--style", default="dark", type=click.Choice(["dark", "light", "chinese", "western"]), help="图表样式")
+@click.option(
+    "--style",
+    default="dark",
+    type=click.Choice(["dark", "light", "chinese", "western"]),
+    help="图表样式",
+)
 def chart_watchlist(user: str, days: int, style: str):
     """为关注列表生成图表"""
-    from fetchers import KlineFetcher
-    from charts import ChartGenerator, ChartConfig
+    from charts import ChartConfig, ChartGenerator
     from db import WatchlistItem
+    from fetchers import KlineFetcher
 
     click.echo(f"Generating charts for {user}'s watchlist...")
 
@@ -372,8 +403,8 @@ def chart_watchlist(user: str, days: int, style: str):
                 click.echo(f"  Skipped: {code} (no data)")
 
         click.echo(
-            click.style("Done: ", fg="green") +
-            f"Generated {success_count}/{len(codes)} charts in {output_dir}"
+            click.style("Done: ", fg="green")
+            + f"Generated {success_count}/{len(codes)} charts in {output_dir}"
         )
 
     except Exception as e:
@@ -384,11 +415,16 @@ def chart_watchlist(user: str, days: int, style: str):
 @chart.command("positions")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--days", default=120, help="K线天数")
-@click.option("--style", default="dark", type=click.Choice(["dark", "light", "chinese", "western"]), help="图表样式")
+@click.option(
+    "--style",
+    default="dark",
+    type=click.Choice(["dark", "light", "chinese", "western"]),
+    help="图表样式",
+)
 def chart_positions(user: str, days: int, style: str):
     """为持仓股票生成图表"""
+    from charts import ChartConfig, ChartGenerator
     from fetchers import KlineFetcher
-    from charts import ChartGenerator, ChartConfig
 
     click.echo(f"Generating charts for {user}'s positions...")
 
@@ -399,7 +435,12 @@ def chart_positions(user: str, days: int, style: str):
 
     # Get position codes
     with get_session() as session:
-        positions = session.query(Position).join(Account).filter(Account.user_id == db_user.id).all()
+        positions = (
+            session.query(Position)
+            .join(Account)
+            .filter(Account.user_id == db_user.id)
+            .all()
+        )
         codes = list(set(p.code for p in positions if p.qty > 0))
 
     if not codes:
@@ -438,8 +479,8 @@ def chart_positions(user: str, days: int, style: str):
                 click.echo(f"  Skipped: {code} (no data)")
 
         click.echo(
-            click.style("Done: ", fg="green") +
-            f"Generated {success_count}/{len(codes)} charts in {output_dir}"
+            click.style("Done: ", fg="green")
+            + f"Generated {success_count}/{len(codes)} charts in {output_dir}"
         )
 
     except Exception as e:
@@ -504,7 +545,8 @@ def report_portfolio(user: str, output: Optional[str]):
                 f"\n{pos.code} ({pos.name or 'N/A'})"
                 f"\n  Qty: {pos.qty:,.0f} @ {pos.cost_price or 0:.2f}"
                 f"\n  Market Value: {market_value:,.2f}"
-                f"\n  P&L: " + click.style(f"{pnl:+,.2f} ({pnl_pct:+.2f}%)", fg=pnl_color)
+                f"\n  P&L: "
+                + click.style(f"{pnl:+,.2f} ({pnl_pct:+.2f}%)", fg=pnl_color)
             )
 
         click.echo("\n" + "-" * 60)
@@ -519,8 +561,8 @@ def report_portfolio(user: str, output: Optional[str]):
 @click.option("--days", default=120, help="分析天数")
 def report_technical(code: str, days: int):
     """生成技术分析报告"""
+    from analysis import AnalysisConfig, TechnicalAnalyzer
     from fetchers import KlineFetcher
-    from analysis import TechnicalAnalyzer, AnalysisConfig
 
     click.echo(f"Generating technical report for {code} ({days} days)...")
 
@@ -751,7 +793,10 @@ def db_seed(user: str):
             session.add(db_user)
             session.commit()
 
-            click.echo(click.style("Success: ", fg="green") + f"Created user '{user}' (id={db_user.id})")
+            click.echo(
+                click.style("Success: ", fg="green")
+                + f"Created user '{user}' (id={db_user.id})"
+            )
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)
@@ -769,6 +814,273 @@ def db_migrate(direction: str):
     # TODO: Implement proper migration system (e.g., Alembic)
     click.echo("Note: Migration system not yet implemented.")
     click.echo("Use 'python scripts/init_db.py' for now.")
+
+
+# =============================================================================
+# Import Commands
+# =============================================================================
+
+
+@cli.group(name="import")
+def import_cmd():
+    """CSV 数据导入命令"""
+    pass
+
+
+@import_cmd.command("watchlist")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="CSV文件路径",
+)
+@click.option("--encoding", default="utf-8", help="文件编码 (默认utf-8)")
+def import_watchlist(user: str, file_path: str, encoding: str):
+    """导入关注列表 CSV"""
+    from scripts.import_csv import get_user_id
+    from scripts.import_csv import import_watchlist as do_import
+
+    click.echo(f"Importing watchlist for user '{user}' from {file_path}...")
+
+    user_id = get_user_id(user)
+    if not user_id:
+        click.echo(
+            f"Error: User '{user}' not found in database. Run 'db seed -u {user}' first.",
+            err=True,
+        )
+        sys.exit(1)
+
+    result = do_import(user_id, Path(file_path), encoding)
+
+    if result.success:
+        click.echo(
+            click.style("Success: ", fg="green")
+            + f"Imported {result.imported}, skipped {result.skipped}"
+        )
+    else:
+        click.echo(click.style("Error: ", fg="red") + "Import failed", err=True)
+
+    if result.error_messages:
+        click.echo("\nErrors:")
+        for msg in result.error_messages[:10]:
+            click.echo(f"  - {msg}", err=True)
+        if len(result.error_messages) > 10:
+            click.echo(
+                f"  ... and {len(result.error_messages) - 10} more errors", err=True
+            )
+
+    sys.exit(0 if result.success else 1)
+
+
+@import_cmd.command("positions")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--account", "-a", "account_id", type=int, help="账户ID (富途账户号)")
+@click.option(
+    "--market",
+    "-m",
+    type=click.Choice(["HK", "US", "A"]),
+    help="市场 (如果没有指定账户ID)",
+)
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="CSV文件路径",
+)
+@click.option("--date", "-d", "snapshot_date", help="快照日期 (YYYY-MM-DD，默认今天)")
+@click.option("--encoding", default="utf-8", help="文件编码 (默认utf-8)")
+def import_positions(
+    user: str,
+    account_id: Optional[int],
+    market: Optional[str],
+    file_path: str,
+    snapshot_date: Optional[str],
+    encoding: str,
+):
+    """导入持仓数据 CSV"""
+    from scripts.import_csv import (
+        get_account,
+        get_user_id,
+    )
+    from scripts.import_csv import import_positions as do_import
+
+    click.echo(f"Importing positions for user '{user}' from {file_path}...")
+
+    user_id = get_user_id(user)
+    if not user_id:
+        click.echo(f"Error: User '{user}' not found in database.", err=True)
+        sys.exit(1)
+
+    account = get_account(user_id, account_id, market)
+    if not account:
+        click.echo(
+            f"Error: Account not found. Please create an account first.", err=True
+        )
+        sys.exit(1)
+
+    # Parse date
+    from datetime import datetime as dt
+
+    date_obj = None
+    if snapshot_date:
+        try:
+            date_obj = dt.strptime(snapshot_date, "%Y-%m-%d").date()
+        except ValueError:
+            click.echo(f"Error: Invalid date format. Use YYYY-MM-DD.", err=True)
+            sys.exit(1)
+
+    result = do_import(account.id, Path(file_path), date_obj, encoding)
+
+    if result.success:
+        click.echo(
+            click.style("Success: ", fg="green")
+            + f"Imported {result.imported}, skipped {result.skipped}"
+        )
+    else:
+        click.echo(click.style("Error: ", fg="red") + "Import failed", err=True)
+
+    if result.error_messages:
+        click.echo("\nErrors:")
+        for msg in result.error_messages[:10]:
+            click.echo(f"  - {msg}", err=True)
+        if len(result.error_messages) > 10:
+            click.echo(
+                f"  ... and {len(result.error_messages) - 10} more errors", err=True
+            )
+
+    sys.exit(0 if result.success else 1)
+
+
+@import_cmd.command("trades")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--account", "-a", "account_id", type=int, help="账户ID (富途账户号)")
+@click.option(
+    "--market",
+    "-m",
+    type=click.Choice(["HK", "US", "A"]),
+    help="市场 (如果没有指定账户ID)",
+)
+@click.option(
+    "--file",
+    "-f",
+    "file_path",
+    required=True,
+    type=click.Path(exists=True),
+    help="CSV文件路径",
+)
+@click.option("--encoding", default="utf-8", help="文件编码 (默认utf-8)")
+def import_trades(
+    user: str,
+    account_id: Optional[int],
+    market: Optional[str],
+    file_path: str,
+    encoding: str,
+):
+    """导入交易记录 CSV"""
+    from scripts.import_csv import get_account, get_user_id
+    from scripts.import_csv import import_trades as do_import
+
+    click.echo(f"Importing trades for user '{user}' from {file_path}...")
+
+    user_id = get_user_id(user)
+    if not user_id:
+        click.echo(f"Error: User '{user}' not found in database.", err=True)
+        sys.exit(1)
+
+    account = get_account(user_id, account_id, market)
+    if not account:
+        click.echo(
+            f"Error: Account not found. Please create an account first.", err=True
+        )
+        sys.exit(1)
+
+    result = do_import(account.id, Path(file_path), encoding)
+
+    if result.success:
+        click.echo(
+            click.style("Success: ", fg="green")
+            + f"Imported {result.imported}, skipped {result.skipped}"
+        )
+    else:
+        click.echo(click.style("Error: ", fg="red") + "Import failed", err=True)
+
+    if result.error_messages:
+        click.echo("\nErrors:")
+        for msg in result.error_messages[:10]:
+            click.echo(f"  - {msg}", err=True)
+        if len(result.error_messages) > 10:
+            click.echo(
+                f"  ... and {len(result.error_messages) - 10} more errors", err=True
+            )
+
+    sys.exit(0 if result.success else 1)
+
+
+@import_cmd.command("formats")
+def import_formats():
+    """显示支持的 CSV 格式"""
+    click.echo(
+        """
+=== Watchlist CSV Format ===
+Required columns: code
+Optional columns: name, group, notes
+
+Example:
+code,name,group,notes
+HK.00700,腾讯控股,科技股,核心持仓
+US.NVDA,英伟达,AI概念,
+
+Column aliases (Chinese/English):
+  code: 股票代码, 代码, symbol
+  name: 股票名称, 名称, stock_name
+  group: 分组, 组, group_name
+  notes: 备注, note, comment
+
+
+=== Positions CSV Format ===
+Required columns: code, qty
+Optional columns: name, cost_price, market_price, market_val, pl_val, pl_ratio
+
+Example:
+code,name,qty,cost_price,market_price
+HK.00700,腾讯控股,100,350.00,380.00
+US.NVDA,英伟达,50,500.00,550.00
+
+Column aliases (Chinese/English):
+  code: 股票代码, 代码, symbol
+  qty: 数量, quantity, 持仓数量, shares
+  cost_price: 成本价, cost, avg_cost, 均价
+  market_price: 市价, price, current_price, 现价
+
+
+=== Trades CSV Format ===
+Required columns: code, qty, price
+Optional columns: deal_id, order_id, trade_time, name, side, amount, fee
+
+Example:
+deal_id,trade_time,code,name,side,qty,price,amount,fee
+D123456,2024-01-15 10:30:00,HK.00700,腾讯控股,BUY,100,350.00,35000.00,50.00
+
+Column aliases (Chinese/English):
+  code: 股票代码, 代码, symbol
+  qty: 数量, quantity, 成交数量
+  price: 成交价, deal_price, 价格
+  side: 方向, 买卖方向, direction (BUY/SELL/买/卖)
+  trade_time: 成交时间, time, datetime
+
+
+=== Code Format ===
+Supports: HK.00700, US.NVDA, 00700 (defaults to HK), NVDA (defaults to US)
+
+=== Date/Time Formats ===
+Supports: YYYY-MM-DD, YYYY/MM/DD, DD/MM/YYYY, with optional HH:MM:SS
+"""
+    )
 
 
 # =============================================================================
@@ -819,7 +1131,11 @@ def config_users():
     click.echo("-" * 40)
     for username in usernames:
         user = users_config.get_user(username)
-        status = click.style("Active", fg="green") if user.is_active else click.style("Inactive", fg="yellow")
+        status = (
+            click.style("Active", fg="green")
+            if user.is_active
+            else click.style("Inactive", fg="yellow")
+        )
         click.echo(f"  {username} ({user.display_name}) - {status}")
         click.echo(f"    OpenD: {user.opend.host}:{user.opend.port}")
         click.echo(f"    Markets: {', '.join(user.default_markets)}")

@@ -289,13 +289,19 @@ class TestUserValidation:
         """Test sync with invalid user shows error."""
         result = runner.invoke(cli, ["sync", "positions", "-u", "nonexistent_user_xyz"])
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "invalid" in result.output.lower()
+        assert (
+            "not found" in result.output.lower() or "invalid" in result.output.lower()
+        )
 
     def test_invalid_user_chart(self, runner):
         """Test chart with invalid user shows error."""
-        result = runner.invoke(cli, ["chart", "watchlist", "-u", "nonexistent_user_xyz"])
+        result = runner.invoke(
+            cli, ["chart", "watchlist", "-u", "nonexistent_user_xyz"]
+        )
         assert result.exit_code != 0
-        assert "not found" in result.output.lower() or "invalid" in result.output.lower()
+        assert (
+            "not found" in result.output.lower() or "invalid" in result.output.lower()
+        )
 
 
 class TestDBCheckMocked:
@@ -371,3 +377,90 @@ class TestSyncKlinesIntegration:
         assert result.exit_code == 0
         assert "Success" in result.output
         mock_service.sync_klines.assert_called_once()
+
+
+class TestImportCommands:
+    """Tests for import command group."""
+
+    def test_import_help(self, runner):
+        """Test import command help."""
+        result = runner.invoke(cli, ["import", "--help"])
+        assert result.exit_code == 0
+        assert "CSV 数据导入命令" in result.output
+        assert "watchlist" in result.output
+        assert "positions" in result.output
+        assert "trades" in result.output
+        assert "formats" in result.output
+
+    def test_import_watchlist_help(self, runner):
+        """Test import watchlist subcommand help."""
+        result = runner.invoke(cli, ["import", "watchlist", "--help"])
+        assert result.exit_code == 0
+        assert "--user" in result.output
+        assert "--file" in result.output
+        assert "--encoding" in result.output
+
+    def test_import_positions_help(self, runner):
+        """Test import positions subcommand help."""
+        result = runner.invoke(cli, ["import", "positions", "--help"])
+        assert result.exit_code == 0
+        assert "--user" in result.output
+        assert "--account" in result.output
+        assert "--market" in result.output
+        assert "--file" in result.output
+        assert "--date" in result.output
+        assert "--encoding" in result.output
+
+    def test_import_trades_help(self, runner):
+        """Test import trades subcommand help."""
+        result = runner.invoke(cli, ["import", "trades", "--help"])
+        assert result.exit_code == 0
+        assert "--user" in result.output
+        assert "--account" in result.output
+        assert "--market" in result.output
+        assert "--file" in result.output
+        assert "--encoding" in result.output
+
+    def test_import_formats(self, runner):
+        """Test import formats command."""
+        result = runner.invoke(cli, ["import", "formats"])
+        assert result.exit_code == 0
+        assert "Watchlist CSV Format" in result.output
+        assert "Positions CSV Format" in result.output
+        assert "Trades CSV Format" in result.output
+        assert "Column aliases" in result.output
+
+    def test_import_watchlist_requires_options(self, runner):
+        """Test import watchlist requires user and file options."""
+        # Test missing user (file path error comes first since Path() validates)
+        result = runner.invoke(cli, ["import", "watchlist"])
+        assert result.exit_code != 0
+        assert "Missing option" in result.output
+
+    def test_import_watchlist_requires_file(self, runner):
+        """Test import watchlist requires file option."""
+        result = runner.invoke(cli, ["import", "watchlist", "-u", "dyson"])
+        assert result.exit_code != 0
+        assert "Missing option" in result.output or "required" in result.output.lower()
+
+    def test_import_positions_requires_options(self, runner):
+        """Test import positions requires user and file options."""
+        result = runner.invoke(cli, ["import", "positions"])
+        assert result.exit_code != 0
+        assert "Missing option" in result.output
+
+    def test_import_trades_requires_options(self, runner):
+        """Test import trades requires user and file options."""
+        result = runner.invoke(cli, ["import", "trades"])
+        assert result.exit_code != 0
+        assert "Missing option" in result.output
+
+    def test_import_invalid_user(self, runner):
+        """Test import with invalid user shows error."""
+        result = runner.invoke(
+            cli, ["import", "watchlist", "-u", "nonexistent_user_xyz", "-f", "test.csv"]
+        )
+        assert result.exit_code != 0
+        assert (
+            "not found" in result.output.lower() or "invalid" in result.output.lower()
+        )

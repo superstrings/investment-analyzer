@@ -32,6 +32,7 @@
 | T007 | 富途数据采集器 | 2025-12-14 | fetchers/base.py, futu_fetcher.py (7个API方法), 31 tests |
 | T008 | K线数据采集器 | 2025-12-14 | fetchers/kline_fetcher.py (HK/US/A股K线), 34 tests |
 | T009 | 数据同步服务 | 2025-12-14 | services/sync_service.py (6个同步方法), 24 tests |
+| T010 | CSV 数据导入 | 2025-12-14 | scripts/import_csv.py (中英文列名映射), main.py import命令组, 75 tests |
 
 ---
 

@@ -294,15 +294,27 @@
       "title": "CSV 数据导入",
       "description": "创建现有 CSV 数据导入脚本",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "subtasks": [
-        "解析现有 CSV 格式",
-        "实现持仓 CSV 导入",
-        "实现关注列表导入"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 scripts/import_csv.py 导入脚本",
+        "实现 import_watchlist() 关注列表导入",
+        "实现 import_positions() 持仓导入",
+        "实现 import_trades() 交易记录导入",
+        "实现灵活的列名映射 (中英文别名)",
+        "实现多种日期格式支持",
+        "实现 ImportResult 数据类",
+        "实现代码格式自动识别 (HK/US/A股)",
+        "添加 main.py import 命令组 (watchlist/positions/trades/formats)",
+        "创建 tests/test_import_csv.py (63个测试用例)",
+        "更新 tests/test_main.py (12个新测试用例)",
+        "验证所有测试通过 (366 passed)"
       ],
       "files": [
-        "scripts/import_csv.py"
+        "scripts/import_csv.py",
+        "main.py",
+        "tests/test_import_csv.py",
+        "tests/test_main.py"
       ]
     }
   ]
@@ -554,7 +566,7 @@
 | T011 | K线图生成器 | P0 | ✅ completed | 100% |
 | T013 | 技术指标计算 | P0 | ✅ completed | 100% |
 | T006 | 主程序入口 | P1 | ✅ completed | 100% |
-| T010 | CSV 数据导入 | P1 | pending | 0% |
+| T010 | CSV 数据导入 | P1 | ✅ completed | 100% |
 | T012 | 批量图表生成 | P1 | pending | 0% |
 | T014 | VCP 形态识别 | P1 | pending | 0% |
 | T015 | 组合分析 | P1 | pending | 0% |
@@ -565,9 +577,9 @@
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T011, T013
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T013
 - **进行中**: 无
-- **待开始**: T010, T012, T014-T019
+- **待开始**: T012, T014-T019
 - **已阻塞**: 无
 
 ### 参考文档
