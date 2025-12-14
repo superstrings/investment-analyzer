@@ -1,9 +1,10 @@
 """
-Technical analysis module for Investment Analyzer.
+Technical and portfolio analysis module for Investment Analyzer.
 
-This module provides comprehensive technical analysis capabilities including:
+This module provides comprehensive analysis capabilities including:
 - Technical indicators (MA, MACD, RSI, Bollinger Bands, OBV)
 - VCP (Volatility Contraction Pattern) detection
+- Portfolio analysis (positions, P&L, risk metrics)
 - Unified analysis framework (TechnicalAnalyzer)
 - Signal generation and divergence detection
 
@@ -20,7 +21,14 @@ Usage:
     if vcp_result.is_vcp:
         print(f"VCP Score: {vcp_result.score}")
 
-    # Use the unified analyzer
+    # Use portfolio analysis
+    from analysis import PortfolioAnalyzer, PositionData, analyze_portfolio
+
+    positions = [PositionData(market="HK", code="00700", qty=100, cost_price=350)]
+    result = analyze_portfolio(positions)
+    print(f"Total P&L: {result.summary.total_pl_value}")
+
+    # Use the unified technical analyzer
     from analysis import TechnicalAnalyzer, AnalysisConfig
 
     analyzer = TechnicalAnalyzer()
@@ -34,6 +42,21 @@ from .technical import (
     AnalysisResult,
     create_technical_analyzer,
     analyze_stock,
+)
+
+from .portfolio import (
+    PortfolioAnalyzer,
+    PortfolioAnalysisResult,
+    PortfolioSummary,
+    PositionMetrics,
+    PositionData,
+    AccountData,
+    MarketAllocation,
+    RiskMetrics,
+    RiskLevel,
+    analyze_portfolio,
+    analyze_positions_from_db,
+    create_portfolio_analyzer,
 )
 
 from .indicators import (
@@ -76,6 +99,19 @@ __all__ = [
     "AnalysisResult",
     "create_technical_analyzer",
     "analyze_stock",
+    # Portfolio Analyzer
+    "PortfolioAnalyzer",
+    "PortfolioAnalysisResult",
+    "PortfolioSummary",
+    "PositionMetrics",
+    "PositionData",
+    "AccountData",
+    "MarketAllocation",
+    "RiskMetrics",
+    "RiskLevel",
+    "analyze_portfolio",
+    "analyze_positions_from_db",
+    "create_portfolio_analyzer",
     # Base
     "BaseIndicator",
     "IndicatorResult",

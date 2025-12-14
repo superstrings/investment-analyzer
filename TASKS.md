@@ -473,16 +473,27 @@
       "title": "组合分析",
       "description": "实现投资组合分析功能",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "subtasks": [
-        "实现仓位分析",
-        "实现盈亏分析",
-        "实现风险评估",
-        "实现账户汇总"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 PositionData 和 AccountData 输入数据类",
+        "实现 PositionMetrics 持仓指标计算",
+        "实现 PortfolioSummary 组合摘要",
+        "实现 MarketAllocation 市场分布分析",
+        "实现 RiskMetrics 风险评估 (HHI, 集中度, 最大亏损)",
+        "实现 PortfolioAnalyzer 核心分析器",
+        "实现仓位权重和P&L计算",
+        "实现 Top/Bottom performers 排名",
+        "实现风险信号生成",
+        "实现 analyze_portfolio 便捷函数",
+        "实现 analyze_positions_from_db 数据库对象分析",
+        "创建 tests/test_portfolio.py (50个测试用例)",
+        "验证所有测试通过 (479 passed)"
       ],
       "files": [
-        "analysis/portfolio.py"
+        "analysis/portfolio.py",
+        "analysis/__init__.py",
+        "tests/test_portfolio.py"
       ]
     }
   ]
@@ -594,7 +605,7 @@
 | T010 | CSV 数据导入 | P1 | ✅ completed | 100% |
 | T012 | 批量图表生成 | P1 | ✅ completed | 100% |
 | T014 | VCP 形态识别 | P1 | ✅ completed | 100% |
-| T015 | 组合分析 | P1 | pending | 0% |
+| T015 | 组合分析 | P1 | ✅ completed | 100% |
 | T016 | Portfolio Analyzer Skill | P1 | pending | 0% |
 | T017 | Technical Analyzer Skill | P1 | pending | 0% |
 | T018 | Report Generator Skill | P1 | pending | 0% |
@@ -602,9 +613,9 @@
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015
 - **进行中**: 无
-- **待开始**: T015-T019
+- **待开始**: T016-T019
 - **已阻塞**: 无
 
 ### 参考文档

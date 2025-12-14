@@ -28,3 +28,4 @@
 [2025-12-14 23:06] T010 完成 - 实现 CSV 数据导入脚本 (watchlist/positions/trades), main.py import命令组, 75 tests, 366 passed total
 [2025-12-14 23:13] T012 完成 - 实现批量图表生成服务 (ChartService), 重构 main.py chart commands, 20 tests, 386 passed total
 [2025-12-14 23:25] T014 完成 - 实现 VCP 形态识别 (波动收缩形态), VCP/VCPScanner/VCPConfig, 评分系统, 43 tests, 429 passed total
+[2025-12-14 23:40] T015 完成 - 实现组合分析 (PortfolioAnalyzer, RiskMetrics, MarketAllocation), 50 tests, 479 passed total

@@ -51,6 +51,7 @@
 |----|------|---------|---------|
 | T013 | 技术指标计算 | 2025-12-14 | analysis/indicators/ (MA,MACD,RSI,BB,OBV), technical.py, 69 tests |
 | T014 | VCP 形态识别 | 2025-12-14 | analysis/indicators/vcp.py (VCP,VCPScanner,VCPConfig), 43 tests |
+| T015 | 组合分析 | 2025-12-14 | analysis/portfolio.py (PortfolioAnalyzer,RiskMetrics), 50 tests |
 
 ---
 
