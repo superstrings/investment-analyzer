@@ -21,11 +21,11 @@ Usage:
 """
 
 from .generator import (
-    ReportType,
     OutputFormat,
     ReportConfig,
-    ReportResult,
     ReportGenerator,
+    ReportResult,
+    ReportType,
     create_report_generator,
     generate_report,
 )

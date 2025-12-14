@@ -4,45 +4,38 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from analysis.indicators import (
-    # Base
-    BaseIndicator,
-    IndicatorResult,
-    validate_period,
-    # Moving Averages
-    SMA,
+from analysis.indicators import (  # Base; Moving Averages; MACD; RSI; Bollinger Bands; OBV
     EMA,
-    WMA,
     MA,
-    calculate_sma,
-    calculate_ema,
-    # MACD
     MACD,
+    OBV,
+    RSI,
+    SMA,
+    WMA,
+    BaseIndicator,
+    BollingerBands,
+    BollingerBandsSignals,
+    BollingerBandsSqueeze,
+    IndicatorResult,
     MACDCrossover,
     MACDHistogramDivergence,
-    calculate_macd,
-    # RSI
-    RSI,
-    StochasticRSI,
-    RSIDivergence,
-    calculate_rsi,
-    # Bollinger Bands
-    BollingerBands,
-    BollingerBandsSqueeze,
-    BollingerBandsSignals,
-    calculate_bollinger_bands,
-    # OBV
-    OBV,
     OBVDivergence,
+    RSIDivergence,
+    StochasticRSI,
+    calculate_bollinger_bands,
+    calculate_ema,
+    calculate_macd,
     calculate_obv,
+    calculate_rsi,
+    calculate_sma,
+    validate_period,
 )
-
 from analysis.technical import (
-    TechnicalAnalyzer,
     AnalysisConfig,
     AnalysisResult,
-    create_technical_analyzer,
+    TechnicalAnalyzer,
     analyze_stock,
+    create_technical_analyzer,
 )
 
 
@@ -58,13 +51,16 @@ def sample_ohlcv_df():
     low = close - np.abs(np.random.randn(n) * 0.3)
     open_ = close + np.random.randn(n) * 0.2
 
-    return pd.DataFrame({
-        "open": open_,
-        "high": high,
-        "low": low,
-        "close": close,
-        "volume": np.random.randint(1000, 10000, n).astype(float),
-    }, index=pd.date_range("2024-01-01", periods=n, freq="D"))
+    return pd.DataFrame(
+        {
+            "open": open_,
+            "high": high,
+            "low": low,
+            "close": close,
+            "volume": np.random.randint(1000, 10000, n).astype(float),
+        },
+        index=pd.date_range("2024-01-01", periods=n, freq="D"),
+    )
 
 
 @pytest.fixture
@@ -720,10 +716,12 @@ class TestEdgeCases:
 
     def test_short_dataframe(self):
         """Test indicators with short DataFrame."""
-        df = pd.DataFrame({
-            "close": [100, 101, 102, 103, 104],
-            "volume": [1000, 1100, 1200, 1300, 1400],
-        })
+        df = pd.DataFrame(
+            {
+                "close": [100, 101, 102, 103, 104],
+                "volume": [1000, 1100, 1200, 1300, 1400],
+            }
+        )
 
         # Should not raise, just have NaN values
         sma = SMA(period=20)
@@ -732,10 +730,12 @@ class TestEdgeCases:
 
     def test_constant_prices(self):
         """Test indicators with constant prices."""
-        df = pd.DataFrame({
-            "close": [100.0] * 50,
-            "volume": [1000.0] * 50,
-        })
+        df = pd.DataFrame(
+            {
+                "close": [100.0] * 50,
+                "volume": [1000.0] * 50,
+            }
+        )
 
         # RSI should be NaN (no gains or losses)
         rsi = RSI()
@@ -766,10 +766,12 @@ class TestDataTypes:
 
     def test_integer_prices(self):
         """Test indicators work with integer prices."""
-        df = pd.DataFrame({
-            "close": list(range(100, 200)),
-            "volume": list(range(1000, 1100)),
-        })
+        df = pd.DataFrame(
+            {
+                "close": list(range(100, 200)),
+                "volume": list(range(1000, 1100)),
+            }
+        )
 
         sma = SMA(period=10)
         result = sma.calculate(df)
@@ -778,10 +780,12 @@ class TestDataTypes:
     def test_float32_prices(self):
         """Test indicators work with float32 prices."""
         np.random.seed(42)
-        df = pd.DataFrame({
-            "close": np.random.randn(100).astype(np.float32) + 100,
-            "volume": np.random.randint(1000, 2000, 100).astype(np.float32),
-        })
+        df = pd.DataFrame(
+            {
+                "close": np.random.randn(100).astype(np.float32) + 100,
+                "volume": np.random.randint(1000, 2000, 100).astype(np.float32),
+            }
+        )
 
         macd = MACD()
         result = macd.calculate(df)

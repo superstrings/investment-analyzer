@@ -36,60 +36,79 @@ Usage:
     summary = results.summary()
 """
 
-from .technical import (
-    TechnicalAnalyzer,
-    AnalysisConfig,
-    AnalysisResult,
-    create_technical_analyzer,
-    analyze_stock,
+from .indicators import (  # Base; Moving Averages; MACD; RSI; Bollinger Bands; OBV; VCP
+    EMA,
+    MA,
+    MACD,
+    OBV,
+    RSI,
+    SMA,
+    VCP,
+    WMA,
+    BaseIndicator,
+    BollingerBands,
+    BollingerBandsSignals,
+    BollingerBandsSqueeze,
+    Contraction,
+    IndicatorResult,
+    MACDCrossover,
+    OBVDivergence,
+    RSIDivergence,
+    StochasticRSI,
+    VCPConfig,
+    VCPResult,
+    VCPScanner,
+    detect_vcp,
+    scan_vcp,
+    # Chart Patterns
+    PatternType,
+    PatternBias,
+    PatternResult,
+    CupAndHandle,
+    HeadAndShoulders,
+    DoubleTopBottom,
+    TrianglePattern,
+    PatternScanner,
+    detect_patterns,
+    # Support and Resistance
+    LevelType,
+    LevelStrength,
+    PriceLevel,
+    SupportResistanceResult,
+    SRConfig,
+    SupportResistance,
+    find_support_resistance,
+    get_key_levels,
+    # Trendlines
+    TrendDirection,
+    TrendlineType,
+    Trendline,
+    TrendlineResult,
+    TrendlineConfig,
+    TrendlineDetector,
+    detect_trendlines,
+    get_trend_direction,
 )
-
 from .portfolio import (
-    PortfolioAnalyzer,
-    PortfolioAnalysisResult,
-    PortfolioSummary,
-    PositionMetrics,
-    PositionData,
     AccountData,
     MarketAllocation,
-    RiskMetrics,
+    PortfolioAnalysisResult,
+    PortfolioAnalyzer,
+    PortfolioSummary,
+    PositionData,
+    PositionMetrics,
     RiskLevel,
+    RiskMetrics,
     analyze_portfolio,
     analyze_positions_from_db,
     create_portfolio_analyzer,
 )
-
-from .indicators import (
-    # Base
-    BaseIndicator,
-    IndicatorResult,
-    # Moving Averages
-    SMA,
-    EMA,
-    WMA,
-    MA,
-    # MACD
-    MACD,
-    MACDCrossover,
-    # RSI
-    RSI,
-    StochasticRSI,
-    RSIDivergence,
-    # Bollinger Bands
-    BollingerBands,
-    BollingerBandsSqueeze,
-    BollingerBandsSignals,
-    # OBV
-    OBV,
-    OBVDivergence,
-    # VCP
-    VCP,
-    VCPScanner,
-    VCPConfig,
-    VCPResult,
-    Contraction,
-    detect_vcp,
-    scan_vcp,
+from .technical import (
+    AnalysisConfig,
+    AnalysisResult,
+    TechnicalAnalyzer,
+    analyze_stock,
+    create_technical_analyzer,
 )
 
 __all__ = [
@@ -142,4 +161,32 @@ __all__ = [
     "Contraction",
     "detect_vcp",
     "scan_vcp",
+    # Chart Patterns
+    "PatternType",
+    "PatternBias",
+    "PatternResult",
+    "CupAndHandle",
+    "HeadAndShoulders",
+    "DoubleTopBottom",
+    "TrianglePattern",
+    "PatternScanner",
+    "detect_patterns",
+    # Support and Resistance
+    "LevelType",
+    "LevelStrength",
+    "PriceLevel",
+    "SupportResistanceResult",
+    "SRConfig",
+    "SupportResistance",
+    "find_support_resistance",
+    "get_key_levels",
+    # Trendlines
+    "TrendDirection",
+    "TrendlineType",
+    "Trendline",
+    "TrendlineResult",
+    "TrendlineConfig",
+    "TrendlineDetector",
+    "detect_trendlines",
+    "get_trend_direction",
 ]

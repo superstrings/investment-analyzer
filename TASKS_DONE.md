@@ -73,4 +73,24 @@
 
 ---
 
+## Phase M7: 质量保障
+
+| ID | 任务 | 完成日期 | 主要产出 |
+|----|------|---------|---------|
+| T020 | 端到端集成测试 | 2025-12-14 | tests/integration/ (conftest.py, test_data_flow.py, test_report_flow.py), 29 tests |
+| T022 | CLI 增强优化 | 2025-12-14 | cli/utils.py (rich输出, 进度条, format_output), 33 tests |
+
+---
+
+## Phase M8: 功能增强
+
+| ID | 任务 | 完成日期 | 主要产出 |
+|----|------|---------|---------|
+| T023 | 价格提醒系统 | 2025-12-14 | db/models.py (PriceAlert), services/alert_service.py (AlertService), main.py alert命令组, 37 tests |
+| T024 | 回测框架 | 2025-12-14 | backtest/ (Strategy, BacktestEngine, MACross, VCPBreakout, report), main.py backtest命令组, 30 tests |
+| T025 | 更多技术形态识别 | 2025-12-14 | analysis/indicators/ (patterns.py, support_resistance.py, trendline.py), PatternScanner, 64 tests |
+| T026 | 数据导出功能 | 2025-12-14 | services/export_service.py (ExportService, CSV/Excel/JSON), main.py export命令组, 36 tests |
+
+---
+
 *归档开始日期: 2025-12-14*

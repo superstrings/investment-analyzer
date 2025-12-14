@@ -584,17 +584,21 @@ class PortfolioAnalyzer:
 
         # Performance signals
         if summary.total_pl_ratio > 20:
-            signals.append(f"Strong performance: {summary.total_pl_ratio:.1f}% total gain")
-        elif summary.total_pl_ratio < -10:
             signals.append(
-                f"Underperforming: {summary.total_pl_ratio:.1f}% total loss"
+                f"Strong performance: {summary.total_pl_ratio:.1f}% total gain"
             )
+        elif summary.total_pl_ratio < -10:
+            signals.append(f"Underperforming: {summary.total_pl_ratio:.1f}% total loss")
 
         # Win rate signals
         if summary.win_rate >= 70:
-            signals.append(f"High win rate: {summary.win_rate:.0f}% profitable positions")
+            signals.append(
+                f"High win rate: {summary.win_rate:.0f}% profitable positions"
+            )
         elif summary.win_rate <= 30:
-            signals.append(f"Low win rate: {summary.win_rate:.0f}% profitable positions")
+            signals.append(
+                f"Low win rate: {summary.win_rate:.0f}% profitable positions"
+            )
 
         # Diversification signals
         if summary.position_count < 5:

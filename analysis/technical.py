@@ -34,20 +34,20 @@ from typing import Optional
 import pandas as pd
 
 from .indicators import (
-    SMA,
     EMA,
     MA,
     MACD,
-    MACDCrossover,
-    RSI,
-    StochasticRSI,
-    RSIDivergence,
-    BollingerBands,
-    BollingerBandsSqueeze,
-    BollingerBandsSignals,
     OBV,
-    OBVDivergence,
+    RSI,
+    SMA,
+    BollingerBands,
+    BollingerBandsSignals,
+    BollingerBandsSqueeze,
     IndicatorResult,
+    MACDCrossover,
+    OBVDivergence,
+    RSIDivergence,
+    StochasticRSI,
 )
 
 

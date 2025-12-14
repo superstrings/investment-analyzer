@@ -24,14 +24,22 @@ Usage:
 
 from .base import BaseIndicator, IndicatorResult, validate_period
 
+# Bollinger Bands
+from .bollinger import (
+    BollingerBands,
+    BollingerBandsSignals,
+    BollingerBandsSqueeze,
+    calculate_bollinger_bands,
+)
+
 # Moving Averages
 from .ma import (
-    SMA,
     EMA,
-    WMA,
     MA,
-    calculate_sma,
+    SMA,
+    WMA,
     calculate_ema,
+    calculate_sma,
 )
 
 # MACD
@@ -42,22 +50,6 @@ from .macd import (
     calculate_macd,
 )
 
-# RSI
-from .rsi import (
-    RSI,
-    StochasticRSI,
-    RSIDivergence,
-    calculate_rsi,
-)
-
-# Bollinger Bands
-from .bollinger import (
-    BollingerBands,
-    BollingerBandsSqueeze,
-    BollingerBandsSignals,
-    calculate_bollinger_bands,
-)
-
 # On-Balance Volume
 from .obv import (
     OBV,
@@ -65,15 +57,60 @@ from .obv import (
     calculate_obv,
 )
 
+# RSI
+from .rsi import (
+    RSI,
+    RSIDivergence,
+    StochasticRSI,
+    calculate_rsi,
+)
+
 # VCP (Volatility Contraction Pattern)
 from .vcp import (
     VCP,
-    VCPScanner,
+    Contraction,
     VCPConfig,
     VCPResult,
-    Contraction,
+    VCPScanner,
     detect_vcp,
     scan_vcp,
+)
+
+# Chart Patterns
+from .patterns import (
+    PatternType,
+    PatternBias,
+    PatternResult,
+    CupAndHandle,
+    HeadAndShoulders,
+    DoubleTopBottom,
+    TrianglePattern,
+    PatternScanner,
+    detect_patterns,
+)
+
+# Support and Resistance
+from .support_resistance import (
+    LevelType,
+    LevelStrength,
+    PriceLevel,
+    SupportResistanceResult,
+    SRConfig,
+    SupportResistance,
+    find_support_resistance,
+    get_key_levels,
+)
+
+# Trendlines
+from .trendline import (
+    TrendDirection,
+    TrendlineType,
+    Trendline,
+    TrendlineResult,
+    TrendlineConfig,
+    TrendlineDetector,
+    detect_trendlines,
+    get_trend_direction,
 )
 
 __all__ = [
@@ -115,4 +152,32 @@ __all__ = [
     "Contraction",
     "detect_vcp",
     "scan_vcp",
+    # Chart Patterns
+    "PatternType",
+    "PatternBias",
+    "PatternResult",
+    "CupAndHandle",
+    "HeadAndShoulders",
+    "DoubleTopBottom",
+    "TrianglePattern",
+    "PatternScanner",
+    "detect_patterns",
+    # Support and Resistance
+    "LevelType",
+    "LevelStrength",
+    "PriceLevel",
+    "SupportResistanceResult",
+    "SRConfig",
+    "SupportResistance",
+    "find_support_resistance",
+    "get_key_levels",
+    # Trendlines
+    "TrendDirection",
+    "TrendlineType",
+    "Trendline",
+    "TrendlineResult",
+    "TrendlineConfig",
+    "TrendlineDetector",
+    "detect_trendlines",
+    "get_trend_direction",
 ]

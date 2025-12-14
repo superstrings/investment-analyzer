@@ -153,7 +153,9 @@ class SyncService:
             ).all()
 
             if not accounts:
-                return SyncResult.error("POSITIONS", f"No active accounts for user {user_id}")
+                return SyncResult.error(
+                    "POSITIONS", f"No active accounts for user {user_id}"
+                )
 
             total_synced = 0
             total_skipped = 0
@@ -167,7 +169,9 @@ class SyncService:
                     logger.warning(
                         f"Failed to fetch positions for account {account.futu_acc_id}: {result.error_message}"
                     )
-                    account_details[account.futu_acc_id] = {"error": result.error_message}
+                    account_details[account.futu_acc_id] = {
+                        "error": result.error_message
+                    }
                     continue
 
                 synced = 0
@@ -301,7 +305,9 @@ class SyncService:
             ).all()
 
             if not accounts:
-                return SyncResult.error("TRADES", f"No active accounts for user {user_id}")
+                return SyncResult.error(
+                    "TRADES", f"No active accounts for user {user_id}"
+                )
 
             total_synced = 0
             total_skipped = 0
@@ -319,7 +325,9 @@ class SyncService:
                     logger.warning(
                         f"Failed to fetch trades for account {account.futu_acc_id}: {result.error_message}"
                     )
-                    account_details[account.futu_acc_id] = {"error": result.error_message}
+                    account_details[account.futu_acc_id] = {
+                        "error": result.error_message
+                    }
                     continue
 
                 synced = 0
@@ -440,7 +448,9 @@ class SyncService:
                 )
 
                 if not result.success:
-                    logger.warning(f"Failed to fetch klines for {code}: {result.error_message}")
+                    logger.warning(
+                        f"Failed to fetch klines for {code}: {result.error_message}"
+                    )
                     code_details[code] = {"error": result.error_message}
                     continue
 

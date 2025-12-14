@@ -86,7 +86,9 @@ class OBV(BaseIndicator):
         if self.signal_period:
             result_df = pd.DataFrame(index=df.index)
             result_df["OBV"] = obv
-            result_df["OBV_signal"] = obv.ewm(span=self.signal_period, adjust=True).mean()
+            result_df["OBV_signal"] = obv.ewm(
+                span=self.signal_period, adjust=True
+            ).mean()
 
             return IndicatorResult(
                 name="OBV",

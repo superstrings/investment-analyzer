@@ -12,6 +12,17 @@ from typing import Optional
 
 import click
 
+from cli import (
+    OutputFormat,
+    console,
+    create_progress,
+    format_output,
+    print_error,
+    print_info,
+    print_success,
+    print_table,
+    print_warning,
+)
 from config import ConfigurationError, get_users_config, settings
 from db import Account, Position, User, check_connection, get_session, init_db
 
@@ -454,14 +465,21 @@ def report():
 @report.command("portfolio")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--output", "-o", default=None, help="输出文件路径")
-def report_portfolio(user: str, output: Optional[str]):
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="输出格式",
+)
+def report_portfolio(user: str, output: Optional[str], output_format: str):
     """生成持仓报告"""
-    click.echo(f"Generating portfolio report for user '{user}'...")
+    print_info(f"Generating portfolio report for user '{user}'...")
 
     db_user = get_user_by_name(user)
     if not db_user:
-        click.echo(f"Error: User '{user}' not found in database.", err=True)
-        sys.exit(1)
+        print_error(f"User '{user}' not found in database.", exit_code=1)
 
     # Get positions summary
     with get_session() as session:
@@ -473,39 +491,65 @@ def report_portfolio(user: str, output: Optional[str]):
         )
 
         if not positions:
-            click.echo("No active positions found.")
+            print_warning("No active positions found.")
             return
 
-        # Display simple report
-        click.echo("\n" + "=" * 60)
-        click.echo(f"Portfolio Report for {user}")
-        click.echo("=" * 60)
-
+        # Build positions data
+        positions_data = []
         total_market_value = 0
         total_pnl = 0
 
         for pos in positions:
-            market_value = float(pos.qty * pos.price) if pos.price else 0
+            market_value = float(pos.qty * pos.market_price) if pos.market_price else 0
             pnl = float(pos.pl_val) if pos.pl_val else 0
-            pnl_pct = float(pos.pl_pct) if pos.pl_pct else 0
+            pnl_pct = float(pos.pl_ratio) if pos.pl_ratio else 0
 
             total_market_value += market_value
             total_pnl += pnl
 
-            pnl_color = "green" if pnl >= 0 else "red"
-            click.echo(
-                f"\n{pos.code} ({pos.name or 'N/A'})"
-                f"\n  Qty: {pos.qty:,.0f} @ {pos.cost_price or 0:.2f}"
-                f"\n  Market Value: {market_value:,.2f}"
-                f"\n  P&L: "
-                + click.style(f"{pnl:+,.2f} ({pnl_pct:+.2f}%)", fg=pnl_color)
+            positions_data.append(
+                {
+                    "code": pos.code,
+                    "name": pos.stock_name or "N/A",
+                    "qty": float(pos.qty),
+                    "cost_price": float(pos.cost_price) if pos.cost_price else 0,
+                    "market_price": float(pos.market_price) if pos.market_price else 0,
+                    "market_val": market_value,
+                    "pl_val": pnl,
+                    "pl_ratio": pnl_pct,
+                }
             )
 
-        click.echo("\n" + "-" * 60)
-        pnl_color = "green" if total_pnl >= 0 else "red"
-        click.echo(f"Total Market Value: {total_market_value:,.2f}")
-        click.echo("Total P&L: " + click.style(f"{total_pnl:+,.2f}", fg=pnl_color))
-        click.echo("=" * 60)
+        fmt = OutputFormat(output_format)
+
+        if fmt == OutputFormat.TABLE:
+            # Rich table output
+            columns = [
+                ("code", "Code"),
+                ("name", "Name"),
+                ("qty", "Qty"),
+                ("cost_price", "Cost"),
+                ("market_price", "Price"),
+                ("market_val", "Market Val"),
+                ("pl_val", "P&L"),
+                ("pl_ratio", "P&L %"),
+            ]
+            print_table(positions_data, columns, title=f"Portfolio Report - {user}")
+
+            # Summary
+            console.print()
+            pnl_color = "green" if total_pnl >= 0 else "red"
+            console.print(f"[bold]Total Market Value:[/bold] {total_market_value:,.2f}")
+            console.print(
+                f"[bold]Total P&L:[/bold] [{pnl_color}]{total_pnl:+,.2f}[/{pnl_color}]"
+            )
+        else:
+            result = format_output(positions_data, fmt)
+            if output:
+                Path(output).write_text(result)
+                print_success(f"Report saved to {output}")
+            else:
+                console.print(result)
 
 
 @report.command("technical")
@@ -603,28 +647,51 @@ def account():
 
 @account.command("list")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
-def account_list(user: str):
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="输出格式",
+)
+def account_list(user: str, output_format: str):
     """列出用户账户"""
     db_user = get_user_by_name(user)
     if not db_user:
-        click.echo(f"Error: User '{user}' not found in database.", err=True)
-        sys.exit(1)
+        print_error(f"User '{user}' not found in database.", exit_code=1)
 
     with get_session() as session:
         accounts = session.query(Account).filter_by(user_id=db_user.id).all()
 
         if not accounts:
-            click.echo(f"No accounts found for user '{user}'")
+            print_warning(f"No accounts found for user '{user}'")
             return
 
-        click.echo(f"\nAccounts for {user}:")
-        click.echo("-" * 50)
-        for acc in accounts:
-            click.echo(
-                f"  [{acc.market}] {acc.futu_acc_id} "
-                f"({acc.account_type or 'N/A'}) "
-                f"{'Active' if acc.is_active else 'Inactive'}"
-            )
+        accounts_data = [
+            {
+                "market": acc.market,
+                "account_id": acc.futu_acc_id,
+                "type": acc.account_type or "N/A",
+                "name": acc.account_name or "N/A",
+                "active": acc.is_active,
+            }
+            for acc in accounts
+        ]
+
+        fmt = OutputFormat(output_format)
+        if fmt == OutputFormat.TABLE:
+            columns = [
+                ("market", "Market"),
+                ("account_id", "Account ID"),
+                ("type", "Type"),
+                ("name", "Name"),
+                ("active", "Active"),
+            ]
+            print_table(accounts_data, columns, title=f"Accounts - {user}")
+        else:
+            result = format_output(accounts_data, fmt)
+            console.print(result)
 
 
 @account.command("info")
@@ -689,34 +756,34 @@ def db():
 @db.command("check")
 def db_check():
     """检查数据库连接"""
-    click.echo("Checking database connection...")
+    print_info("Checking database connection...")
     try:
-        if check_connection():
-            click.echo(click.style("Success: ", fg="green") + "Database connection OK")
+        with console.status("Connecting to database..."):
+            result = check_connection()
+        if result:
+            print_success("Database connection OK")
         else:
-            click.echo(click.style("Error: ", fg="red") + "Database connection failed")
-            sys.exit(1)
+            print_error("Database connection failed", exit_code=1)
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        print_error(f"{e}", exit_code=1)
 
 
 @db.command("init")
 @click.option("--force", is_flag=True, help="强制重建表")
 def db_init(force: bool):
     """初始化数据库表"""
-    click.echo("Initializing database...")
+    print_info("Initializing database...")
     if force:
-        click.echo("Warning: This will drop all existing tables!")
+        print_warning("This will drop all existing tables!")
         if not click.confirm("Continue?"):
             return
 
     try:
-        init_db()
-        click.echo(click.style("Success: ", fg="green") + "Database initialized")
+        with console.status("Creating tables..."):
+            init_db()
+        print_success("Database initialized")
     except Exception as e:
-        click.echo(f"Error: {e}", err=True)
-        sys.exit(1)
+        print_error(f"{e}", exit_code=1)
 
 
 @db.command("seed")
@@ -1049,48 +1116,784 @@ def config():
 @config.command("show")
 def config_show():
     """显示当前配置"""
-    click.echo("\n=== Current Configuration ===\n")
+    from rich.panel import Panel
+    from rich.tree import Tree
 
-    click.echo("Database:")
-    click.echo(f"  URL: {settings.database.url}")
-    click.echo(f"  Pool Size: {settings.database.pool_size}")
+    tree = Tree("[bold]Configuration[/bold]")
 
-    click.echo("\nFutu OpenD:")
-    click.echo(f"  Default Host: {settings.futu.default_host}")
-    click.echo(f"  Default Port: {settings.futu.default_port}")
+    db_branch = tree.add("[cyan]Database[/cyan]")
+    db_branch.add(f"URL: {settings.database.url}")
+    db_branch.add(f"Pool Size: {settings.database.pool_size}")
 
-    click.echo("\nChart:")
-    click.echo(f"  Output Dir: {settings.chart.output_dir}")
-    click.echo(f"  DPI: {settings.chart.dpi}")
-    click.echo(f"  MAV Periods: {settings.chart.mav}")
+    futu_branch = tree.add("[cyan]Futu OpenD[/cyan]")
+    futu_branch.add(f"Default Host: {settings.futu.default_host}")
+    futu_branch.add(f"Default Port: {settings.futu.default_port}")
 
-    click.echo("\nK-line:")
-    click.echo(f"  Default Days: {settings.kline.default_days}")
-    click.echo(f"  Markets: {settings.kline.markets}")
+    chart_branch = tree.add("[cyan]Chart[/cyan]")
+    chart_branch.add(f"Output Dir: {settings.chart.output_dir}")
+    chart_branch.add(f"DPI: {settings.chart.dpi}")
+    chart_branch.add(f"MAV Periods: {settings.chart.mav}")
+
+    kline_branch = tree.add("[cyan]K-line[/cyan]")
+    kline_branch.add(f"Default Days: {settings.kline.default_days}")
+    kline_branch.add(f"Markets: {settings.kline.markets}")
+
+    console.print(tree)
 
 
 @config.command("users")
-def config_users():
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["table", "json"]),
+    default="table",
+    help="输出格式",
+)
+def config_users(output_format: str):
     """列出配置的用户"""
     users_config = get_users_config()
     usernames = users_config.list_usernames()
 
     if not usernames:
-        click.echo("No users configured. Edit config/users.yaml to add users.")
+        print_warning("No users configured. Edit config/users.yaml to add users.")
         return
 
-    click.echo("\nConfigured Users:")
-    click.echo("-" * 40)
+    users_data = []
     for username in usernames:
         user = users_config.get_user(username)
-        status = (
-            click.style("Active", fg="green")
-            if user.is_active
-            else click.style("Inactive", fg="yellow")
+        users_data.append(
+            {
+                "username": username,
+                "display_name": user.display_name,
+                "active": user.is_active,
+                "opend_host": user.opend.host,
+                "opend_port": user.opend.port,
+                "markets": ", ".join(user.default_markets),
+            }
         )
-        click.echo(f"  {username} ({user.display_name}) - {status}")
-        click.echo(f"    OpenD: {user.opend.host}:{user.opend.port}")
-        click.echo(f"    Markets: {', '.join(user.default_markets)}")
+
+    fmt = (
+        OutputFormat(output_format) if output_format != "table" else OutputFormat.TABLE
+    )
+
+    if fmt == OutputFormat.TABLE:
+        columns = [
+            ("username", "Username"),
+            ("display_name", "Display Name"),
+            ("active", "Active"),
+            ("opend_host", "OpenD Host"),
+            ("opend_port", "Port"),
+            ("markets", "Markets"),
+        ]
+        print_table(users_data, columns, title="Configured Users")
+    else:
+        result = format_output(users_data, OutputFormat.JSON)
+        console.print(result)
+
+
+# =============================================================================
+# Alert Commands
+# =============================================================================
+
+
+@cli.group()
+def alert():
+    """价格提醒命令"""
+    pass
+
+
+@alert.command("add")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--code", "-c", required=True, help="股票代码 (如 HK.00700)")
+@click.option(
+    "--type",
+    "-t",
+    "alert_type",
+    type=click.Choice(["above", "below", "up", "down"]),
+    required=True,
+    help="提醒类型: above(突破), below(跌破), up(涨幅), down(跌幅)",
+)
+@click.option("--price", "-p", type=float, help="目标价格 (突破/跌破时必填)")
+@click.option("--pct", type=float, help="目标涨跌幅百分比 (如 0.1 表示 10%)")
+@click.option("--base", type=float, help="基准价格 (计算涨跌幅时使用)")
+@click.option("--notes", "-n", help="备注")
+def alert_add(
+    user: str,
+    code: str,
+    alert_type: str,
+    price: Optional[float],
+    pct: Optional[float],
+    base: Optional[float],
+    notes: Optional[str],
+):
+    """添加价格提醒"""
+    from services import AlertService, AlertType
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+
+    # Parse stock code
+    if "." in code:
+        market, stock_code = code.split(".", 1)
+    else:
+        # Default to HK market
+        market = "HK" if code.isdigit() else "US"
+        stock_code = code
+
+    # Map alert type
+    type_map = {
+        "above": AlertType.ABOVE,
+        "below": AlertType.BELOW,
+        "up": AlertType.CHANGE_UP,
+        "down": AlertType.CHANGE_DOWN,
+    }
+    at = type_map[alert_type]
+
+    # Validate required params
+    if at in (AlertType.ABOVE, AlertType.BELOW) and price is None:
+        print_error(f"--price is required for '{alert_type}' alert", exit_code=1)
+    if at in (AlertType.CHANGE_UP, AlertType.CHANGE_DOWN) and pct is None:
+        print_error(f"--pct is required for '{alert_type}' alert", exit_code=1)
+
+    try:
+        service = AlertService()
+        created = service.create_alert(
+            user_id=db_user.id,
+            market=market.upper(),
+            code=stock_code,
+            alert_type=at,
+            target_price=price,
+            target_change_pct=pct,
+            base_price=base,
+            notes=notes,
+        )
+
+        print_success(f"Alert created (ID: {created.id})")
+        console.print(f"  Code: [cyan]{created.full_code}[/cyan]")
+        console.print(f"  Type: [yellow]{created.alert_type}[/yellow]")
+        console.print(f"  Target: {created.target_description}")
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@alert.command("list")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--all", "-a", "show_all", is_flag=True, help="显示所有提醒(包括已触发)")
+@click.option("--market", "-m", help="筛选市场 (HK/US/A)")
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["table", "json", "csv"]),
+    default="table",
+    help="输出格式",
+)
+def alert_list(user: str, show_all: bool, market: Optional[str], output_format: str):
+    """列出价格提醒"""
+    from services import AlertService
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+
+    service = AlertService()
+    alerts = service.get_user_alerts(
+        user_id=db_user.id,
+        active_only=not show_all,
+        market=market,
+    )
+
+    if not alerts:
+        print_warning("No alerts found.")
+        return
+
+    # Build data for output
+    alerts_data = []
+    for a in alerts:
+        target = (
+            str(a.target_price)
+            if a.target_price
+            else f"{float(a.target_change_pct or 0):.2%}"
+        )
+        alerts_data.append(
+            {
+                "id": a.id,
+                "code": a.full_code,
+                "name": a.stock_name or "-",
+                "type": a.alert_type,
+                "target": target,
+                "active": a.is_active and not a.is_triggered,
+                "triggered": a.is_triggered,
+                "notes": a.notes or "",
+            }
+        )
+
+    fmt = OutputFormat(output_format)
+
+    if fmt == OutputFormat.TABLE:
+        columns = [
+            ("id", "ID"),
+            ("code", "Code"),
+            ("name", "Name"),
+            ("type", "Type"),
+            ("target", "Target"),
+            ("active", "Active"),
+            ("triggered", "Triggered"),
+        ]
+        print_table(alerts_data, columns, title=f"Price Alerts - {user}")
+    else:
+        result = format_output(alerts_data, fmt)
+        console.print(result)
+
+
+@alert.command("delete")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.argument("alert_id", type=int)
+def alert_delete(user: str, alert_id: int):
+    """删除价格提醒"""
+    from services import AlertService
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+
+    service = AlertService()
+
+    # Verify the alert belongs to the user
+    existing = service.get_alert(alert_id)
+    if not existing:
+        print_error(f"Alert {alert_id} not found.", exit_code=1)
+    if existing.user_id != db_user.id:
+        print_error(f"Alert {alert_id} does not belong to user '{user}'.", exit_code=1)
+
+    if service.delete_alert(alert_id):
+        print_success(f"Alert {alert_id} deleted.")
+    else:
+        print_error(f"Failed to delete alert {alert_id}.", exit_code=1)
+
+
+@alert.command("check")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--dry-run", is_flag=True, help="仅检查,不触发提醒")
+def alert_check(user: str, dry_run: bool):
+    """检查价格提醒 (需要先同步K线数据)"""
+    from services import AlertService
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+
+    service = AlertService()
+    alerts = service.get_user_alerts(db_user.id, active_only=True)
+
+    if not alerts:
+        print_warning("No active alerts to check.")
+        return
+
+    # Get latest prices from database
+    from db import Kline, get_session
+
+    price_data = {}
+    with get_session() as session:
+        for a in alerts:
+            kline = (
+                session.query(Kline)
+                .filter_by(market=a.market, code=a.code)
+                .order_by(Kline.trade_date.desc())
+                .first()
+            )
+            if kline:
+                price_data[a.full_code] = float(kline.close)
+
+    if not price_data:
+        print_warning("No price data available. Run 'sync klines' first.")
+        return
+
+    print_info(f"Checking {len(alerts)} alerts against {len(price_data)} prices...")
+
+    summary = service.check_all_alerts(
+        db_user.id,
+        price_data,
+        auto_trigger=not dry_run,
+    )
+
+    console.print(f"\nChecked: {summary.total_checked}")
+    console.print(f"Triggered: {summary.total_triggered}")
+
+    if summary.results:
+        console.print("\n[bold yellow]Triggered Alerts:[/bold yellow]")
+        for result in summary.results:
+            console.print(f"  - {result.message}")
+
+
+# =============================================================================
+# Backtest Commands
+# =============================================================================
+
+
+@cli.group()
+def backtest():
+    """策略回测命令"""
+    pass
+
+
+@backtest.command("run")
+@click.option("--code", "-c", required=True, help="股票代码 (如 HK.00700)")
+@click.option("--days", "-d", default=250, help="回测天数 (默认250天)")
+@click.option(
+    "--strategy",
+    "-s",
+    type=click.Choice(["ma_cross", "vcp"]),
+    default="ma_cross",
+    help="策略类型",
+)
+@click.option("--fast-ma", default=10, help="快速MA周期 (ma_cross策略)")
+@click.option("--slow-ma", default=30, help="慢速MA周期 (ma_cross策略)")
+@click.option("--capital", default=100000.0, help="初始资金")
+@click.option("--stop-loss", type=float, help="止损比例 (如 0.08 表示 8%)")
+@click.option("--take-profit", type=float, help="止盈比例 (如 0.2 表示 20%)")
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["text", "markdown", "json"]),
+    default="text",
+    help="输出格式",
+)
+@click.option("--output", "-o", help="输出文件路径")
+def backtest_run(
+    code: str,
+    days: int,
+    strategy: str,
+    fast_ma: int,
+    slow_ma: int,
+    capital: float,
+    stop_loss: Optional[float],
+    take_profit: Optional[float],
+    output_format: str,
+    output: Optional[str],
+):
+    """运行策略回测"""
+    from backtest import (
+        MACrossConfig,
+        MACrossStrategy,
+        ReportFormat,
+        VCPBreakoutConfig,
+        VCPBreakoutStrategy,
+        generate_report,
+        run_backtest,
+    )
+    from fetchers import KlineFetcher
+
+    print_info(f"Running backtest for {code} ({days} days, strategy={strategy})...")
+
+    try:
+        # Fetch K-line data
+        fetcher = KlineFetcher()
+        result = fetcher.fetch(code, days=days)
+
+        if not result.success or result.df is None or result.df.empty:
+            print_error(f"Failed to fetch K-line data for {code}", exit_code=1)
+
+        # Create strategy
+        if strategy == "ma_cross":
+            config = MACrossConfig(
+                fast_period=fast_ma,
+                slow_period=slow_ma,
+                initial_capital=capital,
+                stop_loss_pct=stop_loss,
+                take_profit_pct=take_profit,
+            )
+            strat = MACrossStrategy(config)
+        else:  # vcp
+            config = VCPBreakoutConfig(
+                initial_capital=capital,
+                stop_loss_pct=stop_loss or 0.08,
+                take_profit_pct=take_profit,
+            )
+            strat = VCPBreakoutStrategy(config)
+
+        # Run backtest
+        with console.status("Running backtest..."):
+            bt_result = run_backtest(strat, result.df, symbol=code)
+
+        # Generate report
+        fmt_map = {
+            "text": ReportFormat.TEXT,
+            "markdown": ReportFormat.MARKDOWN,
+            "json": ReportFormat.JSON,
+        }
+        report_format = fmt_map.get(output_format, ReportFormat.TEXT)
+        report = generate_report(bt_result, format=report_format)
+
+        # Output
+        if output:
+            import json
+
+            with open(output, "w") as f:
+                if isinstance(report, dict):
+                    json.dump(report, f, indent=2, ensure_ascii=False, default=str)
+                else:
+                    f.write(report)
+            print_success(f"Report saved to {output}")
+        else:
+            if isinstance(report, dict):
+                import json
+
+                console.print(
+                    json.dumps(report, indent=2, ensure_ascii=False, default=str)
+                )
+            else:
+                console.print(report)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@backtest.command("strategies")
+def backtest_strategies():
+    """列出可用的回测策略"""
+    console.print("\n[bold]Available Strategies[/bold]\n")
+
+    console.print("[cyan]ma_cross[/cyan] - Moving Average Crossover")
+    console.print("  Uses fast and slow MA crossover for entry/exit signals.")
+    console.print("  Parameters:")
+    console.print("    --fast-ma: Fast MA period (default: 10)")
+    console.print("    --slow-ma: Slow MA period (default: 30)")
+    console.print()
+
+    console.print("[cyan]vcp[/cyan] - VCP Breakout")
+    console.print("  Detects VCP patterns and enters on pivot breakout.")
+    console.print("  Uses ATR-based trailing stop for exits.")
+    console.print("  Parameters:")
+    console.print("    --stop-loss: Stop loss percentage (default: 8%)")
+    console.print()
+
+    console.print("[bold]Example:[/bold]")
+    console.print(
+        "  python main.py backtest run -c HK.00700 -d 365 -s ma_cross --fast-ma 5 --slow-ma 20"
+    )
+
+
+@backtest.command("compare")
+@click.option("--code", "-c", required=True, help="股票代码")
+@click.option("--days", "-d", default=365, help="回测天数")
+def backtest_compare(code: str, days: int):
+    """比较多种策略的回测结果"""
+    from backtest import (
+        MACrossConfig,
+        MACrossStrategy,
+        VCPBreakoutConfig,
+        VCPBreakoutStrategy,
+        run_backtest,
+    )
+    from fetchers import KlineFetcher
+
+    print_info(f"Comparing strategies for {code} ({days} days)...")
+
+    try:
+        # Fetch data
+        fetcher = KlineFetcher()
+        result = fetcher.fetch(code, days=days)
+
+        if not result.success or result.df is None or result.df.empty:
+            print_error(f"Failed to fetch data for {code}", exit_code=1)
+
+        # Define strategies to test
+        strategies = [
+            ("MA(5/20)", MACrossStrategy(MACrossConfig(fast_period=5, slow_period=20))),
+            (
+                "MA(10/30)",
+                MACrossStrategy(MACrossConfig(fast_period=10, slow_period=30)),
+            ),
+            (
+                "MA(20/60)",
+                MACrossStrategy(MACrossConfig(fast_period=20, slow_period=60)),
+            ),
+            ("VCP", VCPBreakoutStrategy(VCPBreakoutConfig())),
+        ]
+
+        # Run backtests
+        results_data = []
+        for name, strat in strategies:
+            with console.status(f"Testing {name}..."):
+                bt_result = run_backtest(strat, result.df.copy(), symbol=code)
+                m = bt_result.metrics
+                results_data.append(
+                    {
+                        "strategy": name,
+                        "return": f"{m.total_return_pct * 100:.2f}%",
+                        "sharpe": f"{m.sharpe_ratio:.2f}",
+                        "max_dd": f"{m.max_drawdown_pct * 100:.2f}%",
+                        "win_rate": f"{m.win_rate * 100:.1f}%",
+                        "trades": m.total_trades,
+                        "profit_factor": f"{m.profit_factor:.2f}",
+                    }
+                )
+
+        # Display comparison
+        columns = [
+            ("strategy", "Strategy"),
+            ("return", "Return"),
+            ("sharpe", "Sharpe"),
+            ("max_dd", "Max DD"),
+            ("win_rate", "Win Rate"),
+            ("trades", "Trades"),
+            ("profit_factor", "PF"),
+        ]
+        print_table(results_data, columns, title=f"Strategy Comparison - {code}")
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+# =============================================================================
+# Export Commands
+# =============================================================================
+
+
+@cli.group()
+def export():
+    """数据导出命令"""
+    pass
+
+
+@export.command("positions")
+@click.option("--user", "-u", default="dyson", help="用户名")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "xlsx", "json"]),
+    default="csv",
+    help="导出格式",
+)
+@click.option("--output", "-o", help="输出目录")
+def export_positions_cmd(user: str, format: str, output: str):
+    """导出持仓数据"""
+    from pathlib import Path
+
+    from services.export_service import ExportFormat, ExportService, ExportConfig
+
+    user_obj = validate_user(None, None, user)
+    if not user_obj:
+        print_error(f"User not found: {user}", exit_code=1)
+
+    try:
+        config = ExportConfig()
+        if output:
+            config.output_dir = Path(output)
+
+        service = ExportService(config=config)
+        export_format = ExportFormat(format)
+
+        result = service.export_positions(user_obj.id, format=export_format)
+
+        if result.success:
+            if result.records_exported > 0:
+                print_success(
+                    f"Exported {result.records_exported} positions to {result.file_path}"
+                )
+            else:
+                print_warning("No positions found to export")
+        else:
+            print_error(f"Export failed: {result.error}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@export.command("trades")
+@click.option("--user", "-u", default="dyson", help="用户名")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "xlsx", "json"]),
+    default="csv",
+    help="导出格式",
+)
+@click.option("--start-date", "-s", help="开始日期 (YYYY-MM-DD)")
+@click.option("--end-date", "-e", help="结束日期 (YYYY-MM-DD)")
+@click.option("--output", "-o", help="输出目录")
+def export_trades_cmd(user: str, format: str, start_date: str, end_date: str, output: str):
+    """导出交易记录"""
+    from datetime import datetime
+    from pathlib import Path
+
+    from services.export_service import DateRange, ExportFormat, ExportService, ExportConfig
+
+    user_obj = validate_user(None, None, user)
+    if not user_obj:
+        print_error(f"User not found: {user}", exit_code=1)
+
+    try:
+        config = ExportConfig()
+        if output:
+            config.output_dir = Path(output)
+
+        service = ExportService(config=config)
+        export_format = ExportFormat(format)
+
+        # Parse dates
+        date_range = DateRange()
+        if start_date:
+            date_range.start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            date_range.end_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+        result = service.export_trades(
+            user_obj.id, format=export_format, date_range=date_range
+        )
+
+        if result.success:
+            if result.records_exported > 0:
+                print_success(
+                    f"Exported {result.records_exported} trades to {result.file_path}"
+                )
+            else:
+                print_warning("No trades found to export")
+        else:
+            print_error(f"Export failed: {result.error}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@export.command("klines")
+@click.option("--code", "-c", required=True, help="股票代码 (e.g., HK.00700)")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "xlsx", "json"]),
+    default="csv",
+    help="导出格式",
+)
+@click.option("--start-date", "-s", help="开始日期 (YYYY-MM-DD)")
+@click.option("--end-date", "-e", help="结束日期 (YYYY-MM-DD)")
+@click.option("--limit", "-l", type=int, help="最大记录数")
+@click.option("--output", "-o", help="输出目录")
+def export_klines_cmd(
+    code: str, format: str, start_date: str, end_date: str, limit: int, output: str
+):
+    """导出K线数据"""
+    from datetime import datetime
+    from pathlib import Path
+
+    from services.export_service import DateRange, ExportFormat, ExportService, ExportConfig
+
+    try:
+        config = ExportConfig()
+        if output:
+            config.output_dir = Path(output)
+
+        service = ExportService(config=config)
+        export_format = ExportFormat(format)
+
+        # Parse dates
+        date_range = DateRange()
+        if start_date:
+            date_range.start_date = datetime.strptime(start_date, "%Y-%m-%d")
+        if end_date:
+            date_range.end_date = datetime.strptime(end_date, "%Y-%m-%d")
+
+        result = service.export_klines(
+            code, format=export_format, date_range=date_range, limit=limit
+        )
+
+        if result.success:
+            if result.records_exported > 0:
+                print_success(
+                    f"Exported {result.records_exported} kline records to {result.file_path}"
+                )
+            else:
+                print_warning(f"No kline data found for {code}")
+        else:
+            print_error(f"Export failed: {result.error}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@export.command("watchlist")
+@click.option("--user", "-u", default="dyson", help="用户名")
+@click.option(
+    "--format",
+    "-f",
+    type=click.Choice(["csv", "xlsx", "json"]),
+    default="csv",
+    help="导出格式",
+)
+@click.option("--output", "-o", help="输出目录")
+def export_watchlist_cmd(user: str, format: str, output: str):
+    """导出关注列表"""
+    from pathlib import Path
+
+    from services.export_service import ExportFormat, ExportService, ExportConfig
+
+    user_obj = validate_user(None, None, user)
+    if not user_obj:
+        print_error(f"User not found: {user}", exit_code=1)
+
+    try:
+        config = ExportConfig()
+        if output:
+            config.output_dir = Path(output)
+
+        service = ExportService(config=config)
+        export_format = ExportFormat(format)
+
+        result = service.export_watchlist(user_obj.id, format=export_format)
+
+        if result.success:
+            if result.records_exported > 0:
+                print_success(
+                    f"Exported {result.records_exported} watchlist items to {result.file_path}"
+                )
+            else:
+                print_warning("No watchlist items found to export")
+        else:
+            print_error(f"Export failed: {result.error}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@export.command("all")
+@click.option("--user", "-u", default="dyson", help="用户名")
+@click.option("--output", "-o", help="输出目录")
+def export_all_cmd(user: str, output: str):
+    """导出所有数据到 Excel (多工作表)"""
+    from pathlib import Path
+
+    from services.export_service import ExportFormat, ExportService, ExportConfig
+
+    user_obj = validate_user(None, None, user)
+    if not user_obj:
+        print_error(f"User not found: {user}", exit_code=1)
+
+    try:
+        config = ExportConfig()
+        if output:
+            config.output_dir = Path(output)
+
+        service = ExportService(config=config)
+
+        result = service.export_all(user_obj.id, format=ExportFormat.EXCEL)
+
+        if result.success:
+            if result.records_exported > 0:
+                print_success(
+                    f"Exported {result.records_exported} total records to {result.file_path}"
+                )
+            else:
+                print_warning("No data found to export")
+        else:
+            print_error(f"Export failed: {result.error}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
 
 
 if __name__ == "__main__":

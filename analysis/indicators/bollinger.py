@@ -167,7 +167,7 @@ class BollingerBandsSqueeze(BaseIndicator):
         bandwidth_min = bandwidth.rolling(window=self.bb.period * 6).min()
 
         # Squeeze signal: when bandwidth is near its minimum
-        squeeze = (bandwidth <= bandwidth_min * (1 + self.squeeze_threshold))
+        squeeze = bandwidth <= bandwidth_min * (1 + self.squeeze_threshold)
 
         bb_df["squeeze"] = squeeze.astype(int)
 

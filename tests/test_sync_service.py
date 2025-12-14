@@ -143,15 +143,17 @@ class TestSyncServicePositions:
             )
         ]
         mock_futu.get_positions.return_value = FetchResult.ok(mock_positions)
-        mock_futu.get_account_info.return_value = FetchResult.ok([
-            AccountInfo(
-                acc_id=123456,
-                account_type=AccountType.REAL,
-                market=Market.HK,
-                total_assets=Decimal("100000"),
-                cash=Decimal("62000"),
-            )
-        ])
+        mock_futu.get_account_info.return_value = FetchResult.ok(
+            [
+                AccountInfo(
+                    acc_id=123456,
+                    account_type=AccountType.REAL,
+                    market=Market.HK,
+                    total_assets=Decimal("100000"),
+                    cash=Decimal("62000"),
+                )
+            ]
+        )
 
         service = SyncService(futu_fetcher=mock_futu)
         result = service.sync_positions(user_id=1)

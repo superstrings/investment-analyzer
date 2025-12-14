@@ -124,7 +124,9 @@ class KlineFetcher:
             end_date = date.today()
         if start_date is None:
             fetch_days = days or self.default_days
-            start_date = end_date - timedelta(days=fetch_days * 2)  # Fetch extra for holidays
+            start_date = end_date - timedelta(
+                days=fetch_days * 2
+            )  # Fetch extra for holidays
 
         try:
             if market == Market.HK:

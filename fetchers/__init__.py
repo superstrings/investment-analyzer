@@ -38,8 +38,8 @@ from .base import (
 from .futu_fetcher import FutuFetcher, create_futu_fetcher
 from .kline_fetcher import (
     KlineData,
-    KlineFetchResult,
     KlineFetcher,
+    KlineFetchResult,
     create_kline_fetcher,
 )
 

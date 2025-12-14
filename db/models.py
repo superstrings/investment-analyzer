@@ -64,6 +64,9 @@ class User(Base):
     sync_logs: Mapped[list["SyncLog"]] = relationship(
         "SyncLog", back_populates="user", cascade="all, delete-orphan"
     )
+    price_alerts: Mapped[list["PriceAlert"]] = relationship(
+        "PriceAlert", back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username='{self.username}')>"
@@ -362,3 +365,69 @@ class SyncLog(Base):
         if self.finished_at and self.started_at:
             return (self.finished_at - self.started_at).total_seconds()
         return None
+
+
+class PriceAlert(Base):
+    """
+    价格提醒表
+
+    Stores price alert rules for stocks.
+    Alert types:
+    - ABOVE: Price goes above target
+    - BELOW: Price goes below target
+    - CHANGE_UP: Price increases by percentage
+    - CHANGE_DOWN: Price decreases by percentage
+    """
+
+    __tablename__ = "price_alerts"
+    __table_args__ = (
+        Index("idx_price_alerts_user", "user_id", "is_active"),
+        Index("idx_price_alerts_code", "market", "code"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=False
+    )
+    market: Mapped[str] = mapped_column(String(10), nullable=False)  # HK/US/A
+    code: Mapped[str] = mapped_column(String(20), nullable=False)
+    stock_name: Mapped[Optional[str]] = mapped_column(String(100))
+    alert_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # ABOVE/BELOW/CHANGE_UP/CHANGE_DOWN
+    target_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
+    target_change_pct: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(10, 4)
+    )  # For percentage alerts
+    base_price: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(18, 6)
+    )  # Reference price for change alerts
+    notes: Mapped[Optional[str]] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
+    triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    triggered_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+    # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="price_alerts")
+
+    def __repr__(self) -> str:
+        return f"<PriceAlert(id={self.id}, code='{self.market}.{self.code}', type='{self.alert_type}')>"
+
+    @property
+    def full_code(self) -> str:
+        """Get full stock code with market prefix."""
+        return f"{self.market}.{self.code}"
+
+    @property
+    def target_description(self) -> str:
+        """Get human-readable target description."""
+        if self.alert_type in ("ABOVE", "BELOW"):
+            return f"{self.alert_type.lower()} {self.target_price}"
+        else:  # CHANGE_UP/CHANGE_DOWN
+            sign = "+" if self.alert_type == "CHANGE_UP" else "-"
+            return f"{sign}{abs(float(self.target_change_pct or 0)):.2%}"

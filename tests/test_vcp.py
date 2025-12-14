@@ -6,10 +6,10 @@ import pytest
 
 from analysis.indicators.vcp import (
     VCP,
-    VCPScanner,
+    Contraction,
     VCPConfig,
     VCPResult,
-    Contraction,
+    VCPScanner,
     detect_vcp,
     scan_vcp,
 )
@@ -81,7 +81,9 @@ def create_vcp_pattern_df() -> pd.DataFrame:
     # Phase 5: Tight consolidation near pivot (days 90-120)
     consolidation = 95 + np.random.randn(30) * 1.5
 
-    close = np.concatenate([uptrend, contraction1, contraction2, contraction3, consolidation])
+    close = np.concatenate(
+        [uptrend, contraction1, contraction2, contraction3, consolidation]
+    )
 
     # High/Low with decreasing volatility
     volatility = np.concatenate(
@@ -683,10 +685,10 @@ class TestVCPIntegration:
         """Test imports from indicators submodule."""
         from analysis.indicators import (
             VCP,
-            VCPScanner,
+            Contraction,
             VCPConfig,
             VCPResult,
-            Contraction,
+            VCPScanner,
             detect_vcp,
             scan_vcp,
         )

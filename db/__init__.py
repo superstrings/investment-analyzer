@@ -36,6 +36,7 @@ from .models import (
     Base,
     Kline,
     Position,
+    PriceAlert,
     SyncLog,
     Trade,
     User,
@@ -62,4 +63,5 @@ __all__ = [
     "Kline",
     "WatchlistItem",
     "SyncLog",
+    "PriceAlert",
 ]

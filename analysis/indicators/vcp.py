@@ -239,9 +239,7 @@ class VCP(BaseIndicator):
             )
 
         # Step 7: Determine if valid VCP
-        is_valid_vcp = self._validate_vcp(
-            result, depth_decreasing
-        )
+        is_valid_vcp = self._validate_vcp(result, depth_decreasing)
         result.is_vcp = is_valid_vcp
 
         # Step 8: Calculate score
@@ -496,7 +494,9 @@ class VCP(BaseIndicator):
         # 1. Contraction count score (25 points)
         if result.contraction_count >= cfg.min_contractions:
             # More contractions = better (up to a point)
-            contraction_score = min(result.contraction_count, 4) / 4 * cfg.weight_contractions
+            contraction_score = (
+                min(result.contraction_count, 4) / 4 * cfg.weight_contractions
+            )
             score += contraction_score
 
         # 2. Depth decrease score (25 points)
@@ -562,9 +562,7 @@ class VCP(BaseIndicator):
                 result.signals.append("Significant range contraction")
 
             if result.pivot_price and abs(result.pivot_distance_pct) < 3:
-                result.signals.append(
-                    f"Near pivot point (${result.pivot_price:.2f})"
-                )
+                result.signals.append(f"Near pivot point (${result.pivot_price:.2f})")
         else:
             # Add signals explaining why not detected as VCP
             if result.contraction_count < self.config.min_contractions:

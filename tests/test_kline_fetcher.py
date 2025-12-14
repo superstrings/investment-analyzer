@@ -11,7 +11,13 @@ from unittest.mock import MagicMock, patch
 import pandas as pd
 import pytest
 
-from fetchers import KlineData, KlineFetchResult, KlineFetcher, Market, create_kline_fetcher
+from fetchers import (
+    KlineData,
+    KlineFetcher,
+    KlineFetchResult,
+    Market,
+    create_kline_fetcher,
+)
 
 
 class TestKlineData:

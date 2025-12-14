@@ -58,7 +58,9 @@ class MACD(BaseIndicator):
         validate_period(signal)
 
         if fast >= slow:
-            raise ValueError(f"Fast period ({fast}) must be less than slow period ({slow})")
+            raise ValueError(
+                f"Fast period ({fast}) must be less than slow period ({slow})"
+            )
 
         self.fast = fast
         self.slow = slow

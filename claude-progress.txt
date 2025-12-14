@@ -31,3 +31,6 @@
 [2025-12-14 23:40] T015 完成 - 实现组合分析 (PortfolioAnalyzer, RiskMetrics, MarketAllocation), 50 tests, 479 passed total
 [2025-12-14 23:39] T019 完成 - 实现报告生成器 (ReportGenerator, 4种报告类型/3种输出格式), 4个Jinja2模板, 47 tests, 526 passed total
 [2025-12-14 23:51] 文档更新完成 - README.md, docs/* (design, database, api, development), PLANNING.md, TASKS.md (T020-T026 新任务规划), 526 tests
+[Mon Dec 15 00:14:16 CST 2025] T023: 价格提醒系统 - 完成 AlertService, AlertResult, AlertSummary, CLI 命令 (alert add/list/delete/check), 37 测试, 共 625 测试全部通过
+[Mon Dec 15 00:23:14 CST 2025] T024: 回测框架 - 完成 BacktestEngine, Strategy 基类, MACrossStrategy, VCPBreakoutStrategy, 报告生成, CLI 命令 (backtest run/strategies/compare), 30 测试, 共 655 测试全部通过
+[2025-12-15 00:41:49] T026 数据导出功能 完成: services/export_service.py (ExportService, CSV/Excel/JSON), main.py export命令组 (positions/trades/klines/watchlist/all), tests/test_export.py (36个测试), 总计 755 tests passed

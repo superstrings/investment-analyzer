@@ -8,8 +8,8 @@ import pytest
 from analysis.portfolio import (
     AccountData,
     MarketAllocation,
-    PortfolioAnalyzer,
     PortfolioAnalysisResult,
+    PortfolioAnalyzer,
     PortfolioSummary,
     PositionData,
     PositionMetrics,
@@ -722,10 +722,10 @@ class TestIntegration:
     def test_imports_from_analysis(self):
         """Test imports from analysis module."""
         from analysis import (
-            PortfolioAnalyzer,
-            PortfolioAnalysisResult,
-            PositionData,
             AccountData,
+            PortfolioAnalysisResult,
+            PortfolioAnalyzer,
+            PositionData,
             analyze_portfolio,
         )
 
