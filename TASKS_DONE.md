@@ -59,7 +59,9 @@
 
 | ID | 任务 | 完成日期 | 主要产出 |
 |----|------|---------|---------|
-| | | | |
+| T016 | Portfolio Analyzer Skill | 2025-12-14 | SKILL.md (Python API, CLI, 分析维度, 报告模板) |
+| T017 | Technical Analyzer Skill | 2025-12-14 | SKILL.md (指标文档, 评分标准, 输出模板) |
+| T018 | Report Generator Skill | 2025-12-14 | SKILL.md (报告类型, 输出格式, 图表集成) |
 
 ---
 

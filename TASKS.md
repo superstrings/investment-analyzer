@@ -515,8 +515,17 @@
       "title": "Portfolio Analyzer Skill",
       "description": "持仓分析技能",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "更新 SKILL.md 详细文档",
+        "添加 Python API 使用示例",
+        "添加 CLI 命令说明",
+        "添加分析维度说明 (仓位/盈亏/风险)",
+        "添加输出数据结构文档",
+        "添加风险信号示例",
+        "添加报告模板 (持仓明细/市场配比/风险评分)"
+      ],
       "files": [
         "skills/portfolio_analyzer/SKILL.md"
       ]
@@ -527,8 +536,16 @@
       "title": "Technical Analyzer Skill",
       "description": "技术分析技能",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "更新 SKILL.md 详细文档",
+        "添加 Python API 使用示例",
+        "添加 CLI 命令说明",
+        "添加技术指标文档 (MA/RSI/MACD/BB/OBV/VCP)",
+        "添加评分标准说明",
+        "添加输出格式模板"
+      ],
       "files": [
         "skills/technical_analyzer/SKILL.md"
       ]
@@ -539,8 +556,17 @@
       "title": "Report Generator Skill",
       "description": "报告生成技能",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "更新 SKILL.md 详细文档",
+        "添加报告类型说明 (持仓/技术/每日/周度)",
+        "添加 Python API 使用示例",
+        "添加 CLI 命令说明",
+        "添加输出格式说明 (Markdown/JSON/HTML)",
+        "添加报告模板 (持仓明细/技术指标/风险评估)",
+        "添加图表集成说明"
+      ],
       "files": [
         "skills/report_generator/SKILL.md"
       ]
@@ -606,16 +632,16 @@
 | T012 | 批量图表生成 | P1 | ✅ completed | 100% |
 | T014 | VCP 形态识别 | P1 | ✅ completed | 100% |
 | T015 | 组合分析 | P1 | ✅ completed | 100% |
-| T016 | Portfolio Analyzer Skill | P1 | pending | 0% |
-| T017 | Technical Analyzer Skill | P1 | pending | 0% |
-| T018 | Report Generator Skill | P1 | pending | 0% |
+| T016 | Portfolio Analyzer Skill | P1 | ✅ completed | 100% |
+| T017 | Technical Analyzer Skill | P1 | ✅ completed | 100% |
+| T018 | Report Generator Skill | P1 | ✅ completed | 100% |
 | T019 | 报告生成器 | P1 | pending | 0% |
 
 ### 按状态
 
-- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015
+- **已完成**: T001, T002, T003, T004, T005, T006, T007, T008, T009, T010, T011, T012, T013, T014, T015, T016, T017, T018
 - **进行中**: 无
-- **待开始**: T016-T019
+- **待开始**: T019
 - **已阻塞**: 无
 
 ### 参考文档
