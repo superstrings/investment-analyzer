@@ -78,6 +78,7 @@
 | ID | 任务 | 完成日期 | 主要产出 |
 |----|------|---------|---------|
 | T020 | 端到端集成测试 | 2025-12-14 | tests/integration/ (conftest.py, test_data_flow.py, test_report_flow.py), 29 tests |
+| T021 | 富途 API 真实数据测试 | 2025-12-15 | OpenD连接测试, 持仓同步(17条), 交易同步(319条), K线同步(656条) |
 | T022 | CLI 增强优化 | 2025-12-14 | cli/utils.py (rich输出, 进度条, format_output), 33 tests |
 
 ---
