@@ -159,13 +159,13 @@ python main.py sync klines -u dyson --codes "SZ.300308,SH.601138"
 # 单只股票深度分析
 python main.py deep-analyze -u dyson -c HK.00700
 
-# 批量分析 (关注列表 + 持仓)
-python main.py deep-analyze -u dyson --market HK --batch
-python main.py deep-analyze -u dyson --market US --batch
-python main.py deep-analyze -u dyson --market A --batch
+# 按市场批量分析 (关注列表 + 持仓)
+python main.py deep-analyze -u dyson -m HK --save
+python main.py deep-analyze -u dyson -m US --save
+python main.py deep-analyze -u dyson -m A --save
 
-# 所有市场汇总
-python main.py deep-analyze -u dyson --all-markets
+# 多只股票分析
+python main.py deep-analyze -u dyson --codes "HK.00700,HK.00981" --save
 ```
 
 ### 输出报告
@@ -174,11 +174,11 @@ python main.py deep-analyze -u dyson --all-markets
 
 ```
 reports/output/
-├── deep_analysis_HK.00700_2025-12-15.md     # 单只股票报告
-├── deep_analysis_HK_batch_2025-12-15.md     # 港股批量报告
-├── deep_analysis_US_batch_2025-12-15.md     # 美股批量报告
-├── deep_analysis_A_batch_2025-12-15.md      # A股批量报告
-└── deep_analysis_summary_2025-12-15.md      # 汇总报告
+├── deep_analysis_HK_00700_2025-12-15_120000.md  # 单只股票报告
+├── deep_analysis_HK_2025-12-15_120000.md        # 港股市场报告
+├── deep_analysis_US_2025-12-15_120000.md        # 美股市场报告
+├── deep_analysis_A_2025-12-15_120000.md         # A股市场报告
+└── deep_analysis_batch_2025-12-15_120000.md     # 自定义批量报告
 ```
 
 ---
@@ -275,9 +275,11 @@ python main.py deep-analyze --help
 # 选项
 -u, --user      用户名 (必需)
 -c, --code      股票代码 (如 HK.00700)
---market        市场 (HK/US/A)
---batch         批量分析模式
---all-markets   分析所有市场
+--codes         股票代码列表 (逗号分隔)
+-m, --market    市场代码 (HK/US/A) - 批量分析该市场所有关注股票
+--no-web        不获取网络数据 (仅技术分析)
+-o, --output    输出文件路径
+-s, --save      自动保存到 reports/output/
 ```
 
 ### chart 命令组

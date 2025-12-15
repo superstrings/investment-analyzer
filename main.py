@@ -2779,6 +2779,12 @@ def workflow_status(market: str):
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--code", "-c", help="股票代码 (如 HK.00700)")
 @click.option("--codes", help="股票代码列表 (逗号分隔)")
+@click.option(
+    "--market",
+    "-m",
+    type=click.Choice(["HK", "US", "A"], case_sensitive=False),
+    help="市场代码，批量分析该市场所有关注股票",
+)
 @click.option("--no-web", is_flag=True, help="不获取网络数据 (仅技术分析)")
 @click.option("--output", "-o", help="输出文件路径")
 @click.option("--save", "-s", is_flag=True, help="自动保存到 reports/output/")
@@ -2786,6 +2792,7 @@ def deep_analyze(
     user: str,
     code: Optional[str],
     codes: Optional[str],
+    market: Optional[str],
     no_web: bool,
     output: Optional[str],
     save: bool,
@@ -2799,6 +2806,8 @@ def deep_analyze(
         python main.py deep-analyze -u dyson -c HK.00700
         python main.py deep-analyze -u dyson -c HK.00981 --save
         python main.py deep-analyze -u dyson --codes "HK.00700,HK.00981" -o report.md
+        python main.py deep-analyze -u dyson --market HK --save
+        python main.py deep-analyze -u dyson -m US -s
     """
     from datetime import datetime
     from pathlib import Path
@@ -2811,19 +2820,69 @@ def deep_analyze(
         print_error(f"User '{user}' not found in database.", exit_code=1)
         return
 
+    # Initialize data provider early for market option
+    data_provider = DataProvider()
+
     # Parse codes
     code_list = []
+    selected_market = None
+
     if code:
         code_list = [code]
     elif codes:
         code_list = parse_codes(codes)
+    elif market:
+        # Fetch all stocks from positions and watchlist for the specified market
+        selected_market = market.upper()
+
+        # Map A-share market codes
+        market_filters = [selected_market]
+        if selected_market == "A":
+            market_filters = ["A", "SH", "SZ"]
+
+        # Get position codes (exclude options/warrants)
+        positions = data_provider.get_positions(db_user.id, market_filters)
+        pos_codes = set()
+        for p in positions:
+            # Skip options/warrants (codes with letters after numbers for HK)
+            if selected_market == "HK" and any(
+                c.isalpha() for c in p.code if c not in "."
+            ):
+                continue
+            pos_codes.add(f"{p.market}.{p.code}")
+
+        # Get watchlist codes (exclude indices)
+        watchlist = data_provider.get_watchlist(
+            db_user.id, market_filters, exclude_indices=True
+        )
+        watch_codes = set()
+        for w in watchlist:
+            # Use original market prefix for A-shares
+            if w.market == "A":
+                # Determine SH or SZ based on code
+                if w.code.startswith("6"):
+                    watch_codes.add(f"SH.{w.code}")
+                else:
+                    watch_codes.add(f"SZ.{w.code}")
+            else:
+                watch_codes.add(f"{w.market}.{w.code}")
+
+        code_list = sorted(pos_codes | watch_codes)
+
+        if code_list:
+            print_info(
+                f"找到 {len(code_list)} 只 {selected_market} 股票 "
+                f"(持仓: {len(pos_codes)}, 关注: {len(watch_codes - pos_codes)})"
+            )
+        else:
+            print_warning(f"未找到 {selected_market} 市场的股票")
+            return
 
     if not code_list:
-        print_error("Please specify --code or --codes", exit_code=1)
+        print_error("请指定 --code, --codes 或 --market 选项", exit_code=1)
         return
 
-    # Initialize analyzer
-    data_provider = DataProvider()
+    # Initialize analyzer (data_provider already created above)
     analyzer = DeepAnalyzer(data_provider)
 
     reports = []
@@ -2895,6 +2954,8 @@ def deep_analyze(
             timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
             if len(code_list) == 1:
                 filename = f"deep_analysis_{code_list[0].replace('.', '_')}_{timestamp}.md"
+            elif selected_market:
+                filename = f"deep_analysis_{selected_market}_{timestamp}.md"
             else:
                 filename = f"deep_analysis_batch_{timestamp}.md"
             output_path = output_dir / filename

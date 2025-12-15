@@ -80,3 +80,4 @@
 [2025-12-15 12:57:02] DeepAnalyzer 基本面数据增强 完成: WebDataFetcher 集成 Futu API 获取 PE/PB/市值/EPS/52周区间/股本等, 报告模板增强显示基本面数据, 行业分析数据, 新闻消息分类, 1068 tests passed
 [2025-12-15 15:00:36] DeepAnalyzer US股票支持增强: akshare获取US股票PE/市值, 添加更多行业趋势(半导体/AI/消费电子/电动汽车/软件云计算/社交媒体), 添加更多行业新闻上下文, 1068 tests passed
 [2025-12-15 16:04:09] 文档与Claude命令更新完成: docs/guide/README.md (完整使用指南), 新增 Claude 命令 (daily-analysis/deep-analyze/market-summary/sync-all), 更新 CLAUDE.md 和 README.md
+[2025-12-15 16:21:30] deep-analyze CLI 新增 --market/-m 选项: 支持按市场批量分析 (HK/US/A), 自动获取持仓+关注列表股票, 更新文档

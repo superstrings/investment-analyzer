@@ -27,21 +27,21 @@ python main.py deep-analyze -u dyson -c $ARGUMENTS
 
 ```bash
 # 港股
-python main.py deep-analyze -u dyson --market HK --batch
+python main.py deep-analyze -u dyson -m HK --save
 
 # 美股
-python main.py deep-analyze -u dyson --market US --batch
+python main.py deep-analyze -u dyson -m US --save
 
 # A股
-python main.py deep-analyze -u dyson --market A --batch
+python main.py deep-analyze -u dyson -m A --save
 ```
 
 #### 全市场分析
 
 ```bash
-python main.py deep-analyze -u dyson --market HK --batch
-python main.py deep-analyze -u dyson --market US --batch
-python main.py deep-analyze -u dyson --market A --batch
+python main.py deep-analyze -u dyson -m HK -s
+python main.py deep-analyze -u dyson -m US -s
+python main.py deep-analyze -u dyson -m A -s
 ```
 
 ### 3. 读取并展示报告
