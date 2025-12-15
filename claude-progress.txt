@@ -51,3 +51,13 @@
   - 更新 TASKS.md: 添加 M9 阶段 (T027-T033)
 [2025-12-15 09:49:24] Skills 体系需求分析完成 (F001): 4大角色设计 (分析师/风控师/交易导师/市场观察员), 技术分析简化为 OBV + VCP 双核心, 自动化工作流设计 (盘前/盘后/月度), 新增 T028-T033 任务
 [2025-12-15 09:59:19] T028 Skills 基础框架 完成: skills/shared/ (base.py/data_provider.py/report_builder.py), CLI skill命令组 (list/run/info), MarketSchedule交易时段检测, 67个测试, 共 822 tests passed
+[2025-12-15 10:14] T029 Analyst Skill 完成:
+- 实现 OBVAnalyzer (趋势检测/背离检测/成交量确认)
+- 实现 VCPScanner (收缩识别/阶段判断/评分)
+- 实现 StockAnalyzer (整合 OBV + VCP 分析)
+- 实现 BatchAnalyzer (批量筛选排序)
+- 实现 ScoringSystem (OBV 40% + VCP 60%)
+- 更新 main.py _run_analyst_skill 使用新组件
+- 创建 SKILL.md 详细文档
+- 创建 tests/test_analyst_skill.py (41 tests)
+- 验证所有 863 个测试通过

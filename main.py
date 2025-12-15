@@ -2154,80 +2154,129 @@ def skill_run(
 
 
 def _run_analyst_skill(context, report_format):
-    """Run the analyst skill (placeholder until full implementation)."""
-    from skills.shared import DataProvider, ReportBuilder, SkillResult
+    """Run the analyst skill with OBV + VCP analysis."""
+    from skills.analyst import (
+        BatchAnalyzer,
+        StockAnalyzer,
+        generate_analysis_report,
+        generate_batch_report,
+    )
+    from skills.shared import DataProvider, SkillResult
 
     provider = DataProvider()
-    builder = ReportBuilder("Technical Analysis Report", report_format)
+    days = context.get_param("days", 120)
 
-    # Get positions and watchlist for context
-    positions = provider.get_positions(context.user_id, context.markets)
-    watchlist = provider.get_watchlist(context.user_id, context.markets)
+    # Single stock analysis
+    if context.codes and len(context.codes) == 1:
+        full_code = context.codes[0]
+        if "." in full_code:
+            market, code = full_code.split(".", 1)
+        else:
+            market = "HK" if full_code.isdigit() else "US"
+            code = full_code
 
-    builder.add_section("Portfolio Overview", level=2)
-    builder.add_key_value("Total Positions", len(positions))
-    builder.add_key_value("Watchlist Items", len(watchlist))
-    builder.add_blank_line()
+        # Get stock name from positions or watchlist
+        stock_name = ""
+        positions = provider.get_positions(context.user_id, [market])
+        for p in positions:
+            if p.code == code:
+                stock_name = p.stock_name
+                break
+        if not stock_name:
+            watchlist = provider.get_watchlist(context.user_id, [market])
+            for w in watchlist:
+                if w.code == code:
+                    stock_name = w.stock_name
+                    break
 
-    # If specific codes provided, analyze them
-    if context.codes:
-        builder.add_section("Stock Analysis", level=2)
-        for full_code in context.codes:
-            if "." in full_code:
-                market, code = full_code.split(".", 1)
-            else:
-                market = "HK" if full_code.isdigit() else "US"
-                code = full_code
+        # Run single stock analysis
+        analyzer = StockAnalyzer(data_provider=provider)
+        analysis = analyzer.analyze_from_db(market, code, days=days, stock_name=stock_name)
 
-            # Get K-line data
-            klines = provider.get_klines(
-                market, code, days=context.get_param("days", 120)
+        if analysis is None:
+            return SkillResult.error(
+                "analyst",
+                f"No K-line data available for {market}.{code}. Run 'sync klines' first.",
             )
 
-            builder.add_section(f"{market}.{code}", level=3)
-            if klines:
-                latest = klines[-1]
-                builder.add_key_value("Latest Close", latest.close)
-                builder.add_key_value("Data Points", len(klines))
+        report = generate_analysis_report(analysis, report_format)
 
-                # Placeholder for OBV/VCP analysis
-                builder.add_line("\n*OBV and VCP analysis will be added in T029*")
-            else:
-                builder.add_line("No K-line data available")
+        return SkillResult.ok(
+            skill_name="analyst",
+            result_type="single_stock_analysis",
+            data=analysis.to_dict(),
+            report_content=report,
+            next_actions=_get_analyst_next_actions(analysis),
+        )
 
-            builder.add_blank_line()
+    # Batch analysis
+    batch_analyzer = BatchAnalyzer(data_provider=provider, days=days)
+
+    if context.codes:
+        # Analyze specific codes
+        result = batch_analyzer.analyze_codes(context.codes)
     else:
-        # Portfolio overview
-        if positions:
-            builder.add_section("Position Summary", level=3)
-            pos_data = [
-                {
-                    "code": f"{p.market}.{p.code}",
-                    "name": p.stock_name,
-                    "qty": str(p.qty),
-                    "pl_ratio": f"{float(p.pl_ratio):.2f}%",
-                }
-                for p in positions[:10]  # Top 10
-            ]
-            builder.add_table(pos_data)
+        # Analyze user's positions and watchlist
+        result = batch_analyzer.analyze_user_stocks(
+            user_id=context.user_id,
+            include_positions=True,
+            include_watchlist=True,
+            markets=context.markets if context.markets != ["HK", "US", "A"] else None,
+        )
 
-    builder.add_divider()
-    builder.add_alert(
-        "This is a basic analysis. Full OBV+VCP analysis coming in T029.", level="info"
-    )
+    if result.successful == 0 and result.failed > 0:
+        return SkillResult.error(
+            "analyst",
+            f"Failed to analyze any stocks. {result.failed} failures. Check K-line data.",
+        )
 
-    report = builder.build()
+    report = generate_batch_report(result, report_format)
 
     return SkillResult.ok(
         skill_name="analyst",
-        result_type="technical_analysis",
-        data={"positions": len(positions), "watchlist": len(watchlist)},
+        result_type="batch_analysis",
+        data=result.to_dict(),
         report_content=report,
         next_actions=[
-            "Run 'skill run analyst -c <code>' for single stock analysis",
-            "Implement full OBV+VCP analysis in T029",
+            f"Analyzed {result.successful} stocks successfully",
+            f"Strong Buy: {len(result.strong_buy)}, Buy: {len(result.buy)}",
+            "Run 'skill run analyst -c <code>' for detailed single stock analysis",
         ],
     )
+
+
+def _get_analyst_next_actions(analysis) -> list[str]:
+    """Generate next action suggestions based on analysis result."""
+    actions = []
+    score = analysis.technical_score
+
+    if score.rating.value == "strong_buy":
+        if analysis.vcp_analysis.stage.value == "breakout":
+            actions.append("VCP breakout in progress - consider entry if within risk tolerance")
+        elif analysis.vcp_analysis.stage.value == "mature":
+            actions.append(f"Watch for breakout above pivot: {score.pivot_price:.2f}" if score.pivot_price else "Watch for breakout")
+        actions.append("Set stop loss at 7-8% below entry")
+    elif score.rating.value == "buy":
+        if analysis.vcp_analysis.detected:
+            actions.append("VCP forming - add to watchlist for breakout")
+        else:
+            actions.append("Positive technicals - look for pullback entry")
+    elif score.rating.value == "hold":
+        if analysis.obv_analysis.divergence.value == "bullish":
+            actions.append("Bullish divergence forming - monitor for reversal")
+        elif analysis.obv_analysis.divergence.value == "bearish":
+            actions.append("Bearish divergence warning - tighten stops")
+        else:
+            actions.append("Wait for clearer signal")
+    elif score.rating.value in ("sell", "strong_sell"):
+        actions.append("Consider reducing position or exiting")
+        actions.append("Review risk management")
+
+    # Add key levels if available
+    if score.key_levels:
+        actions.append(f"Key levels: {', '.join(score.key_levels)}")
+
+    return actions
 
 
 @skill.command("info")

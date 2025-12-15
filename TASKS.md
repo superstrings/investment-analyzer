@@ -959,17 +959,22 @@
       "title": "分析师 (Analyst) Skill",
       "description": "实现 OBV + VCP 双核心技术分析、评分系统",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
+      "status": "completed",
+      "progress": 100,
       "design_principle": "技术指标在精不在多，专注 OBV (量价关系) + VCP (波动收缩形态)",
-      "estimated_items": [
-        "实现 OBVAnalyzer (趋势/背离/突破确认)",
-        "实现 VCPScanner (收缩识别/评分/突破点计算)",
+      "completed_items": [
+        "实现 OBVAnalyzer (趋势检测/背离检测/成交量确认)",
+        "实现 VCPScanner (收缩识别/阶段判断/评分/突破点计算)",
         "实现 StockAnalyzer (整合 OBV + VCP 分析)",
         "实现 BatchAnalyzer (关注列表批量筛选排序)",
         "实现 ScoringSystem (OBV 40% + VCP 60%)",
-        "创建 SKILL.md 文档",
-        "添加单元测试"
+        "实现 TechnicalScore/TechnicalRating/SignalStrength 数据类",
+        "实现 generate_analysis_report 单股报告生成",
+        "实现 generate_batch_report 批量报告生成",
+        "更新 main.py _run_analyst_skill 使用新组件",
+        "创建 SKILL.md 详细文档",
+        "创建 tests/test_analyst_skill.py (41个测试用例)",
+        "验证所有 863 个测试通过"
       ],
       "files": [
         "skills/analyst/__init__.py",
@@ -978,7 +983,8 @@
         "skills/analyst/vcp_scanner.py",
         "skills/analyst/stock_analyzer.py",
         "skills/analyst/batch_analyzer.py",
-        "skills/analyst/scoring.py"
+        "skills/analyst/scoring.py",
+        "tests/test_analyst_skill.py"
       ]
     },
     {
@@ -1082,9 +1088,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T028 (28个任务)
+- **已完成**: T001-T029 (29个任务)
 - **进行中**: 无
-- **待开始**: T029-T033 (5个任务)
+- **待开始**: T030-T033 (4个任务)
 - **已阻塞**: 无
 
 ### 参考文档
