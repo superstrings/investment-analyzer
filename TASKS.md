@@ -1024,21 +1024,25 @@
       "title": "交易导师 (Trading Coach) Skill",
       "description": "实现交易计划、复利教育、心理辅导",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "estimated_items": [
-        "实现 PlanGenerator (今日操作计划)",
-        "实现 CompoundEducator (复利思维教育)",
-        "实现 PsychologyCoach (交易心理辅导)",
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 PlanGenerator (今日操作计划, 检查清单, 持仓建议)",
+        "实现 CompoundEducator (复利计算, 交易数学, 财富规划)",
+        "实现 PsychologyCoach (情绪评估, 行为分析, 交易格言)",
+        "实现 TradingCoach 主控制器 (5种会话类型)",
         "创建 SKILL.md 文档",
-        "添加单元测试"
+        "添加单元测试 (49 tests)",
+        "更新 main.py coach skill 处理"
       ],
       "files": [
         "skills/trading_coach/__init__.py",
         "skills/trading_coach/SKILL.md",
+        "skills/trading_coach/trading_coach.py",
         "skills/trading_coach/plan_generator.py",
         "skills/trading_coach/compound_educator.py",
-        "skills/trading_coach/psychology_coach.py"
+        "skills/trading_coach/psychology_coach.py",
+        "tests/test_trading_coach.py"
       ]
     },
     {
@@ -1096,9 +1100,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T030 (30个任务)
+- **已完成**: T001-T031 (31个任务)
 - **进行中**: 无
-- **待开始**: T031-T033 (3个任务)
+- **待开始**: T032-T033 (2个任务)
 - **已阻塞**: 无
 
 ### 参考文档

@@ -2120,8 +2120,7 @@ def skill_run(
         elif skill_type == "risk":
             result = _run_risk_skill(context, report_format)
         elif skill_type == "coach":
-            print_warning("Coach skill not yet implemented.")
-            return
+            result = _run_coach_skill(context, report_format)
         elif skill_type == "observer":
             print_warning("Observer skill not yet implemented.")
             return
@@ -2323,6 +2322,51 @@ def _run_risk_skill(context, report_format):
     )
 
 
+def _run_coach_skill(context, report_format):
+    """Run the trading coach skill for trading guidance."""
+    from skills.shared import DataProvider, SkillResult
+    from skills.trading_coach import TradingCoach
+
+    provider = DataProvider()
+
+    # Create trading coach
+    coach = TradingCoach(data_provider=provider)
+
+    # Determine request type based on context
+    # Default to full_coaching, or use parameters
+    request_type = context.get_param("type", "full_coaching")
+    context.request_type = request_type
+
+    # Execute coaching session
+    result = coach.execute(context)
+
+    if not result.success:
+        return SkillResult.error("trading_coach", result.error_message)
+
+    # Build next actions from result
+    next_actions = result.next_actions.copy() if result.next_actions else []
+
+    # Add coaching summary
+    if result.data:
+        coaching_result = result.data
+        if hasattr(coaching_result, "trading_plan") and coaching_result.trading_plan:
+            plan = coaching_result.trading_plan
+            must_do = len(plan.must_do_actions)
+            warnings = len(plan.risk_warnings)
+            if must_do > 0:
+                next_actions.insert(0, f"{must_do} 项必做操作需要执行")
+            if warnings > 0:
+                next_actions.insert(0, f"{warnings} 项风险警示需要关注")
+
+    return SkillResult.ok(
+        skill_name="trading_coach",
+        result_type=request_type,
+        data=result.data,
+        report_content=result.report_content,
+        next_actions=next_actions,
+    )
+
+
 @skill.command("info")
 @click.argument(
     "skill_type", type=click.Choice(["analyst", "risk", "coach", "observer"])
@@ -2360,13 +2404,19 @@ def skill_info(skill_type: str):
         },
         "coach": {
             "name": "交易导师 (Trading Coach)",
-            "description": "交易计划制定和执行监督",
+            "description": "交易计划制定、心理辅导、复利教育",
             "capabilities": [
-                "trading_plan - 交易计划生成",
-                "execution_monitor - 执行监控",
-                "review - 交易复盘",
+                "daily_plan - 今日交易计划生成",
+                "psychology_check - 交易心理状态检查",
+                "compound_lesson - 复利教育课程",
+                "position_review - 持仓操作建议",
+                "full_coaching - 完整教练会话",
             ],
-            "status": "待实现 (T031)",
+            "components": [
+                "PlanGenerator - 交易计划和检查清单",
+                "PsychologyCoach - 情绪评估和行为分析",
+                "CompoundEducator - 复利计算和财富规划",
+            ],
         },
         "observer": {
             "name": "市场观察员 (Market Observer)",

@@ -102,6 +102,7 @@
 | T028 | Skills 基础框架 | 2025-12-15 | skills/shared/ (base.py, data_provider.py, report_builder.py), CLI skill命令组, 67 tests, 822 total |
 | T029 | 分析师 (Analyst) Skill | 2025-12-15 | skills/analyst/ (OBVAnalyzer, VCPScanner, StockAnalyzer, BatchAnalyzer, ScoringSystem), SKILL.md, 41 tests, 863 total |
 | T030 | 风控师 (Risk Controller) Skill | 2025-12-15 | skills/risk_controller/ (PositionMonitor, RiskCalculator, AlertGenerator, RiskController), SKILL.md, 36 tests, 899 total |
+| T031 | 交易导师 (Trading Coach) Skill | 2025-12-15 | skills/trading_coach/ (PlanGenerator, CompoundEducator, PsychologyCoach, TradingCoach), SKILL.md, 49 tests, 948 total |
 
 ---
 
