@@ -86,7 +86,7 @@ class KlineFetcher:
     A_SH_PATTERN = re.compile(r"^(6\d{5})$")  # Starts with 6: 600519 (Shanghai)
     A_SZ_PATTERN = re.compile(r"^(0\d{5}|3\d{5})$")  # Starts with 0 or 3 (Shenzhen)
 
-    def __init__(self, default_days: int = 120):
+    def __init__(self, default_days: int = 250):
         """
         Initialize K-line fetcher.
 
@@ -423,7 +423,7 @@ class KlineFetcher:
         return market
 
 
-def create_kline_fetcher(default_days: int = 120) -> KlineFetcher:
+def create_kline_fetcher(default_days: int = 250) -> KlineFetcher:
     """
     Factory function to create a KlineFetcher.
 

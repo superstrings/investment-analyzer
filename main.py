@@ -81,7 +81,7 @@ def sync():
 @sync.command("all")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--days", default=365, help="同步交易历史天数")
-@click.option("--kline-days", default=120, help="同步K线天数")
+@click.option("--kline-days", default=250, help="同步K线天数")
 def sync_all(user: str, days: int, kline_days: int):
     """同步所有数据 (持仓、交易、K线)"""
     from fetchers import FutuFetcher, KlineFetcher

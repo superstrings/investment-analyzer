@@ -35,7 +35,7 @@ class UserConfig:
     display_name: str
     opend: OpenDConfig
     default_markets: list = field(default_factory=lambda: ["HK", "US"])
-    kline_days: int = 120
+    kline_days: int = 250
     is_active: bool = True
 
     @property
@@ -131,7 +131,7 @@ def _parse_user_config(username: str, user_data: dict, defaults: dict) -> UserCo
     default_markets = user_data.get(
         "default_markets", defaults.get("markets", ["HK", "US"])
     )
-    kline_days = user_data.get("kline_days", defaults.get("kline_days", 120))
+    kline_days = user_data.get("kline_days", defaults.get("kline_days", 250))
 
     return UserConfig(
         username=username,

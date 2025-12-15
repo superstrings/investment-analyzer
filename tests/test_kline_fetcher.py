@@ -131,7 +131,7 @@ class TestKlineFetcherInit:
     def test_default_init(self):
         """Test default initialization."""
         fetcher = KlineFetcher()
-        assert fetcher.default_days == 120
+        assert fetcher.default_days == 250
 
     def test_custom_init(self):
         """Test custom initialization."""
@@ -467,7 +467,7 @@ class TestCreateKlineFetcher:
     def test_create_with_default_days(self):
         """Test creating fetcher with default days."""
         fetcher = create_kline_fetcher()
-        assert fetcher.default_days == 120
+        assert fetcher.default_days == 250
 
     def test_create_with_custom_days(self):
         """Test creating fetcher with custom days."""

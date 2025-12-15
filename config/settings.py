@@ -48,7 +48,7 @@ class FutuSettings:
 class KlineSettings:
     """K-line data configuration."""
 
-    default_days: int = 120
+    default_days: int = 250
     cache_hours: int = 4
     markets: tuple = ("HK", "US", "A")
 

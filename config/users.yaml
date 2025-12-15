@@ -20,7 +20,7 @@ users:
       - HK
       - US
     # Default K-line days to fetch
-    kline_days: 120
+    kline_days: 250
     # Whether this user is active
     is_active: true
 

@@ -40,7 +40,7 @@ class TestSettings:
 
     def test_kline_settings_defaults(self):
         """Test K-line settings have defaults."""
-        assert settings.kline.default_days == 120
+        assert settings.kline.default_days == 250
         assert settings.kline.cache_hours == 4
         assert "HK" in settings.kline.markets
 

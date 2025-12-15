@@ -614,7 +614,7 @@ class SyncService:
         self,
         user_id: int,
         trade_days: int = 90,
-        kline_days: int = 120,
+        kline_days: int = 250,
         include_klines: bool = True,
         session: Optional[Session] = None,
     ) -> dict[str, SyncResult]:
