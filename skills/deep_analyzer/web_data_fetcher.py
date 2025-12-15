@@ -463,12 +463,43 @@ class WebDataFetcher:
     def _fetch_us_fundamental(
         self, ak, code: str, fundamental: FundamentalData
     ) -> FundamentalData:
-        """Fetch US stock fundamental data."""
+        """Fetch US stock fundamental data using akshare."""
         fundamental.market_cap_currency = "USD"
         fundamental.data_source = "akshare"
 
-        # US stock data is more limited in akshare
-        # For now, return with basic data
+        try:
+            # Get US stock spot data
+            df = ak.stock_us_spot_em()
+
+            if df is not None and not df.empty:
+                # Find the stock by code (akshare uses format like "105.NVDA")
+                mask = df["代码"].astype(str).str.contains(code, case=False, na=False)
+                stock_row = df[mask]
+
+                if not stock_row.empty:
+                    row = stock_row.iloc[0]
+
+                    # Stock name
+                    if "名称" in row.index and pd.notna(row["名称"]):
+                        if not fundamental.stock_name or fundamental.stock_name == code:
+                            fundamental.stock_name = str(row["名称"])
+
+                    # PE ratio
+                    if "市盈率" in row.index and pd.notna(row["市盈率"]):
+                        pe = float(row["市盈率"])
+                        if pe > 0:  # akshare may return negative PE
+                            fundamental.pe_ratio = pe
+
+                    # Market cap (in USD, convert to billions)
+                    if "总市值" in row.index and pd.notna(row["总市值"]):
+                        market_cap = float(row["总市值"])
+                        fundamental.market_cap = market_cap / 1e8  # 转换为亿
+
+                    logger.debug(f"US fundamental data fetched for {code}: PE={fundamental.pe_ratio}, market_cap={fundamental.market_cap}")
+
+        except Exception as e:
+            logger.debug(f"US fundamental fetch error: {e}")
+
         return fundamental
 
     def _get_industry_data(
@@ -535,6 +566,13 @@ class WebDataFetcher:
                 "汽车芯片需求旺盛",
                 "存储芯片周期复苏",
             ],
+            "半导体/AI": [
+                "AI大模型训练推动GPU需求爆发",
+                "数据中心芯片市场快速扩张",
+                "边缘AI计算需求增长",
+                "自动驾驶芯片市场爆发",
+                "AI芯片竞争加剧",
+            ],
             "互联网科技": [
                 "AI大模型应用落地",
                 "云计算持续增长",
@@ -549,6 +587,20 @@ class WebDataFetcher:
                 "即时零售发展",
                 "AI提升运营效率",
             ],
+            "消费电子": [
+                "智能手机创新放缓",
+                "可穿戴设备持续增长",
+                "AI PC/手机概念兴起",
+                "折叠屏技术成熟",
+                "XR设备市场培育期",
+            ],
+            "电动汽车": [
+                "电动车渗透率持续提升",
+                "自动驾驶技术加速落地",
+                "充电基础设施完善",
+                "电池技术持续突破",
+                "价格战加剧行业竞争",
+            ],
             "新能源": [
                 "电动车渗透率提升",
                 "储能需求爆发",
@@ -562,6 +614,20 @@ class WebDataFetcher:
                 "数字化转型",
                 "利率环境影响投资收益",
                 "监管政策持续优化",
+            ],
+            "软件/云计算": [
+                "AI赋能软件产品升级",
+                "云计算市场持续扩张",
+                "SaaS订阅模式普及",
+                "企业数字化转型加速",
+                "网络安全需求增长",
+            ],
+            "社交媒体": [
+                "短视频内容爆发",
+                "AI推荐算法优化",
+                "元宇宙概念布局",
+                "广告市场竞争加剧",
+                "用户增长见顶",
             ],
         }
 
@@ -605,6 +671,23 @@ class WebDataFetcher:
                     sentiment="negative",
                 ),
             ],
+            "半导体/AI": [
+                NewsItem(
+                    title="AI芯片: 大模型训练需求持续爆发，GPU供不应求",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+                NewsItem(
+                    title="数据中心: 云厂商资本开支持续增长",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+                NewsItem(
+                    title="竞争加剧: AMD、Intel等加大AI芯片投入",
+                    source="行业分析",
+                    sentiment="negative",
+                ),
+            ],
             "互联网科技": [
                 NewsItem(
                     title="互联网平台: AI应用加速落地，提升运营效率",
@@ -625,6 +708,42 @@ class WebDataFetcher:
                 ),
                 NewsItem(
                     title="跨境电商: 海外市场拓展带来新增量",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+            ],
+            "消费电子": [
+                NewsItem(
+                    title="消费电子: AI功能推动换机需求",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+                NewsItem(
+                    title="智能手机市场竞争激烈，利润率承压",
+                    source="行业分析",
+                    sentiment="negative",
+                ),
+            ],
+            "电动汽车": [
+                NewsItem(
+                    title="电动汽车: 全球渗透率持续提升",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+                NewsItem(
+                    title="价格战持续，行业盈利能力受挑战",
+                    source="行业分析",
+                    sentiment="negative",
+                ),
+            ],
+            "软件/云计算": [
+                NewsItem(
+                    title="云计算: 企业上云趋势不减，市场持续扩张",
+                    source="行业分析",
+                    sentiment="positive",
+                ),
+                NewsItem(
+                    title="AI集成推动软件产品升级换代",
                     source="行业分析",
                     sentiment="positive",
                 ),
