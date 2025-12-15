@@ -71,3 +71,6 @@ secrets/
 tmp/
 temp/
 *.tmp
+
+# Export output
+exports/

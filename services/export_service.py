@@ -18,7 +18,7 @@ import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from db.database import get_session
+from db.database import SessionLocal, get_session
 from db.models import Account, Kline, Position, Trade, WatchlistItem
 
 
@@ -83,10 +83,14 @@ class ExportService:
         self.config.output_dir.mkdir(parents=True, exist_ok=True)
 
     def _get_session(self) -> Session:
-        """Get database session."""
+        """Get database session.
+
+        Note: When no session is injected, creates a new session using SessionLocal.
+        The caller should close the session when done if self.session was None.
+        """
         if self.session:
             return self.session
-        return get_session()
+        return SessionLocal()
 
     def _get_user_account_ids(self, session: Session, user_id: int) -> list[int]:
         """Get account IDs for a user."""
@@ -142,23 +146,29 @@ class ExportService:
             # Convert to DataFrame
             data = []
             for pos in positions:
-                data.append({
-                    "id": pos.id,
-                    "account_id": pos.account_id,
-                    "snapshot_date": pos.snapshot_date,
-                    "market": pos.market,
-                    "code": pos.code,
-                    "stock_name": pos.stock_name,
-                    "qty": float(pos.qty) if pos.qty else 0,
-                    "can_sell_qty": float(pos.can_sell_qty) if pos.can_sell_qty else 0,
-                    "cost_price": float(pos.cost_price) if pos.cost_price else 0,
-                    "market_price": float(pos.market_price) if pos.market_price else 0,
-                    "market_val": float(pos.market_val) if pos.market_val else 0,
-                    "pl_val": float(pos.pl_val) if pos.pl_val else 0,
-                    "pl_ratio": float(pos.pl_ratio) if pos.pl_ratio else 0,
-                    "position_side": pos.position_side,
-                    "created_at": pos.created_at,
-                })
+                data.append(
+                    {
+                        "id": pos.id,
+                        "account_id": pos.account_id,
+                        "snapshot_date": pos.snapshot_date,
+                        "market": pos.market,
+                        "code": pos.code,
+                        "stock_name": pos.stock_name,
+                        "qty": float(pos.qty) if pos.qty else 0,
+                        "can_sell_qty": (
+                            float(pos.can_sell_qty) if pos.can_sell_qty else 0
+                        ),
+                        "cost_price": float(pos.cost_price) if pos.cost_price else 0,
+                        "market_price": (
+                            float(pos.market_price) if pos.market_price else 0
+                        ),
+                        "market_val": float(pos.market_val) if pos.market_val else 0,
+                        "pl_val": float(pos.pl_val) if pos.pl_val else 0,
+                        "pl_ratio": float(pos.pl_ratio) if pos.pl_ratio else 0,
+                        "position_side": pos.position_side,
+                        "created_at": pos.created_at,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -235,22 +245,24 @@ class ExportService:
             # Convert to DataFrame
             data = []
             for trade in trades:
-                data.append({
-                    "id": trade.id,
-                    "account_id": trade.account_id,
-                    "deal_id": trade.deal_id,
-                    "order_id": trade.order_id,
-                    "trade_time": trade.trade_time,
-                    "market": trade.market,
-                    "code": trade.code,
-                    "stock_name": trade.stock_name,
-                    "trd_side": trade.trd_side,
-                    "qty": float(trade.qty) if trade.qty else 0,
-                    "price": float(trade.price) if trade.price else 0,
-                    "amount": float(trade.amount) if trade.amount else 0,
-                    "fee": float(trade.fee) if trade.fee else 0,
-                    "currency": trade.currency,
-                })
+                data.append(
+                    {
+                        "id": trade.id,
+                        "account_id": trade.account_id,
+                        "deal_id": trade.deal_id,
+                        "order_id": trade.order_id,
+                        "trade_time": trade.trade_time,
+                        "market": trade.market,
+                        "code": trade.code,
+                        "stock_name": trade.stock_name,
+                        "trd_side": trade.trd_side,
+                        "qty": float(trade.qty) if trade.qty else 0,
+                        "price": float(trade.price) if trade.price else 0,
+                        "amount": float(trade.amount) if trade.amount else 0,
+                        "fee": float(trade.fee) if trade.fee else 0,
+                        "currency": trade.currency,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -307,7 +319,9 @@ class ExportService:
 
             if date_range:
                 if date_range.start_date:
-                    query = query.where(Kline.trade_date >= date_range.start_date.date())
+                    query = query.where(
+                        Kline.trade_date >= date_range.start_date.date()
+                    )
                 if date_range.end_date:
                     query = query.where(Kline.trade_date <= date_range.end_date.date())
 
@@ -329,21 +343,23 @@ class ExportService:
             # Convert to DataFrame
             data = []
             for kline in klines:
-                data.append({
-                    "trade_date": kline.trade_date,
-                    "market": kline.market,
-                    "code": kline.code,
-                    "open": float(kline.open) if kline.open else 0,
-                    "high": float(kline.high) if kline.high else 0,
-                    "low": float(kline.low) if kline.low else 0,
-                    "close": float(kline.close) if kline.close else 0,
-                    "volume": int(kline.volume) if kline.volume else 0,
-                    "turnover": float(kline.turnover) if kline.turnover else 0,
-                    "ma5": float(kline.ma5) if kline.ma5 else None,
-                    "ma10": float(kline.ma10) if kline.ma10 else None,
-                    "ma20": float(kline.ma20) if kline.ma20 else None,
-                    "ma60": float(kline.ma60) if kline.ma60 else None,
-                })
+                data.append(
+                    {
+                        "trade_date": kline.trade_date,
+                        "market": kline.market,
+                        "code": kline.code,
+                        "open": float(kline.open) if kline.open else 0,
+                        "high": float(kline.high) if kline.high else 0,
+                        "low": float(kline.low) if kline.low else 0,
+                        "close": float(kline.close) if kline.close else 0,
+                        "volume": int(kline.volume) if kline.volume else 0,
+                        "amount": float(kline.amount) if kline.amount else 0,
+                        "ma5": float(kline.ma5) if kline.ma5 else None,
+                        "ma10": float(kline.ma10) if kline.ma10 else None,
+                        "ma20": float(kline.ma20) if kline.ma20 else None,
+                        "ma60": float(kline.ma60) if kline.ma60 else None,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -400,17 +416,19 @@ class ExportService:
             # Convert to DataFrame
             data = []
             for item in watchlist:
-                data.append({
-                    "id": item.id,
-                    "market": item.market,
-                    "code": item.code,
-                    "stock_name": item.stock_name,
-                    "group_name": item.group_name,
-                    "notes": item.notes,
-                    "sort_order": item.sort_order,
-                    "is_active": item.is_active,
-                    "created_at": item.created_at,
-                })
+                data.append(
+                    {
+                        "id": item.id,
+                        "market": item.market,
+                        "code": item.code,
+                        "stock_name": item.stock_name,
+                        "group_name": item.group_name,
+                        "notes": item.notes,
+                        "sort_order": item.sort_order,
+                        "is_active": item.is_active,
+                        "created_at": item.created_at,
+                    }
+                )
 
             df = pd.DataFrame(data)
 
@@ -458,51 +476,70 @@ class ExportService:
 
             # Positions
             if account_ids:
-                positions_query = select(Position).where(Position.account_id.in_(account_ids))
+                positions_query = select(Position).where(
+                    Position.account_id.in_(account_ids)
+                )
                 positions = session.execute(positions_query).scalars().all()
                 if positions:
-                    positions_data = [{
-                        "market": p.market,
-                        "code": p.code,
-                        "stock_name": p.stock_name,
-                        "qty": float(p.qty) if p.qty else 0,
-                        "cost_price": float(p.cost_price) if p.cost_price else 0,
-                        "market_price": float(p.market_price) if p.market_price else 0,
-                        "market_val": float(p.market_val) if p.market_val else 0,
-                        "pl_val": float(p.pl_val) if p.pl_val else 0,
-                        "pl_ratio": float(p.pl_ratio) if p.pl_ratio else 0,
-                    } for p in positions]
+                    positions_data = [
+                        {
+                            "market": p.market,
+                            "code": p.code,
+                            "stock_name": p.stock_name,
+                            "qty": float(p.qty) if p.qty else 0,
+                            "cost_price": float(p.cost_price) if p.cost_price else 0,
+                            "market_price": (
+                                float(p.market_price) if p.market_price else 0
+                            ),
+                            "market_val": float(p.market_val) if p.market_val else 0,
+                            "pl_val": float(p.pl_val) if p.pl_val else 0,
+                            "pl_ratio": float(p.pl_ratio) if p.pl_ratio else 0,
+                        }
+                        for p in positions
+                    ]
                     dataframes["positions"] = pd.DataFrame(positions_data)
 
                 # Trades
-                trades_query = select(Trade).where(Trade.account_id.in_(account_ids)).order_by(Trade.trade_time.desc())
+                trades_query = (
+                    select(Trade)
+                    .where(Trade.account_id.in_(account_ids))
+                    .order_by(Trade.trade_time.desc())
+                )
                 trades = session.execute(trades_query).scalars().all()
                 if trades:
-                    trades_data = [{
-                        "trade_time": t.trade_time,
-                        "market": t.market,
-                        "code": t.code,
-                        "stock_name": t.stock_name,
-                        "trd_side": t.trd_side,
-                        "qty": float(t.qty) if t.qty else 0,
-                        "price": float(t.price) if t.price else 0,
-                        "amount": float(t.amount) if t.amount else 0,
-                        "fee": float(t.fee) if t.fee else 0,
-                    } for t in trades]
+                    trades_data = [
+                        {
+                            "trade_time": t.trade_time,
+                            "market": t.market,
+                            "code": t.code,
+                            "stock_name": t.stock_name,
+                            "trd_side": t.trd_side,
+                            "qty": float(t.qty) if t.qty else 0,
+                            "price": float(t.price) if t.price else 0,
+                            "amount": float(t.amount) if t.amount else 0,
+                            "fee": float(t.fee) if t.fee else 0,
+                        }
+                        for t in trades
+                    ]
                     dataframes["trades"] = pd.DataFrame(trades_data)
 
             # Watchlist
-            watchlist_query = select(WatchlistItem).where(WatchlistItem.user_id == user_id)
+            watchlist_query = select(WatchlistItem).where(
+                WatchlistItem.user_id == user_id
+            )
             watchlist = session.execute(watchlist_query).scalars().all()
             if watchlist:
-                watchlist_data = [{
-                    "market": w.market,
-                    "code": w.code,
-                    "stock_name": w.stock_name,
-                    "group_name": w.group_name,
-                    "notes": w.notes,
-                    "created_at": w.created_at,
-                } for w in watchlist]
+                watchlist_data = [
+                    {
+                        "market": w.market,
+                        "code": w.code,
+                        "stock_name": w.stock_name,
+                        "group_name": w.group_name,
+                        "notes": w.notes,
+                        "created_at": w.created_at,
+                    }
+                    for w in watchlist
+                ]
                 dataframes["watchlist"] = pd.DataFrame(watchlist_data)
 
             if not dataframes:
@@ -573,7 +610,9 @@ class ExportService:
                 df_json = df.copy()
                 for col in df_json.columns:
                     if pd.api.types.is_datetime64_any_dtype(df_json[col]):
-                        df_json[col] = df_json[col].dt.strftime(self.config.datetime_format)
+                        df_json[col] = df_json[col].dt.strftime(
+                            self.config.datetime_format
+                        )
 
                 with open(file_path, "w", encoding=self.config.encoding) as f:
                     json.dump(
@@ -662,7 +701,9 @@ def create_export_service(
     return ExportService(session=session, config=config)
 
 
-def export_positions_to_csv(user_id: int, output_dir: Optional[Path] = None) -> ExportResult:
+def export_positions_to_csv(
+    user_id: int, output_dir: Optional[Path] = None
+) -> ExportResult:
     """Convenience function to export positions to CSV.
 
     Args:
@@ -695,7 +736,9 @@ def export_trades_to_csv(
     """
     service = create_export_service(output_dir=output_dir)
     date_range = DateRange(start_date=start_date, end_date=end_date)
-    return service.export_trades(user_id, format=ExportFormat.CSV, date_range=date_range)
+    return service.export_trades(
+        user_id, format=ExportFormat.CSV, date_range=date_range
+    )
 
 
 def export_klines_to_csv(
@@ -720,7 +763,9 @@ def export_klines_to_csv(
     return service.export_klines(code, format=ExportFormat.CSV, date_range=date_range)
 
 
-def export_all_to_excel(user_id: int, output_dir: Optional[Path] = None) -> ExportResult:
+def export_all_to_excel(
+    user_id: int, output_dir: Optional[Path] = None
+) -> ExportResult:
     """Convenience function to export all data to Excel.
 
     Args:

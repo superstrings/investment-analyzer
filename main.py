@@ -1675,13 +1675,23 @@ def export_positions_cmd(user: str, format: str, output: str):
     """导出持仓数据"""
     from pathlib import Path
 
-    from services.export_service import ExportFormat, ExportService, ExportConfig
+    from db.database import get_session
+    from db.models import User
+    from services.export_service import ExportConfig, ExportFormat, ExportService
 
-    user_obj = validate_user(None, None, user)
-    if not user_obj:
+    username = validate_user(None, None, user)
+    if not username:
         print_error(f"User not found: {user}", exit_code=1)
 
     try:
+        # Get user ID from database
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == username).first()
+            if not user_obj:
+                print_error(f"User '{username}' not found in database", exit_code=1)
+                return
+            user_id = user_obj.id
+
         config = ExportConfig()
         if output:
             config.output_dir = Path(output)
@@ -1689,7 +1699,7 @@ def export_positions_cmd(user: str, format: str, output: str):
         service = ExportService(config=config)
         export_format = ExportFormat(format)
 
-        result = service.export_positions(user_obj.id, format=export_format)
+        result = service.export_positions(user_id, format=export_format)
 
         if result.success:
             if result.records_exported > 0:
@@ -1717,18 +1727,35 @@ def export_positions_cmd(user: str, format: str, output: str):
 @click.option("--start-date", "-s", help="开始日期 (YYYY-MM-DD)")
 @click.option("--end-date", "-e", help="结束日期 (YYYY-MM-DD)")
 @click.option("--output", "-o", help="输出目录")
-def export_trades_cmd(user: str, format: str, start_date: str, end_date: str, output: str):
+def export_trades_cmd(
+    user: str, format: str, start_date: str, end_date: str, output: str
+):
     """导出交易记录"""
     from datetime import datetime
     from pathlib import Path
 
-    from services.export_service import DateRange, ExportFormat, ExportService, ExportConfig
+    from db.database import get_session
+    from db.models import User
+    from services.export_service import (
+        DateRange,
+        ExportConfig,
+        ExportFormat,
+        ExportService,
+    )
 
-    user_obj = validate_user(None, None, user)
-    if not user_obj:
+    username = validate_user(None, None, user)
+    if not username:
         print_error(f"User not found: {user}", exit_code=1)
 
     try:
+        # Get user ID from database
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == username).first()
+            if not user_obj:
+                print_error(f"User '{username}' not found in database", exit_code=1)
+                return
+            user_id = user_obj.id
+
         config = ExportConfig()
         if output:
             config.output_dir = Path(output)
@@ -1744,7 +1771,7 @@ def export_trades_cmd(user: str, format: str, start_date: str, end_date: str, ou
             date_range.end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
         result = service.export_trades(
-            user_obj.id, format=export_format, date_range=date_range
+            user_id, format=export_format, date_range=date_range
         )
 
         if result.success:
@@ -1781,7 +1808,12 @@ def export_klines_cmd(
     from datetime import datetime
     from pathlib import Path
 
-    from services.export_service import DateRange, ExportFormat, ExportService, ExportConfig
+    from services.export_service import (
+        DateRange,
+        ExportConfig,
+        ExportFormat,
+        ExportService,
+    )
 
     try:
         config = ExportConfig()
@@ -1830,13 +1862,23 @@ def export_watchlist_cmd(user: str, format: str, output: str):
     """导出关注列表"""
     from pathlib import Path
 
-    from services.export_service import ExportFormat, ExportService, ExportConfig
+    from db.database import get_session
+    from db.models import User
+    from services.export_service import ExportConfig, ExportFormat, ExportService
 
-    user_obj = validate_user(None, None, user)
-    if not user_obj:
+    username = validate_user(None, None, user)
+    if not username:
         print_error(f"User not found: {user}", exit_code=1)
 
     try:
+        # Get user ID from database
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == username).first()
+            if not user_obj:
+                print_error(f"User '{username}' not found in database", exit_code=1)
+                return
+            user_id = user_obj.id
+
         config = ExportConfig()
         if output:
             config.output_dir = Path(output)
@@ -1844,7 +1886,7 @@ def export_watchlist_cmd(user: str, format: str, output: str):
         service = ExportService(config=config)
         export_format = ExportFormat(format)
 
-        result = service.export_watchlist(user_obj.id, format=export_format)
+        result = service.export_watchlist(user_id, format=export_format)
 
         if result.success:
             if result.records_exported > 0:
@@ -1867,20 +1909,30 @@ def export_all_cmd(user: str, output: str):
     """导出所有数据到 Excel (多工作表)"""
     from pathlib import Path
 
-    from services.export_service import ExportFormat, ExportService, ExportConfig
+    from db.database import get_session
+    from db.models import User
+    from services.export_service import ExportConfig, ExportFormat, ExportService
 
-    user_obj = validate_user(None, None, user)
-    if not user_obj:
+    username = validate_user(None, None, user)
+    if not username:
         print_error(f"User not found: {user}", exit_code=1)
 
     try:
+        # Get user ID from database
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == username).first()
+            if not user_obj:
+                print_error(f"User '{username}' not found in database", exit_code=1)
+                return
+            user_id = user_obj.id
+
         config = ExportConfig()
         if output:
             config.output_dir = Path(output)
 
         service = ExportService(config=config)
 
-        result = service.export_all(user_obj.id, format=ExportFormat.EXCEL)
+        result = service.export_all(user_id, format=ExportFormat.EXCEL)
 
         if result.success:
             if result.records_exported > 0:
