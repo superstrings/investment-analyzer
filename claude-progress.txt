@@ -38,3 +38,4 @@
 [Mon Dec 15 08:45:07 CST 2025] 修复 export CLI 命令 bug (validate_user 返回 string 而非 User 对象), 修复 export_service session 管理, 修复 kline turnover 字段名, 755 tests passed
 [Mon Dec 15 08:55:54 CST 2025] 修复 trade_time 解析 (支持毫秒格式), 增加默认同步天数到365天, 重新同步848条交易记录 (2023-12至2025-12), 755 tests passed
 [Mon Dec 15 09:05:13 CST 2025] K线默认同步天数从120天改为250天 (支持MA60/VCP/支撑阻力等技术分析), 755 tests passed
+[2025-12-15 09:14:41] 实现关注列表同步: FutuFetcher.get_watchlist (OpenQuoteContext), SyncService.sync_watchlist, CLI sync watchlist 命令, 同步47条关注数据 (17 A股, 15 US, 15 HK), 755 tests passed

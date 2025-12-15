@@ -103,6 +103,21 @@ class TradeInfo:
 
 
 @dataclass
+class WatchlistInfo:
+    """Watchlist item information from broker."""
+
+    market: Market
+    code: str
+    stock_name: str
+    group_name: str = "默认"
+
+    @property
+    def full_code(self) -> str:
+        """Get full stock code with market prefix."""
+        return f"{self.market.value}.{self.code}"
+
+
+@dataclass
 class FetchResult:
     """Result container for fetch operations."""
 

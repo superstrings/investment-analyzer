@@ -264,6 +264,60 @@ def sync_klines(codes: str, days: int):
         sys.exit(1)
 
 
+@sync.command("watchlist")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--clear", is_flag=True, help="清除现有数据后重新同步")
+@click.option("--groups", "-g", default=None, help="关注列表分组 (逗号分隔, 默认: 全部,港股,美股,沪深)")
+def sync_watchlist_cmd(user: str, clear: bool, groups: Optional[str]):
+    """同步关注列表"""
+    from fetchers import FutuFetcher
+    from services import SyncService
+
+    click.echo(f"Syncing watchlist for user '{user}'...")
+
+    users_config = get_users_config()
+    user_config = users_config.get_user(user)
+    db_user = get_user_by_name(user)
+
+    if not db_user:
+        click.echo(f"Error: User '{user}' not found in database.", err=True)
+        sys.exit(1)
+
+    # Parse groups
+    group_list = None
+    if groups:
+        group_list = [g.strip() for g in groups.split(",")]
+
+    try:
+        with FutuFetcher(
+            host=user_config.opend.host,
+            port=user_config.opend.port,
+        ) as futu_fetcher:
+            # Unlock trade if password available
+            if user_config.has_trade_password():
+                futu_fetcher.unlock_trade(user_config.trade_password)
+
+            sync_service = SyncService(futu_fetcher=futu_fetcher)
+            result = sync_service.sync_watchlist(
+                user_id=db_user.id,
+                groups=group_list,
+                clear_existing=clear,
+            )
+
+            if result.success:
+                click.echo(f"Successfully synced watchlist:")
+                click.echo(f"  Synced: {result.records_synced}")
+                click.echo(f"  Skipped (duplicates): {result.records_skipped}")
+            else:
+                click.echo(f"Warning: Watchlist sync completed with issues:")
+                click.echo(f"  {result.error_message}")
+                click.echo(f"  Synced: {result.records_synced}")
+
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
+        sys.exit(1)
+
+
 # =============================================================================
 # Chart Commands
 # =============================================================================

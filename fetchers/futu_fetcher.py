@@ -19,6 +19,7 @@ from typing import Optional
 from futu import (
     RET_ERROR,
     RET_OK,
+    OpenQuoteContext,
     OpenSecTradeContext,
     SecurityFirm,
     TrdEnv,
@@ -36,6 +37,7 @@ from .base import (
     PositionSide,
     TradeInfo,
     TradeSide,
+    WatchlistInfo,
 )
 
 logger = logging.getLogger(__name__)
@@ -437,6 +439,63 @@ class FutuFetcher(BaseFetcher):
             trades.append(trade)
 
         return FetchResult.ok(trades)
+
+    def get_watchlist(
+        self,
+        groups: Optional[list[str]] = None,
+    ) -> FetchResult:
+        """
+        Get watchlist (user securities) from Futu.
+
+        Uses OpenQuoteContext to fetch user's watchlist.
+
+        Args:
+            groups: List of group names to fetch. If None, fetches from common groups.
+
+        Returns:
+            FetchResult containing list of WatchlistInfo
+        """
+        # Default groups to fetch (most common ones)
+        if groups is None:
+            groups = ["全部", "港股", "美股", "沪深"]
+
+        watchlist = []
+        seen_codes = set()  # Avoid duplicates
+
+        try:
+            # Use quote context for watchlist
+            quote_ctx = OpenQuoteContext(host=self.host, port=self.port)
+
+            try:
+                for group_name in groups:
+                    ret, data = quote_ctx.get_user_security(group_name)
+                    if ret != RET_OK:
+                        logger.warning(f"Failed to get watchlist for group '{group_name}': {data}")
+                        continue
+
+                    for _, row in data.iterrows():
+                        full_code = row.get("code", "")
+                        if full_code in seen_codes:
+                            continue
+                        seen_codes.add(full_code)
+
+                        market, code = _parse_code(full_code)
+                        item = WatchlistInfo(
+                            market=market,
+                            code=code,
+                            stock_name=row.get("name", ""),
+                            group_name=group_name,
+                        )
+                        watchlist.append(item)
+
+                return FetchResult.ok(watchlist)
+
+            finally:
+                quote_ctx.close()
+
+        except Exception as e:
+            logger.error(f"Error fetching watchlist: {e}")
+            return FetchResult.error(str(e))
 
     def _ensure_connected(self) -> bool:
         """Ensure connection is established."""

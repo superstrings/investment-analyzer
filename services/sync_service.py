@@ -45,7 +45,7 @@ from db.models import (
     WatchlistItem,
 )
 from fetchers import FutuFetcher, KlineFetcher, Market
-from fetchers.base import AccountInfo, PositionInfo, TradeInfo
+from fetchers.base import AccountInfo, PositionInfo, TradeInfo, WatchlistInfo
 from fetchers.kline_fetcher import KlineData
 
 logger = logging.getLogger(__name__)
@@ -402,10 +402,111 @@ class SyncService:
             with get_session() as sess:
                 return _sync(sess)
 
+    def sync_watchlist(
+        self,
+        user_id: int,
+        groups: Optional[list[str]] = None,
+        clear_existing: bool = False,
+        session: Optional[Session] = None,
+    ) -> SyncResult:
+        """
+        Sync watchlist from Futu to database.
+
+        Fetches user's watchlist from Futu and saves to database.
+
+        Args:
+            user_id: User ID to sync watchlist for
+            groups: List of Futu group names to fetch (default: common groups)
+            clear_existing: If True, clear existing watchlist before sync
+            session: Optional database session
+
+        Returns:
+            SyncResult with sync details
+        """
+        if not self.futu_fetcher:
+            return SyncResult(
+                success=False,
+                sync_type="watchlist",
+                error_message="FutuFetcher not available",
+            )
+
+        start_time = datetime.now()
+
+        def _sync(sess: Session) -> SyncResult:
+            synced = 0
+            skipped = 0
+
+            # Optionally clear existing watchlist
+            if clear_existing:
+                sess.query(WatchlistItem).filter(
+                    WatchlistItem.user_id == user_id
+                ).delete()
+                sess.flush()
+
+            # Fetch watchlist from Futu
+            result = self.futu_fetcher.get_watchlist(groups=groups)
+
+            if not result.success:
+                return SyncResult(
+                    success=False,
+                    sync_type="watchlist",
+                    error_message=result.error_message,
+                )
+
+            # Get existing codes for this user
+            existing = sess.execute(
+                select(WatchlistItem.market, WatchlistItem.code).where(
+                    WatchlistItem.user_id == user_id
+                )
+            ).all()
+            existing_codes = {(r.market, r.code) for r in existing}
+
+            # Sync each item
+            for item in result.data:
+                item: WatchlistInfo
+                key = (item.market.value, item.code)
+
+                if key in existing_codes:
+                    skipped += 1
+                    continue
+
+                watchlist_item = WatchlistItem(
+                    user_id=user_id,
+                    market=item.market.value,
+                    code=item.code,
+                    stock_name=item.stock_name,
+                    group_name=item.group_name,
+                    is_active=True,
+                )
+                sess.add(watchlist_item)
+                synced += 1
+
+            sess.commit()
+
+            duration = (datetime.now() - start_time).total_seconds()
+
+            return SyncResult(
+                success=True,
+                sync_type="watchlist",
+                records_synced=synced,
+                records_skipped=skipped,
+                duration_seconds=duration,
+                details={
+                    "groups": groups or ["全部", "港股", "美股", "沪深"],
+                    "total_fetched": len(result.data),
+                },
+            )
+
+        if session:
+            return _sync(session)
+        else:
+            with get_session() as sess:
+                return _sync(sess)
+
     def sync_klines(
         self,
         codes: list[str],
-        days: int = 120,
+        days: int = 250,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         adjust: str = "qfq",
