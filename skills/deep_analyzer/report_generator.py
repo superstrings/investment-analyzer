@@ -241,6 +241,11 @@ def _generate_fundamental_section(fund: FundamentalData) -> str:
         "",
     ]
 
+    # Data source info
+    if fund.data_source:
+        lines.append(f"*数据来源: {fund.data_source}*")
+        lines.append("")
+
     # Valuation
     lines.append("### 估值指标")
     lines.append("")
@@ -250,16 +255,46 @@ def _generate_fundamental_section(fund: FundamentalData) -> str:
     if fund.pe_ratio:
         eval_pe = "低估" if fund.pe_ratio < 15 else "合理" if fund.pe_ratio < 30 else "偏高"
         lines.append(f"| 市盈率 (PE) | {fund.pe_ratio:.1f} | {eval_pe} |")
+    if fund.pe_ttm:
+        eval_pe_ttm = "低估" if fund.pe_ttm < 15 else "合理" if fund.pe_ttm < 30 else "偏高"
+        lines.append(f"| 市盈率TTM | {fund.pe_ttm:.1f} | {eval_pe_ttm} |")
     if fund.pb_ratio:
         eval_pb = "低估" if fund.pb_ratio < 1.5 else "合理" if fund.pb_ratio < 3 else "偏高"
         lines.append(f"| 市净率 (PB) | {fund.pb_ratio:.1f} | {eval_pb} |")
     if fund.ps_ratio:
         lines.append(f"| 市销率 (PS) | {fund.ps_ratio:.1f} | - |")
     if fund.market_cap:
-        lines.append(f"| 市值 | {fund.market_cap:.1f}B {fund.market_cap_currency} | - |")
+        lines.append(f"| 总市值 | {fund.market_cap:.1f}亿 {fund.market_cap_currency} | - |")
+
+    # Per share data
+    if fund.eps or fund.book_value_per_share:
+        lines.append("")
+        lines.append("### 每股数据")
+        lines.append("")
+        lines.append("| 指标 | 数值 |")
+        lines.append("|------|------|")
+        if fund.eps:
+            lines.append(f"| 每股收益 (EPS) | {fund.eps:.3f} |")
+        if fund.book_value_per_share:
+            lines.append(f"| 每股净资产 | {fund.book_value_per_share:.2f} |")
+
+    # 52-week range
+    if fund.high_52week or fund.low_52week:
+        lines.append("")
+        lines.append("### 52周价格区间")
+        lines.append("")
+        lines.append("| 指标 | 价格 |")
+        lines.append("|------|------|")
+        if fund.high_52week:
+            lines.append(f"| 52周最高 | {fund.high_52week:.2f} |")
+        if fund.low_52week:
+            lines.append(f"| 52周最低 | {fund.low_52week:.2f} |")
+        if fund.high_52week and fund.low_52week:
+            range_pct = ((fund.high_52week - fund.low_52week) / fund.low_52week) * 100
+            lines.append(f"| 52周波幅 | {range_pct:.1f}% |")
 
     # Financial Metrics
-    if any([fund.roe, fund.revenue_growth, fund.net_margin]):
+    if any([fund.roe, fund.revenue_growth, fund.net_margin, fund.net_income, fund.total_assets]):
         lines.append("")
         lines.append("### 财务指标")
         lines.append("")
@@ -278,15 +313,31 @@ def _generate_fundamental_section(fund: FundamentalData) -> str:
             lines.append(f"| 净利率 | {fund.net_margin:.1f}% | - |")
         if fund.gross_margin:
             lines.append(f"| 毛利率 | {fund.gross_margin:.1f}% | - |")
+        if fund.net_income:
+            lines.append(f"| 净利润 | {fund.net_income:.2f}亿 | - |")
+        if fund.total_assets:
+            lines.append(f"| 净资产 | {fund.total_assets:.2f}亿 | - |")
 
     # Dividend
-    if fund.dividend_yield:
+    if fund.dividend_yield and fund.dividend_yield > 0:
         lines.append("")
         lines.append("### 股息")
         lines.append("")
         lines.append(f"- **股息率**: {fund.dividend_yield:.2f}%")
         if fund.dividend_payout_ratio:
             lines.append(f"- **派息率**: {fund.dividend_payout_ratio:.1f}%")
+
+    # Shares info
+    if fund.shares_outstanding or fund.float_shares:
+        lines.append("")
+        lines.append("### 股本结构")
+        lines.append("")
+        if fund.shares_outstanding:
+            shares_b = fund.shares_outstanding / 1e9
+            lines.append(f"- **总股本**: {shares_b:.2f}亿股")
+        if fund.float_shares:
+            float_b = fund.float_shares / 1e9
+            lines.append(f"- **流通股本**: {float_b:.2f}亿股")
 
     return "\n".join(lines)
 

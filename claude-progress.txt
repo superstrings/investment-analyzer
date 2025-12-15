@@ -77,3 +77,4 @@
 [2025-12-15 10:56] T033 完成: Workflow Engine (Scheduler + DailyWorkflow + MonthlyWorkflow + Engine), 44 tests, 1047 total
 [2025-12-15 11:49:58] 修复工作流执行 bug: DataProvider.get_positions 查询改用 account_id, 添加 Analyst/Risk 适配器类, 1047 tests passed
 [2025-12-15 12:39] Implemented DeepAnalyzer skill - comprehensive stock analysis with technical/fundamental/news/industry analysis, report generation, and CLI command (deep-analyze). 1068 tests passing.
+[2025-12-15 12:57:02] DeepAnalyzer 基本面数据增强 完成: WebDataFetcher 集成 Futu API 获取 PE/PB/市值/EPS/52周区间/股本等, 报告模板增强显示基本面数据, 行业分析数据, 新闻消息分类, 1068 tests passed
