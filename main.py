@@ -267,7 +267,12 @@ def sync_klines(codes: str, days: int):
 @sync.command("watchlist")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--clear", is_flag=True, help="清除现有数据后重新同步")
-@click.option("--groups", "-g", default=None, help="关注列表分组 (逗号分隔, 默认: 全部,港股,美股,沪深)")
+@click.option(
+    "--groups",
+    "-g",
+    default=None,
+    help="关注列表分组 (逗号分隔, 默认: 全部,港股,美股,沪深)",
+)
 def sync_watchlist_cmd(user: str, clear: bool, groups: Optional[str]):
     """同步关注列表"""
     from fetchers import FutuFetcher
@@ -2000,6 +2005,306 @@ def export_all_cmd(user: str, output: str):
 
     except Exception as e:
         print_error(f"{e}", exit_code=1)
+
+
+# =============================================================================
+# Skill Commands
+# =============================================================================
+
+
+@cli.group()
+def skill():
+    """Skills 分析命令 (分析师/风控/教练/观察员)"""
+    pass
+
+
+@skill.command("list")
+def skill_list():
+    """列出可用的 Skills"""
+    console.print("\n[bold]Available Skills[/bold]\n")
+
+    console.print("[cyan]analyst[/cyan] - 技术分析师")
+    console.print("  OBV + VCP 双核心技术分析, 评分系统")
+    console.print("  Usage: skill run analyst -u <user> -c <code>")
+    console.print()
+
+    console.print("[cyan]risk[/cyan] - 风控师 (待实现)")
+    console.print("  仓位管理、止损建议、风险评估")
+    console.print()
+
+    console.print("[cyan]coach[/cyan] - 交易导师 (待实现)")
+    console.print("  交易计划制定、执行监督、复盘分析")
+    console.print()
+
+    console.print("[cyan]observer[/cyan] - 市场观察员 (待实现)")
+    console.print("  市场情绪监测、热点追踪、资金流向")
+    console.print()
+
+
+@skill.command("run")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option(
+    "--type",
+    "-t",
+    "skill_type",
+    required=True,
+    type=click.Choice(["analyst", "risk", "coach", "observer"]),
+    help="Skill 类型",
+)
+@click.option("--code", "-c", help="股票代码 (单股分析时必填)")
+@click.option("--codes", help="股票代码列表 (逗号分隔, 批量分析时使用)")
+@click.option("--market", "-m", type=click.Choice(["HK", "US", "A"]), help="市场筛选")
+@click.option("--days", "-d", default=120, help="分析天数 (默认120天)")
+@click.option(
+    "--format",
+    "-f",
+    "output_format",
+    type=click.Choice(["markdown", "json", "text"]),
+    default="markdown",
+    help="输出格式",
+)
+@click.option("--output", "-o", help="输出文件路径")
+def skill_run(
+    user: str,
+    skill_type: str,
+    code: Optional[str],
+    codes: Optional[str],
+    market: Optional[str],
+    days: int,
+    output_format: str,
+    output: Optional[str],
+):
+    """运行指定的 Skill"""
+    from skills.shared import DataProvider, ReportBuilder, ReportFormat, SkillContext
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+
+    # Parse codes
+    code_list = []
+    if code:
+        code_list = [code]
+    elif codes:
+        code_list = parse_codes(codes)
+
+    # Determine request type
+    request_type = "single_stock" if len(code_list) == 1 else "batch"
+    if not code_list:
+        request_type = "portfolio"
+
+    # Build context
+    markets = [market] if market else ["HK", "US", "A"]
+    context = SkillContext(
+        user_id=db_user.id,
+        request_type=request_type,
+        parameters={"days": days},
+        codes=code_list,
+        markets=markets,
+    )
+
+    print_info(f"Running {skill_type} skill for user '{user}'...")
+
+    try:
+        # Map output format
+        format_map = {
+            "markdown": ReportFormat.MARKDOWN,
+            "json": ReportFormat.JSON,
+            "text": ReportFormat.TEXT,
+        }
+        report_format = format_map.get(output_format, ReportFormat.MARKDOWN)
+
+        # Execute skill based on type
+        if skill_type == "analyst":
+            result = _run_analyst_skill(context, report_format)
+        elif skill_type == "risk":
+            print_warning("Risk skill not yet implemented.")
+            return
+        elif skill_type == "coach":
+            print_warning("Coach skill not yet implemented.")
+            return
+        elif skill_type == "observer":
+            print_warning("Observer skill not yet implemented.")
+            return
+        else:
+            print_error(f"Unknown skill type: {skill_type}", exit_code=1)
+            return
+
+        # Handle result
+        if not result.success:
+            print_error(f"Skill execution failed: {result.error_message}", exit_code=1)
+            return
+
+        # Output report
+        if output:
+            Path(output).write_text(result.report_content)
+            print_success(f"Report saved to {output}")
+        else:
+            console.print(result.report_content)
+
+        # Show next actions if any
+        if result.next_actions:
+            console.print("\n[bold yellow]Suggested Next Actions:[/bold yellow]")
+            for action in result.next_actions:
+                console.print(f"  - {action}")
+
+    except Exception as e:
+        logger.exception("Skill execution error")
+        print_error(f"{e}", exit_code=1)
+
+
+def _run_analyst_skill(context, report_format):
+    """Run the analyst skill (placeholder until full implementation)."""
+    from skills.shared import DataProvider, ReportBuilder, SkillResult
+
+    provider = DataProvider()
+    builder = ReportBuilder("Technical Analysis Report", report_format)
+
+    # Get positions and watchlist for context
+    positions = provider.get_positions(context.user_id, context.markets)
+    watchlist = provider.get_watchlist(context.user_id, context.markets)
+
+    builder.add_section("Portfolio Overview", level=2)
+    builder.add_key_value("Total Positions", len(positions))
+    builder.add_key_value("Watchlist Items", len(watchlist))
+    builder.add_blank_line()
+
+    # If specific codes provided, analyze them
+    if context.codes:
+        builder.add_section("Stock Analysis", level=2)
+        for full_code in context.codes:
+            if "." in full_code:
+                market, code = full_code.split(".", 1)
+            else:
+                market = "HK" if full_code.isdigit() else "US"
+                code = full_code
+
+            # Get K-line data
+            klines = provider.get_klines(
+                market, code, days=context.get_param("days", 120)
+            )
+
+            builder.add_section(f"{market}.{code}", level=3)
+            if klines:
+                latest = klines[-1]
+                builder.add_key_value("Latest Close", latest.close)
+                builder.add_key_value("Data Points", len(klines))
+
+                # Placeholder for OBV/VCP analysis
+                builder.add_line("\n*OBV and VCP analysis will be added in T029*")
+            else:
+                builder.add_line("No K-line data available")
+
+            builder.add_blank_line()
+    else:
+        # Portfolio overview
+        if positions:
+            builder.add_section("Position Summary", level=3)
+            pos_data = [
+                {
+                    "code": f"{p.market}.{p.code}",
+                    "name": p.stock_name,
+                    "qty": str(p.qty),
+                    "pl_ratio": f"{float(p.pl_ratio):.2f}%",
+                }
+                for p in positions[:10]  # Top 10
+            ]
+            builder.add_table(pos_data)
+
+    builder.add_divider()
+    builder.add_alert(
+        "This is a basic analysis. Full OBV+VCP analysis coming in T029.", level="info"
+    )
+
+    report = builder.build()
+
+    return SkillResult.ok(
+        skill_name="analyst",
+        result_type="technical_analysis",
+        data={"positions": len(positions), "watchlist": len(watchlist)},
+        report_content=report,
+        next_actions=[
+            "Run 'skill run analyst -c <code>' for single stock analysis",
+            "Implement full OBV+VCP analysis in T029",
+        ],
+    )
+
+
+@skill.command("info")
+@click.argument(
+    "skill_type", type=click.Choice(["analyst", "risk", "coach", "observer"])
+)
+def skill_info(skill_type: str):
+    """显示 Skill 详细信息"""
+    info = {
+        "analyst": {
+            "name": "技术分析师 (Analyst)",
+            "description": "基于 OBV + VCP 双核心的技术分析系统",
+            "capabilities": [
+                "single_stock_analysis - 单股技术分析",
+                "batch_scan - 批量扫描筛选",
+                "portfolio_overview - 持仓技术状态总览",
+            ],
+            "indicators": [
+                "OBV (On-Balance Volume) - 能量潮, 检测资金流向",
+                "VCP (Volatility Contraction Pattern) - 波动收缩形态",
+            ],
+            "scoring": "OBV (40%) + VCP (60%) = 综合技术评分",
+        },
+        "risk": {
+            "name": "风控师 (Risk Controller)",
+            "description": "仓位管理和风险控制",
+            "capabilities": [
+                "position_sizing - 仓位建议",
+                "stop_loss - 止损价计算",
+                "portfolio_risk - 组合风险评估",
+            ],
+            "status": "待实现 (T030)",
+        },
+        "coach": {
+            "name": "交易导师 (Trading Coach)",
+            "description": "交易计划制定和执行监督",
+            "capabilities": [
+                "trading_plan - 交易计划生成",
+                "execution_monitor - 执行监控",
+                "review - 交易复盘",
+            ],
+            "status": "待实现 (T031)",
+        },
+        "observer": {
+            "name": "市场观察员 (Market Observer)",
+            "description": "市场情绪和资金流向监测",
+            "capabilities": [
+                "market_sentiment - 市场情绪",
+                "sector_rotation - 板块轮动",
+                "fund_flow - 资金流向",
+            ],
+            "status": "待实现 (T032)",
+        },
+    }
+
+    skill_info = info.get(skill_type, {})
+
+    console.print(f"\n[bold cyan]{skill_info.get('name', skill_type)}[/bold cyan]")
+    console.print(f"\n{skill_info.get('description', 'No description')}\n")
+
+    if "capabilities" in skill_info:
+        console.print("[bold]Capabilities:[/bold]")
+        for cap in skill_info["capabilities"]:
+            console.print(f"  - {cap}")
+        console.print()
+
+    if "indicators" in skill_info:
+        console.print("[bold]Technical Indicators:[/bold]")
+        for ind in skill_info["indicators"]:
+            console.print(f"  - {ind}")
+        console.print()
+
+    if "scoring" in skill_info:
+        console.print(f"[bold]Scoring:[/bold] {skill_info['scoring']}\n")
+
+    if "status" in skill_info:
+        console.print(f"[yellow]Status: {skill_info['status']}[/yellow]\n")
 
 
 if __name__ == "__main__":

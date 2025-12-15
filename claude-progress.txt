@@ -50,3 +50,4 @@
   - 创建设计决策文档: docs/decisions/D001-skills-architecture.md
   - 更新 TASKS.md: 添加 M9 阶段 (T027-T033)
 [2025-12-15 09:49:24] Skills 体系需求分析完成 (F001): 4大角色设计 (分析师/风控师/交易导师/市场观察员), 技术分析简化为 OBV + VCP 双核心, 自动化工作流设计 (盘前/盘后/月度), 新增 T028-T033 任务
+[2025-12-15 09:59:19] T028 Skills 基础框架 完成: skills/shared/ (base.py/data_provider.py/report_builder.py), CLI skill命令组 (list/run/info), MarketSchedule交易时段检测, 67个测试, 共 822 tests passed

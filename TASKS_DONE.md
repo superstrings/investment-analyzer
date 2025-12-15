@@ -94,4 +94,13 @@
 
 ---
 
+## Phase M9: Skills 体系增强
+
+| ID | 任务 | 完成日期 | 主要产出 |
+|----|------|---------|---------|
+| T027 | Skills 体系增强需求分析 | 2025-12-15 | docs/features/F001-skills-enhancement.md, docs/decisions/D001-skills-architecture.md |
+| T028 | Skills 基础框架 | 2025-12-15 | skills/shared/ (base.py, data_provider.py, report_builder.py), CLI skill命令组, 67 tests, 822 total |
+
+---
+
 *归档开始日期: 2025-12-14*

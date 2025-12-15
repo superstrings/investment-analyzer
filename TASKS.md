@@ -925,21 +925,32 @@
       "title": "Skills 基础框架",
       "description": "创建 BaseSkill 基类、共享组件和 CLI 命令框架",
       "priority": "P0",
-      "status": "pending",
-      "progress": 0,
-      "estimated_items": [
-        "创建 skills 新目录结构",
-        "实现 BaseSkill 抽象基类",
-        "实现 SkillContext 和 SkillResult 数据类",
-        "实现 DataProvider 统一数据获取",
-        "实现 ReportBuilder 报告构建器",
-        "添加 CLI 命令框架 (analyze/risk/coach/market/workflow)"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "创建 skills/shared 目录结构",
+        "实现 BaseSkill 抽象基类 (execute/get_capabilities/validate_context)",
+        "实现 SkillContext 数据类 (user_id/request_type/parameters/codes/markets)",
+        "实现 SkillResult 数据类 (ok/error 工厂方法)",
+        "实现 MarketState/SignalType/RiskLevel 枚举",
+        "实现 MarketSchedule (HK/US/A-share 交易时段检测)",
+        "实现 DataProvider 统一数据获取 (positions/watchlist/klines/trades)",
+        "实现缓存机制 (cache_ttl_seconds)",
+        "实现 ReportBuilder 报告构建器 (Markdown/JSON/Text/HTML)",
+        "实现 TableColumn/ReportSection 数据类",
+        "实现 format_percentage/format_currency/format_score 辅助函数",
+        "添加 CLI 命令框架 (skill list/run/info)",
+        "实现 analyst 基础分析功能占位",
+        "创建 tests/test_skills.py (67个测试用例)",
+        "验证所有 822 个测试通过"
       ],
       "files": [
         "skills/shared/__init__.py",
         "skills/shared/base.py",
         "skills/shared/data_provider.py",
-        "skills/shared/report_builder.py"
+        "skills/shared/report_builder.py",
+        "main.py",
+        "tests/test_skills.py"
       ]
     },
     {
@@ -1071,9 +1082,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T027 (27个任务)
+- **已完成**: T001-T028 (28个任务)
 - **进行中**: 无
-- **待开始**: T028-T033 (6个任务)
+- **待开始**: T029-T033 (5个任务)
 - **已阻塞**: 无
 
 ### 参考文档
