@@ -2118,8 +2118,7 @@ def skill_run(
         if skill_type == "analyst":
             result = _run_analyst_skill(context, report_format)
         elif skill_type == "risk":
-            print_warning("Risk skill not yet implemented.")
-            return
+            result = _run_risk_skill(context, report_format)
         elif skill_type == "coach":
             print_warning("Coach skill not yet implemented.")
             return
@@ -2279,6 +2278,51 @@ def _get_analyst_next_actions(analysis) -> list[str]:
     return actions
 
 
+def _run_risk_skill(context, report_format):
+    """Run the risk controller skill for portfolio risk analysis."""
+    from skills.risk_controller import RiskController, generate_risk_report
+    from skills.shared import DataProvider, SkillResult
+
+    provider = DataProvider()
+
+    # Create risk controller
+    controller = RiskController(data_provider=provider)
+
+    # Run risk analysis
+    result = controller.analyze_portfolio_risk(
+        user_id=context.user_id,
+        markets=context.markets if context.markets != ["HK", "US", "A"] else None,
+    )
+
+    if result.portfolio_value == 0:
+        return SkillResult.error(
+            "risk_controller",
+            "No positions found. Sync positions first with 'sync positions'.",
+        )
+
+    # Generate report
+    report = generate_risk_report(result, report_format)
+
+    # Build next actions
+    next_actions = result.priority_actions.copy() if result.priority_actions else []
+    next_actions.append(
+        f"Risk Level: {result.overall_risk_level.value.upper()}, "
+        f"Health: {result.health_score:.0f}/100, "
+        f"Risk: {result.risk_score:.0f}/100"
+    )
+
+    if result.alerts.critical_count > 0:
+        next_actions.insert(0, f"{result.alerts.critical_count} CRITICAL alert(s) require immediate attention!")
+
+    return SkillResult.ok(
+        skill_name="risk_controller",
+        result_type="portfolio_risk_analysis",
+        data=result.to_dict(),
+        report_content=report,
+        next_actions=next_actions,
+    )
+
+
 @skill.command("info")
 @click.argument(
     "skill_type", type=click.Choice(["analyst", "risk", "coach", "observer"])
@@ -2302,13 +2346,17 @@ def skill_info(skill_type: str):
         },
         "risk": {
             "name": "风控师 (Risk Controller)",
-            "description": "仓位管理和风险控制",
+            "description": "投资组合风险管理系统",
             "capabilities": [
-                "position_sizing - 仓位建议",
-                "stop_loss - 止损价计算",
-                "portfolio_risk - 组合风险评估",
+                "position_monitor - 持仓诊断 (止损/仓位/盈亏状态)",
+                "risk_calculator - 风险计算 (集中度/止损覆盖/杠杆)",
+                "alert_generator - 风险预警生成",
             ],
-            "status": "待实现 (T030)",
+            "metrics": [
+                "HHI Index - 集中度指数 (0-10000)",
+                "Health Score - 健康评分 (0-100)",
+                "Risk Score - 风险评分 (0-100)",
+            ],
         },
         "coach": {
             "name": "交易导师 (Trading Coach)",

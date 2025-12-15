@@ -993,21 +993,29 @@
       "title": "风控师 (Risk Controller) Skill",
       "description": "实现持仓监控、风险预警、仓位管理",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "estimated_items": [
-        "实现 PositionMonitor (持仓诊断)",
-        "实现 RiskCalculator (集中度/止损/杠杆)",
-        "实现 AlertGenerator (风险预警)",
-        "创建 SKILL.md 文档",
-        "添加单元测试"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 PositionMonitor (持仓诊断/止损状态/仓位检查)",
+        "实现 RiskCalculator (HHI集中度/止损覆盖/杠杆分析)",
+        "实现 AlertGenerator (多级别风险预警)",
+        "实现 RiskController 主控制器",
+        "实现 generate_risk_report 报告生成",
+        "实现 PositionSizeRecommendation 仓位计算",
+        "更新 main.py _run_risk_skill 处理函数",
+        "更新 skill info 显示风控师信息",
+        "创建 SKILL.md 详细文档",
+        "创建 tests/test_risk_controller.py (36个测试用例)",
+        "验证所有 899 个测试通过"
       ],
       "files": [
         "skills/risk_controller/__init__.py",
         "skills/risk_controller/SKILL.md",
         "skills/risk_controller/position_monitor.py",
         "skills/risk_controller/risk_calculator.py",
-        "skills/risk_controller/alert_generator.py"
+        "skills/risk_controller/alert_generator.py",
+        "skills/risk_controller/risk_controller.py",
+        "tests/test_risk_controller.py"
       ]
     },
     {
@@ -1088,9 +1096,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T029 (29个任务)
+- **已完成**: T001-T030 (30个任务)
 - **进行中**: 无
-- **待开始**: T030-T033 (4个任务)
+- **待开始**: T031-T033 (3个任务)
 - **已阻塞**: 无
 
 ### 参考文档
