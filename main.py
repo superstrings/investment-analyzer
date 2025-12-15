@@ -2519,5 +2519,178 @@ def skill_info(skill_type: str):
         console.print(f"[yellow]Status: {skill_info['status']}[/yellow]\n")
 
 
+# =============================================================================
+# Workflow Commands
+# =============================================================================
+
+
+@cli.group()
+def workflow():
+    """工作流命令 - 每日/月度自动化分析"""
+    pass
+
+
+@workflow.command("run")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option(
+    "--type",
+    "-t",
+    "workflow_type",
+    type=click.Choice(["daily", "monthly", "auto"]),
+    default="auto",
+    help="工作流类型",
+)
+@click.option("--market", "-m", default="HK", help="市场代码")
+@click.option(
+    "--phase",
+    "-p",
+    type=click.Choice(["pre_market", "post_market", "auto"]),
+    default="auto",
+    help="工作流阶段 (仅 daily)",
+)
+@click.option("--force", "-f", is_flag=True, help="强制执行 (忽略时间检查)")
+def workflow_run(
+    user: str,
+    workflow_type: str,
+    market: str,
+    phase: str,
+    force: bool,
+):
+    """执行工作流"""
+    from db.database import get_session
+    from db.models import User
+    from skills.shared import SkillContext
+    from skills.workflow import WorkflowEngine
+
+    try:
+        # Get user ID
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == user).first()
+            if not user_obj:
+                print_error(f"User '{user}' not found", exit_code=1)
+                return
+            user_id = user_obj.id
+
+        # Create context
+        context = SkillContext(
+            user_id=user_id,
+            request_type=workflow_type,
+            markets=[market],
+            parameters={
+                "phase": phase,
+                "force": force,
+            },
+        )
+
+        # Run workflow
+        engine = WorkflowEngine()
+        result = engine.execute(context)
+
+        if result.success:
+            console.print(result.report_content)
+            console.print()
+            if result.next_actions:
+                console.print("[bold]Next Actions:[/bold]")
+                for action in result.next_actions:
+                    console.print(f"  - {action}")
+        else:
+            print_error(f"Workflow failed: {result.error_message}", exit_code=1)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@workflow.command("daily")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--market", "-m", default="HK", help="市场代码")
+@click.option(
+    "--phase",
+    "-p",
+    type=click.Choice(["pre_market", "post_market", "auto"]),
+    default="auto",
+    help="工作流阶段",
+)
+def workflow_daily(user: str, market: str, phase: str):
+    """执行每日工作流"""
+    from db.database import get_session
+    from db.models import User
+    from skills.workflow import run_daily_workflow
+
+    try:
+        # Get user ID
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == user).first()
+            if not user_obj:
+                print_error(f"User '{user}' not found", exit_code=1)
+                return
+            user_id = user_obj.id
+
+        report = run_daily_workflow(
+            user_id=user_id,
+            phase=phase,
+            markets=[market],
+        )
+
+        console.print(report)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@workflow.command("monthly")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--market", "-m", default="HK", help="市场代码")
+@click.option("--force", "-f", is_flag=True, help="强制执行 (非月末)")
+def workflow_monthly(user: str, market: str, force: bool):
+    """执行月度工作流"""
+    from db.database import get_session
+    from db.models import User
+    from skills.workflow import run_monthly_workflow
+
+    try:
+        # Get user ID
+        with get_session() as session:
+            user_obj = session.query(User).filter(User.username == user).first()
+            if not user_obj:
+                print_error(f"User '{user}' not found", exit_code=1)
+                return
+            user_id = user_obj.id
+
+        report = run_monthly_workflow(
+            user_id=user_id,
+            markets=[market],
+            force=force,
+        )
+
+        console.print(report)
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
+@workflow.command("status")
+@click.option("--market", "-m", default="HK", help="市场代码")
+def workflow_status(market: str):
+    """显示工作流调度状态"""
+    from skills.workflow import WorkflowEngine
+
+    try:
+        engine = WorkflowEngine()
+        info = engine.get_schedule_info(market)
+
+        console.print(f"\n[bold cyan]Workflow Status - {market}[/bold cyan]\n")
+
+        console.print(f"Current Phase: [bold]{info['current_phase']}[/bold]")
+        console.print(f"Next Phase: {info['next_phase']}")
+        if info['next_phase_time']:
+            console.print(f"Next Phase Time: {info['next_phase_time']}")
+        console.print(f"Is Trading Day: {'Yes' if info['is_trading_day'] else 'No'}")
+        console.print(f"Is Month End: {'Yes' if info['is_month_end'] else 'No'}")
+        console.print()
+
+    except Exception as e:
+        print_error(f"{e}", exit_code=1)
+
+
 if __name__ == "__main__":
     cli()

@@ -104,6 +104,7 @@
 | T030 | 风控师 (Risk Controller) Skill | 2025-12-15 | skills/risk_controller/ (PositionMonitor, RiskCalculator, AlertGenerator, RiskController), SKILL.md, 36 tests, 899 total |
 | T031 | 交易导师 (Trading Coach) Skill | 2025-12-15 | skills/trading_coach/ (PlanGenerator, CompoundEducator, PsychologyCoach, TradingCoach), SKILL.md, 49 tests, 948 total |
 | T032 | 市场观察员 (Market Observer) Skill | 2025-12-15 | skills/market_observer/ (SentimentMeter, PreMarketAnalyzer, PostMarketSummarizer, SectorRotationAnalyzer, MarketObserver), SKILL.md, 55 tests, 1003 total |
+| T033 | 自动化工作流引擎 | 2025-12-15 | skills/workflow/ (WorkflowScheduler, DailyWorkflow, MonthlyWorkflow, WorkflowEngine), SKILL.md, CLI workflow命令组, 44 tests, 1047 total |
 
 ---
 

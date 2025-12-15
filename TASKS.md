@@ -1079,21 +1079,24 @@
       "title": "自动化工作流引擎",
       "description": "实现每日/月度自动化工作流",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "estimated_items": [
-        "实现 Scheduler (调度器)",
-        "实现 DailyWorkflow (盘前/盘后)",
-        "实现 MonthlyWorkflow (月度复盘)",
-        "创建工作流配置 YAML",
-        "添加集成测试"
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 WorkflowScheduler (调度器: 时间管理、阶段检测)",
+        "实现 DailyWorkflow (每日工作流: 盘前/盘后)",
+        "实现 MonthlyWorkflow (月度工作流: 月末复盘)",
+        "实现 WorkflowEngine (统一入口: 协调所有工作流)",
+        "更新 main.py 添加 workflow 命令组",
+        "编写 44 个测试用例 (全部通过)"
       ],
       "files": [
         "skills/workflow/__init__.py",
+        "skills/workflow/SKILL.md",
         "skills/workflow/scheduler.py",
         "skills/workflow/daily_workflow.py",
         "skills/workflow/monthly_workflow.py",
-        "skills/workflow/config/daily.yaml"
+        "skills/workflow/workflow_engine.py",
+        "tests/test_workflow.py"
       ]
     }
   ]
@@ -1104,9 +1107,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T032 (32个任务)
+- **已完成**: T001-T033 (33个任务)
 - **进行中**: 无
-- **待开始**: T033 (1个任务)
+- **待开始**: 无
 - **已阻塞**: 无
 
 ### 参考文档
