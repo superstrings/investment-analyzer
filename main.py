@@ -2028,16 +2028,19 @@ def skill_list():
     console.print("  Usage: skill run analyst -u <user> -c <code>")
     console.print()
 
-    console.print("[cyan]risk[/cyan] - 风控师 (待实现)")
-    console.print("  仓位管理、止损建议、风险评估")
+    console.print("[cyan]risk[/cyan] - 风控师")
+    console.print("  持仓诊断、风险预警、仓位建议")
+    console.print("  Usage: skill run risk -u <user>")
     console.print()
 
-    console.print("[cyan]coach[/cyan] - 交易导师 (待实现)")
-    console.print("  交易计划制定、执行监督、复盘分析")
+    console.print("[cyan]coach[/cyan] - 交易导师")
+    console.print("  交易计划制定、心理辅导、复利教育")
+    console.print("  Usage: skill run coach -u <user> --type <daily_plan|psychology_check|compound_lesson|full_coaching>")
     console.print()
 
-    console.print("[cyan]observer[/cyan] - 市场观察员 (待实现)")
-    console.print("  市场情绪监测、热点追踪、资金流向")
+    console.print("[cyan]observer[/cyan] - 市场观察员")
+    console.print("  盘前分析、盘后总结、板块轮动、情绪指数")
+    console.print("  Usage: skill run observer -u <user> --type <pre_market|post_market|sector|sentiment|full|auto>")
     console.print()
 
 
@@ -2122,8 +2125,7 @@ def skill_run(
         elif skill_type == "coach":
             result = _run_coach_skill(context, report_format)
         elif skill_type == "observer":
-            print_warning("Observer skill not yet implemented.")
-            return
+            result = _run_observer_skill(context, report_format)
         else:
             print_error(f"Unknown skill type: {skill_type}", exit_code=1)
             return
@@ -2367,6 +2369,49 @@ def _run_coach_skill(context, report_format):
     )
 
 
+def _run_observer_skill(context, report_format):
+    """Run the market observer skill for market analysis."""
+    from skills.market_observer import MarketObserver
+    from skills.shared import DataProvider, SkillResult
+
+    provider = DataProvider()
+
+    # Create market observer
+    observer = MarketObserver(data_provider=provider)
+
+    # Determine request type based on context parameters
+    # Options: pre_market, post_market, sector, sentiment, full, auto
+    request_type = context.get_param("type", "auto")
+    context.request_type = request_type
+
+    # Execute observation
+    result = observer.execute(context)
+
+    if not result.success:
+        return SkillResult.error("market_observer", result.error_message)
+
+    # Build next actions from result
+    next_actions = result.next_actions.copy() if result.next_actions else []
+
+    # Add observation summary
+    if result.data:
+        obs_result = result.data
+        if hasattr(obs_result, "sentiment_result") and obs_result.sentiment_result:
+            sentiment = obs_result.sentiment_result
+            next_actions.insert(
+                0,
+                f"Market Sentiment: {sentiment.level.value} ({sentiment.score:.0f}/100)",
+            )
+
+    return SkillResult.ok(
+        skill_name="market_observer",
+        result_type=request_type,
+        data=result.data,
+        report_content=result.report_content,
+        next_actions=next_actions,
+    )
+
+
 @skill.command("info")
 @click.argument(
     "skill_type", type=click.Choice(["analyst", "risk", "coach", "observer"])
@@ -2420,13 +2465,21 @@ def skill_info(skill_type: str):
         },
         "observer": {
             "name": "市场观察员 (Market Observer)",
-            "description": "市场情绪和资金流向监测",
+            "description": "盘前分析、盘后总结、板块轮动、情绪指数",
             "capabilities": [
-                "market_sentiment - 市场情绪",
-                "sector_rotation - 板块轮动",
-                "fund_flow - 资金流向",
+                "pre_market - 盘前分析 (全球市场、重大事件、风险预警)",
+                "post_market - 盘后总结 (组合盈亏、异动提醒、经验总结)",
+                "sector - 板块轮动 (强弱板块、资金流向、轮动信号)",
+                "sentiment - 情绪指数 (0-100评分、VIX解读、策略建议)",
+                "full - 完整观察 (包含以上所有内容)",
+                "auto - 自动检测 (根据市场时间选择合适的分析类型)",
             ],
-            "status": "待实现 (T032)",
+            "components": [
+                "PreMarketAnalyzer - 隔夜市场、事件检测、交易准备",
+                "PostMarketSummarizer - 盈亏统计、异动分析、明日关注",
+                "SectorRotationAnalyzer - 板块排行、轮动信号、配置建议",
+                "SentimentMeter - 多维度指标、情绪评分、交易策略",
+            ],
         },
     }
 
@@ -2445,6 +2498,18 @@ def skill_info(skill_type: str):
         console.print("[bold]Technical Indicators:[/bold]")
         for ind in skill_info["indicators"]:
             console.print(f"  - {ind}")
+        console.print()
+
+    if "metrics" in skill_info:
+        console.print("[bold]Metrics:[/bold]")
+        for metric in skill_info["metrics"]:
+            console.print(f"  - {metric}")
+        console.print()
+
+    if "components" in skill_info:
+        console.print("[bold]Components:[/bold]")
+        for comp in skill_info["components"]:
+            console.print(f"  - {comp}")
         console.print()
 
     if "scoring" in skill_info:

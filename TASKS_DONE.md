@@ -103,6 +103,7 @@
 | T029 | 分析师 (Analyst) Skill | 2025-12-15 | skills/analyst/ (OBVAnalyzer, VCPScanner, StockAnalyzer, BatchAnalyzer, ScoringSystem), SKILL.md, 41 tests, 863 total |
 | T030 | 风控师 (Risk Controller) Skill | 2025-12-15 | skills/risk_controller/ (PositionMonitor, RiskCalculator, AlertGenerator, RiskController), SKILL.md, 36 tests, 899 total |
 | T031 | 交易导师 (Trading Coach) Skill | 2025-12-15 | skills/trading_coach/ (PlanGenerator, CompoundEducator, PsychologyCoach, TradingCoach), SKILL.md, 49 tests, 948 total |
+| T032 | 市场观察员 (Market Observer) Skill | 2025-12-15 | skills/market_observer/ (SentimentMeter, PreMarketAnalyzer, PostMarketSummarizer, SectorRotationAnalyzer, MarketObserver), SKILL.md, 55 tests, 1003 total |
 
 ---
 

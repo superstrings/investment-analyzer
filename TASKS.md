@@ -1049,24 +1049,28 @@
       "id": "T032",
       "category": "skill",
       "title": "市场观察员 (Market Observer) Skill",
-      "description": "实现盘前分析、盘后总结、板块轮动",
+      "description": "实现盘前分析、盘后总结、板块轮动、情绪指数",
       "priority": "P1",
-      "status": "pending",
-      "progress": 0,
-      "estimated_items": [
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "实现 SentimentMeter (市场情绪计算0-100评分)",
         "实现 PreMarketAnalyzer (盘前分析报告)",
         "实现 PostMarketSummarizer (盘后总结报告)",
-        "实现 SectorRotation (板块轮动分析)",
-        "实现 SentimentMeter (情绪温度计)",
-        "创建 SKILL.md 文档",
-        "添加单元测试"
+        "实现 SectorRotationAnalyzer (板块轮动分析)",
+        "实现 MarketObserver 主控制器",
+        "更新 main.py 添加 observer skill 支持",
+        "编写 55 个测试用例 (全部通过)"
       ],
       "files": [
         "skills/market_observer/__init__.py",
         "skills/market_observer/SKILL.md",
+        "skills/market_observer/market_observer.py",
+        "skills/market_observer/sentiment_meter.py",
         "skills/market_observer/pre_market.py",
         "skills/market_observer/post_market.py",
-        "skills/market_observer/sector_rotation.py"
+        "skills/market_observer/sector_rotation.py",
+        "tests/test_market_observer.py"
       ]
     },
     {
@@ -1100,9 +1104,9 @@
 
 ### 按状态
 
-- **已完成**: T001-T031 (31个任务)
+- **已完成**: T001-T032 (32个任务)
 - **进行中**: 无
-- **待开始**: T032-T033 (2个任务)
+- **待开始**: T033 (1个任务)
 - **已阻塞**: 无
 
 ### 参考文档
