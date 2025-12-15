@@ -403,12 +403,17 @@ class FutuFetcher(BaseFetcher):
         for _, row in data.iterrows():
             market, code = _parse_code(row.get("code", ""))
 
-            # Parse trade time
+            # Parse trade time (format: 2025-12-11 11:26:45.279)
             trade_time_str = row.get("create_time", "")
             try:
-                trade_time = datetime.strptime(trade_time_str, "%Y-%m-%d %H:%M:%S")
+                # Try with milliseconds first
+                trade_time = datetime.strptime(trade_time_str, "%Y-%m-%d %H:%M:%S.%f")
             except (ValueError, TypeError):
-                trade_time = datetime.now()
+                try:
+                    # Fallback to without milliseconds
+                    trade_time = datetime.strptime(trade_time_str, "%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    trade_time = datetime.now()
 
             # Parse trade side
             trd_side = row.get("trd_side")

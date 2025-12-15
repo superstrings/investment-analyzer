@@ -36,3 +36,4 @@
 [2025-12-15 00:41:49] T026 数据导出功能 完成: services/export_service.py (ExportService, CSV/Excel/JSON), main.py export命令组 (positions/trades/klines/watchlist/all), tests/test_export.py (36个测试), 总计 755 tests passed
 [2025-12-15 08:29:03] T021 富途 API 真实数据测试 完成: OpenD连接成功, 同步持仓(17条), 交易(319条), K线(656条) 到数据库
 [Mon Dec 15 08:45:07 CST 2025] 修复 export CLI 命令 bug (validate_user 返回 string 而非 User 对象), 修复 export_service session 管理, 修复 kline turnover 字段名, 755 tests passed
+[Mon Dec 15 08:55:54 CST 2025] 修复 trade_time 解析 (支持毫秒格式), 增加默认同步天数到365天, 重新同步848条交易记录 (2023-12至2025-12), 755 tests passed
