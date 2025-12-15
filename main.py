@@ -58,6 +58,27 @@ def parse_codes(codes: Optional[str]) -> list[str]:
     return [c.strip() for c in codes.split(",") if c.strip()]
 
 
+def _is_option_code(market: str, code: str) -> bool:
+    """Check if a stock code is an option/warrant.
+
+    HK options: codes containing letters (e.g., SMC260629C75000, TCH260330C650000)
+    US options: codes with date+C/P+strike pattern (e.g., MU260116C230000, NVDA260116C186000)
+    """
+    import re
+
+    if market == "HK":
+        # HK options/warrants have letters in the code
+        return any(c.isalpha() for c in code)
+
+    if market == "US":
+        # US options have pattern: SYMBOL + YYMMDD + C/P + STRIKE
+        # e.g., MU260116C230000, NVDA260116C186000, PLTR251219C175000
+        # Pattern: letters + 6 digits + C or P + digits
+        return bool(re.match(r"^[A-Z]+\d{6}[CP]\d+$", code))
+
+    return False
+
+
 @click.group()
 @click.version_option(version="0.1.0")
 @click.option("-v", "--verbose", is_flag=True, help="Enable verbose output")
@@ -2844,10 +2865,8 @@ def deep_analyze(
         positions = data_provider.get_positions(db_user.id, market_filters)
         pos_codes = set()
         for p in positions:
-            # Skip options/warrants (codes with letters after numbers for HK)
-            if selected_market == "HK" and any(
-                c.isalpha() for c in p.code if c not in "."
-            ):
+            # Skip options/warrants
+            if _is_option_code(p.market, p.code):
                 continue
             pos_codes.add(f"{p.market}.{p.code}")
 
