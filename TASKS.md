@@ -889,4 +889,199 @@
 
 ---
 
-*最后更新: 2025-12-14*
+## 阶段 M9: Skills 体系增强
+
+```json
+{
+  "phase": "M9_skills_enhancement",
+  "description": "完善 Skills 体系，新增智能投资顾问角色",
+  "tasks": [
+    {
+      "id": "T027",
+      "category": "skill",
+      "title": "Skills 体系增强需求分析",
+      "description": "分析现有系统和参考资料，设计新 Skills 体系架构",
+      "priority": "P0",
+      "status": "completed",
+      "progress": 100,
+      "completed_items": [
+        "探索现有 skills 目录结构 (3个 SKILL.md)",
+        "分析参考 prompt 演进 (V1-V5)",
+        "研究历史分析报告示例",
+        "理解复利公式和投资理念",
+        "设计 4 大 Skill 角色 (Analyst/RiskController/TradingCoach/MarketObserver)",
+        "设计自动化工作流 (盘前/盘后/月度)",
+        "创建功能需求文档 F001-skills-enhancement.md",
+        "创建设计决策文档 D001-skills-architecture.md"
+      ],
+      "files": [
+        "docs/features/F001-skills-enhancement.md",
+        "docs/decisions/D001-skills-architecture.md"
+      ]
+    },
+    {
+      "id": "T028",
+      "category": "skill",
+      "title": "Skills 基础框架",
+      "description": "创建 BaseSkill 基类、共享组件和 CLI 命令框架",
+      "priority": "P0",
+      "status": "pending",
+      "progress": 0,
+      "estimated_items": [
+        "创建 skills 新目录结构",
+        "实现 BaseSkill 抽象基类",
+        "实现 SkillContext 和 SkillResult 数据类",
+        "实现 DataProvider 统一数据获取",
+        "实现 ReportBuilder 报告构建器",
+        "添加 CLI 命令框架 (analyze/risk/coach/market/workflow)"
+      ],
+      "files": [
+        "skills/shared/__init__.py",
+        "skills/shared/base.py",
+        "skills/shared/data_provider.py",
+        "skills/shared/report_builder.py"
+      ]
+    },
+    {
+      "id": "T029",
+      "category": "skill",
+      "title": "分析师 (Analyst) Skill",
+      "description": "实现 OBV + VCP 双核心技术分析、评分系统",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "design_principle": "技术指标在精不在多，专注 OBV (量价关系) + VCP (波动收缩形态)",
+      "estimated_items": [
+        "实现 OBVAnalyzer (趋势/背离/突破确认)",
+        "实现 VCPScanner (收缩识别/评分/突破点计算)",
+        "实现 StockAnalyzer (整合 OBV + VCP 分析)",
+        "实现 BatchAnalyzer (关注列表批量筛选排序)",
+        "实现 ScoringSystem (OBV 40% + VCP 60%)",
+        "创建 SKILL.md 文档",
+        "添加单元测试"
+      ],
+      "files": [
+        "skills/analyst/__init__.py",
+        "skills/analyst/SKILL.md",
+        "skills/analyst/obv_analyzer.py",
+        "skills/analyst/vcp_scanner.py",
+        "skills/analyst/stock_analyzer.py",
+        "skills/analyst/batch_analyzer.py",
+        "skills/analyst/scoring.py"
+      ]
+    },
+    {
+      "id": "T030",
+      "category": "skill",
+      "title": "风控师 (Risk Controller) Skill",
+      "description": "实现持仓监控、风险预警、仓位管理",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "estimated_items": [
+        "实现 PositionMonitor (持仓诊断)",
+        "实现 RiskCalculator (集中度/止损/杠杆)",
+        "实现 AlertGenerator (风险预警)",
+        "创建 SKILL.md 文档",
+        "添加单元测试"
+      ],
+      "files": [
+        "skills/risk_controller/__init__.py",
+        "skills/risk_controller/SKILL.md",
+        "skills/risk_controller/position_monitor.py",
+        "skills/risk_controller/risk_calculator.py",
+        "skills/risk_controller/alert_generator.py"
+      ]
+    },
+    {
+      "id": "T031",
+      "category": "skill",
+      "title": "交易导师 (Trading Coach) Skill",
+      "description": "实现交易计划、复利教育、心理辅导",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "estimated_items": [
+        "实现 PlanGenerator (今日操作计划)",
+        "实现 CompoundEducator (复利思维教育)",
+        "实现 PsychologyCoach (交易心理辅导)",
+        "创建 SKILL.md 文档",
+        "添加单元测试"
+      ],
+      "files": [
+        "skills/trading_coach/__init__.py",
+        "skills/trading_coach/SKILL.md",
+        "skills/trading_coach/plan_generator.py",
+        "skills/trading_coach/compound_educator.py",
+        "skills/trading_coach/psychology_coach.py"
+      ]
+    },
+    {
+      "id": "T032",
+      "category": "skill",
+      "title": "市场观察员 (Market Observer) Skill",
+      "description": "实现盘前分析、盘后总结、板块轮动",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "estimated_items": [
+        "实现 PreMarketAnalyzer (盘前分析报告)",
+        "实现 PostMarketSummarizer (盘后总结报告)",
+        "实现 SectorRotation (板块轮动分析)",
+        "实现 SentimentMeter (情绪温度计)",
+        "创建 SKILL.md 文档",
+        "添加单元测试"
+      ],
+      "files": [
+        "skills/market_observer/__init__.py",
+        "skills/market_observer/SKILL.md",
+        "skills/market_observer/pre_market.py",
+        "skills/market_observer/post_market.py",
+        "skills/market_observer/sector_rotation.py"
+      ]
+    },
+    {
+      "id": "T033",
+      "category": "skill",
+      "title": "自动化工作流引擎",
+      "description": "实现每日/月度自动化工作流",
+      "priority": "P1",
+      "status": "pending",
+      "progress": 0,
+      "estimated_items": [
+        "实现 Scheduler (调度器)",
+        "实现 DailyWorkflow (盘前/盘后)",
+        "实现 MonthlyWorkflow (月度复盘)",
+        "创建工作流配置 YAML",
+        "添加集成测试"
+      ],
+      "files": [
+        "skills/workflow/__init__.py",
+        "skills/workflow/scheduler.py",
+        "skills/workflow/daily_workflow.py",
+        "skills/workflow/monthly_workflow.py",
+        "skills/workflow/config/daily.yaml"
+      ]
+    }
+  ]
+}
+```
+
+---
+
+### 按状态
+
+- **已完成**: T001-T027 (27个任务)
+- **进行中**: 无
+- **待开始**: T028-T033 (6个任务)
+- **已阻塞**: 无
+
+### 参考文档
+
+- 详细设计: `docs/investment-analyzer-design.md`
+- Skills 增强设计: `docs/features/F001-skills-enhancement.md`
+- 架构决策: `docs/decisions/D001-skills-architecture.md`
+
+---
+
+*最后更新: 2025-12-15*

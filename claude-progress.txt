@@ -39,3 +39,14 @@
 [Mon Dec 15 08:55:54 CST 2025] 修复 trade_time 解析 (支持毫秒格式), 增加默认同步天数到365天, 重新同步848条交易记录 (2023-12至2025-12), 755 tests passed
 [Mon Dec 15 09:05:13 CST 2025] K线默认同步天数从120天改为250天 (支持MA60/VCP/支撑阻力等技术分析), 755 tests passed
 [2025-12-15 09:14:41] 实现关注列表同步: FutuFetcher.get_watchlist (OpenQuoteContext), SyncService.sync_watchlist, CLI sync watchlist 命令, 同步47条关注数据 (17 A股, 15 US, 15 HK), 755 tests passed
+[2025-12-15 14:30:00] T027 Skills 体系增强需求分析 完成:
+  - 探索现有 skills 目录 (3个 SKILL.md: portfolio_analyzer, technical_analyzer, report_generator)
+  - 分析参考 prompt 演进 (V1.0 基础分析 -> V5.0 数据驱动精准版)
+  - 研究历史分析报告 (portfolio-analysis-20250930.md 等 80+ 文件)
+  - 理解复利公式 (年收益率对应复利倍数表, 命中率参考表)
+  - 设计 4 大 Skill 角色: Analyst(分析师), RiskController(风控师), TradingCoach(交易导师), MarketObserver(市场观察员)
+  - 设计自动化工作流: 盘前分析、盘后总结、月度复盘
+  - 创建功能需求文档: docs/features/F001-skills-enhancement.md
+  - 创建设计决策文档: docs/decisions/D001-skills-architecture.md
+  - 更新 TASKS.md: 添加 M9 阶段 (T027-T033)
+[2025-12-15 09:49:24] Skills 体系需求分析完成 (F001): 4大角色设计 (分析师/风控师/交易导师/市场观察员), 技术分析简化为 OBV + VCP 双核心, 自动化工作流设计 (盘前/盘后/月度), 新增 T028-T033 任务
