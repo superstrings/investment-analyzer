@@ -2770,5 +2770,139 @@ def workflow_status(market: str):
         print_error(f"{e}", exit_code=1)
 
 
+# =============================================================================
+# Deep Analysis Command
+# =============================================================================
+
+
+@cli.command("deep-analyze")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--code", "-c", help="股票代码 (如 HK.00700)")
+@click.option("--codes", help="股票代码列表 (逗号分隔)")
+@click.option("--no-web", is_flag=True, help="不获取网络数据 (仅技术分析)")
+@click.option("--output", "-o", help="输出文件路径")
+@click.option("--save", "-s", is_flag=True, help="自动保存到 reports/output/")
+def deep_analyze(
+    user: str,
+    code: Optional[str],
+    codes: Optional[str],
+    no_web: bool,
+    output: Optional[str],
+    save: bool,
+):
+    """
+    深度分析 - 综合技术面、基本面、行业和新闻的完整分析报告
+
+    适合追求复利增长的趋势交易者，综合多维度分析生成投资建议。
+
+    Examples:
+        python main.py deep-analyze -u dyson -c HK.00700
+        python main.py deep-analyze -u dyson -c HK.00981 --save
+        python main.py deep-analyze -u dyson --codes "HK.00700,HK.00981" -o report.md
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    from skills.deep_analyzer import DeepAnalyzer, generate_deep_analysis_report
+    from skills.shared import DataProvider
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+        return
+
+    # Parse codes
+    code_list = []
+    if code:
+        code_list = [code]
+    elif codes:
+        code_list = parse_codes(codes)
+
+    if not code_list:
+        print_error("Please specify --code or --codes", exit_code=1)
+        return
+
+    # Initialize analyzer
+    data_provider = DataProvider()
+    analyzer = DeepAnalyzer(data_provider)
+
+    reports = []
+    for full_code in code_list:
+        # Parse market and code
+        if "." in full_code:
+            market, stock_code = full_code.split(".", 1)
+        else:
+            market = "HK" if full_code.isdigit() else "US"
+            stock_code = full_code
+
+        print_info(f"深度分析 {market}.{stock_code}...")
+
+        try:
+            # Get stock name from positions or watchlist
+            stock_name = ""
+            positions = data_provider.get_positions(db_user.id, [market])
+            for p in positions:
+                if p.code == stock_code:
+                    stock_name = p.stock_name
+                    break
+            if not stock_name:
+                watchlist = data_provider.get_watchlist(db_user.id, [market])
+                for w in watchlist:
+                    if w.code == stock_code:
+                        stock_name = w.stock_name
+                        break
+
+            # Run analysis
+            result = analyzer.analyze(
+                market=market,
+                code=stock_code,
+                stock_name=stock_name,
+                user_id=db_user.id,
+                include_web_data=not no_web,
+            )
+
+            if result.success:
+                report = generate_deep_analysis_report(result)
+                reports.append(report)
+
+                # Print to console if not saving
+                if not output and not save:
+                    console.print(report)
+                    console.print("\n" + "=" * 80 + "\n")
+
+                print_success(
+                    f"{market}.{stock_code} 分析完成 - "
+                    f"综合评分: {result.overall_score}/100 ({result.overall_rating})"
+                )
+            else:
+                print_warning(f"{market}.{stock_code} 分析失败: {', '.join(result.errors)}")
+
+        except Exception as e:
+            logger.exception(f"Error analyzing {full_code}")
+            print_warning(f"{full_code} 分析出错: {e}")
+
+    # Save reports if requested
+    if (output or save) and reports:
+        combined_report = "\n\n---\n\n".join(reports)
+
+        if output:
+            output_path = Path(output)
+        else:
+            # Auto-generate filename
+            output_dir = Path("reports/output")
+            output_dir.mkdir(parents=True, exist_ok=True)
+
+            timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+            if len(code_list) == 1:
+                filename = f"deep_analysis_{code_list[0].replace('.', '_')}_{timestamp}.md"
+            else:
+                filename = f"deep_analysis_batch_{timestamp}.md"
+            output_path = output_dir / filename
+
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(combined_report, encoding="utf-8")
+        print_success(f"报告已保存到: {output_path}")
+
+
 if __name__ == "__main__":
     cli()
