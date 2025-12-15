@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from click.testing import CliRunner
 
-from main import cli, parse_codes
+from main import cli, parse_codes, _is_option_code
 
 
 @pytest.fixture
@@ -280,6 +280,134 @@ class TestUtilityFunctions:
         """Test parsing with trailing comma."""
         codes = parse_codes("HK.00700,US.NVDA,")
         assert codes == ["HK.00700", "US.NVDA"]
+
+
+class TestIsOptionCode:
+    """Tests for _is_option_code function."""
+
+    # HK options/warrants - codes containing letters
+    def test_hk_option_call(self):
+        """Test HK call option detection."""
+        assert _is_option_code("HK", "SMC260629C75000") is True
+
+    def test_hk_option_put(self):
+        """Test HK put option detection."""
+        assert _is_option_code("HK", "TCH260330P650000") is True
+
+    def test_hk_warrant(self):
+        """Test HK warrant detection."""
+        assert _is_option_code("HK", "SMC260629C75000") is True
+
+    def test_hk_option_short_code(self):
+        """Test HK option with short code."""
+        assert _is_option_code("HK", "TC260330C100") is True
+
+    # HK regular stocks - numeric only
+    def test_hk_regular_stock_tencent(self):
+        """Test HK regular stock (Tencent)."""
+        assert _is_option_code("HK", "00700") is False
+
+    def test_hk_regular_stock_alibaba(self):
+        """Test HK regular stock (Alibaba)."""
+        assert _is_option_code("HK", "09988") is False
+
+    def test_hk_regular_stock_meituan(self):
+        """Test HK regular stock (Meituan)."""
+        assert _is_option_code("HK", "03690") is False
+
+    def test_hk_regular_stock_hsbc(self):
+        """Test HK regular stock (HSBC)."""
+        assert _is_option_code("HK", "00005") is False
+
+    # US options - SYMBOL + YYMMDD + C/P + STRIKE pattern
+    def test_us_option_mu_call(self):
+        """Test US MU call option detection."""
+        assert _is_option_code("US", "MU260116C230000") is True
+
+    def test_us_option_nvda_call(self):
+        """Test US NVDA call option detection."""
+        assert _is_option_code("US", "NVDA260116C186000") is True
+
+    def test_us_option_pltr_call(self):
+        """Test US PLTR call option detection."""
+        assert _is_option_code("US", "PLTR251219C175000") is True
+
+    def test_us_option_put(self):
+        """Test US put option detection."""
+        assert _is_option_code("US", "AAPL260116P150000") is True
+
+    def test_us_option_short_symbol(self):
+        """Test US option with short symbol."""
+        assert _is_option_code("US", "F260116C12000") is True
+
+    def test_us_option_long_symbol(self):
+        """Test US option with long symbol."""
+        assert _is_option_code("US", "GOOGL260116C200000") is True
+
+    # US regular stocks
+    def test_us_regular_stock_nvda(self):
+        """Test US regular stock (NVDA)."""
+        assert _is_option_code("US", "NVDA") is False
+
+    def test_us_regular_stock_aapl(self):
+        """Test US regular stock (AAPL)."""
+        assert _is_option_code("US", "AAPL") is False
+
+    def test_us_regular_stock_tsm(self):
+        """Test US regular stock (TSM)."""
+        assert _is_option_code("US", "TSM") is False
+
+    def test_us_regular_stock_goog(self):
+        """Test US regular stock (GOOG)."""
+        assert _is_option_code("US", "GOOG") is False
+
+    def test_us_regular_stock_single_letter(self):
+        """Test US regular stock with single letter (F for Ford)."""
+        assert _is_option_code("US", "F") is False
+
+    def test_us_regular_stock_brk_a(self):
+        """Test US regular stock (BRK.A - Berkshire)."""
+        assert _is_option_code("US", "BRK.A") is False
+
+    def test_us_regular_stock_brk_b(self):
+        """Test US regular stock (BRK.B - Berkshire)."""
+        assert _is_option_code("US", "BRK.B") is False
+
+    # A-share stocks (should always return False)
+    def test_a_share_sh(self):
+        """Test A-share stock (Shanghai)."""
+        assert _is_option_code("A", "601138") is False
+
+    def test_a_share_sz(self):
+        """Test A-share stock (Shenzhen)."""
+        assert _is_option_code("A", "300308") is False
+
+    def test_a_share_chinext(self):
+        """Test A-share stock (ChiNext)."""
+        assert _is_option_code("A", "300750") is False
+
+    # Edge cases
+    def test_unknown_market(self):
+        """Test unknown market returns False."""
+        assert _is_option_code("JP", "7203") is False
+
+    def test_empty_code(self):
+        """Test empty code returns False."""
+        assert _is_option_code("HK", "") is False
+        assert _is_option_code("US", "") is False
+
+    def test_us_partial_option_pattern(self):
+        """Test US code that looks like option but isn't complete."""
+        # Missing the C/P indicator
+        assert _is_option_code("US", "MU260116230000") is False
+
+    def test_us_etf_gld(self):
+        """Test US ETF (GLD) is not detected as option."""
+        assert _is_option_code("US", "GLD") is False
+
+    def test_us_etf_spy(self):
+        """Test US ETF (SPY) is not detected as option."""
+        assert _is_option_code("US", "SPY") is False
 
 
 class TestUserValidation:
