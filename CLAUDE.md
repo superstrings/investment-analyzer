@@ -129,31 +129,56 @@ AI助手: Claude Code
 
 ## 常用命令
 
-### 快速命令 (日常使用)
+### 日常分析 (推荐)
+
+```bash
+# 同步所有数据
+python main.py sync all -u dyson
+
+# 深度分析 (单只股票)
+python main.py deep-analyze -u dyson -c HK.00700
+
+# 深度分析 (批量 - 按市场)
+python main.py deep-analyze -u dyson --market HK --batch
+python main.py deep-analyze -u dyson --market US --batch
+python main.py deep-analyze -u dyson --market A --batch
+
+# 查看持仓
+python main.py account info -u dyson
+```
+
+### 数据同步
+
+```bash
+python main.py sync all -u dyson           # 同步所有
+python main.py sync positions -u dyson     # 仅持仓
+python main.py sync trades -u dyson        # 仅交易
+python main.py sync watchlist -u dyson     # 仅关注列表
+python main.py sync klines -u dyson        # 仅K线
+```
+
+### 环境与数据库
 
 ```bash
 # 环境管理 (asdf)
 asdf local python 3.12.7     # 设置项目 Python 版本
-python -m venv .venv         # 创建虚拟环境
 source .venv/bin/activate    # 激活虚拟环境
-pip install -r requirements.txt  # 安装依赖
 
 # 数据库
 python scripts/init_db.py    # 初始化数据库
 python main.py db-migrate    # 运行迁移
+```
 
-# 数据同步
-python main.py sync --user dyson --type all
-python main.py sync --user dyson --type positions
-python main.py sync --user dyson --type klines --codes "HK.00700,US.NVDA"
+### 图表与报告
 
+```bash
 # 图表生成
-python main.py chart --code HK.00700 --days 120 --indicators ma,obv
-python main.py chart --watchlist --user dyson
+python main.py chart single --code HK.00700 --days 120
+python main.py chart positions -u dyson
 
 # 报告生成
-python main.py report --user dyson --type portfolio
-python main.py report --user dyson --type technical --codes "HK.00700"
+python main.py report portfolio -u dyson
+python main.py report technical -u dyson --codes "HK.00700"
 ```
 
 ### 测试命令
@@ -198,6 +223,14 @@ Task tool with subagent_type="Explore" for codebase exploration
 
 > 位于 `.claude/commands/` 目录
 
+### 日常分析 (推荐)
+| 命令 | 说明 |
+|------|------|
+| `/daily-analysis` | 每日分析 (盘前/盘后自动识别) |
+| `/deep-analyze [market]` | 深度分析指定市场 (HK/US/A) 或股票代码 |
+| `/market-summary` | 三市场汇总分析报告 |
+| `/sync-all` | 同步所有数据 (持仓+交易+关注+K线) |
+
 ### 会话管理
 | 命令 | 说明 |
 |------|------|
@@ -209,14 +242,13 @@ Task tool with subagent_type="Explore" for codebase exploration
 | 命令 | 说明 |
 |------|------|
 | `/sync-data [type]` | 同步数据 (positions/trades/klines/all) |
-| `/fetch-klines [codes]` | 获取指定股票K线数据 |
+| `/analyze-portfolio` | 分析当前持仓 |
 
-### 分析命令
+### 图表报告
 | 命令 | 说明 |
 |------|------|
 | `/gen-chart [code]` | 生成单只股票K线图 |
 | `/gen-report [type]` | 生成分析报告 |
-| `/analyze-portfolio` | 分析当前持仓 |
 
 ### 开发命令
 | 命令 | 说明 |
@@ -229,7 +261,6 @@ Task tool with subagent_type="Explore" for codebase exploration
 | 命令 | 说明 |
 |------|------|
 | `/analyze-feature [desc]` | 功能需求分析 |
-| `/create-feature [desc]` | 创建功能需求文档 |
 
 ---
 
@@ -316,4 +347,5 @@ Task tool with subagent_type="Explore" for codebase exploration
 ---
 
 *详细信息请查阅 `PLANNING.md` 和对应的 `docs/` 子目录*
-*最后更新: 2025-12-14*
+*使用指南请参阅 `docs/guide/README.md`*
+*最后更新: 2025-12-15*

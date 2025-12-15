@@ -8,12 +8,15 @@
 
 ## 功能特性
 
-- **数据采集**: 富途 OpenAPI 持仓/交易 + akshare K线数据
-- **技术分析**: MA/MACD/RSI/布林带/OBV 指标计算
+- **数据采集**: 富途 OpenAPI 持仓/交易/K线 + akshare A股数据
+- **深度分析**: 技术面 + 基本面 + 行业 + 消息综合评分
+- **技术分析**: MA/MACD/RSI/布林带/OBV/VCP 指标计算
 - **形态识别**: VCP (波动收缩形态) 自动检测与评分
 - **组合分析**: 仓位权重、风险评估、HHI 集中度指数
 - **图表生成**: K线图 + 均线 + 成交量 (mplfinance)
 - **报告输出**: Markdown/JSON/HTML 多格式报告
+- **Skills 系统**: 分析师/风控/交易指导/市场观察多角色
+- **Claude 命令**: 便捷的 Slash 命令快速操作
 - **CLI 工具**: 完整的命令行交互界面
 
 ## 快速开始
@@ -79,6 +82,37 @@ users:
 
 ## 使用指南
 
+> 详细指南请参阅 [docs/guide/README.md](docs/guide/README.md)
+
+### 日常分析 (推荐)
+
+```bash
+# 同步所有数据
+python main.py sync all -u your_name
+
+# 深度分析 (单只股票)
+python main.py deep-analyze -u your_name -c HK.00700
+
+# 深度分析 (批量 - 按市场)
+python main.py deep-analyze -u your_name --market HK --batch
+python main.py deep-analyze -u your_name --market US --batch
+python main.py deep-analyze -u your_name --market A --batch
+
+# 查看持仓
+python main.py account info -u your_name
+```
+
+### Claude 快捷命令
+
+在 Claude Code 中可使用以下命令：
+
+| 命令 | 说明 |
+|------|------|
+| `/daily-analysis` | 每日分析 (盘前/盘后) |
+| `/deep-analyze HK` | 深度分析指定市场 |
+| `/market-summary` | 三市场汇总报告 |
+| `/sync-all` | 同步所有数据 |
+
 ### CLI 命令
 
 ```bash
@@ -86,30 +120,21 @@ users:
 python main.py --help
 
 # 数据同步
-python main.py sync all --user your_name        # 同步所有数据
-python main.py sync positions --user your_name  # 仅同步持仓
-python main.py sync klines --user your_name --codes "HK.00700,US.NVDA"
+python main.py sync all -u your_name           # 同步所有数据
+python main.py sync positions -u your_name     # 仅同步持仓
+python main.py sync klines -u your_name --codes "HK.00700,US.NVDA"
 
 # 图表生成
-python main.py chart single --code HK.00700 --days 120 --style dark
-python main.py chart watchlist --user your_name
-python main.py chart positions --user your_name
+python main.py chart single --code HK.00700 --days 120
+python main.py chart positions -u your_name
 
 # 报告生成
-python main.py report portfolio --user your_name
-python main.py report technical --user your_name --codes "HK.00700"
-
-# 数据导入 (CSV)
-python main.py import watchlist --file watchlist.csv --user your_name
-python main.py import positions --file positions.csv --user your_name
+python main.py report portfolio -u your_name
+python main.py report technical -u your_name --codes "HK.00700"
 
 # 账户信息
-python main.py account list --user your_name
-python main.py account info --user your_name
-
-# 配置查看
-python main.py config show
-python main.py config users
+python main.py account list -u your_name
+python main.py account info -u your_name
 ```
 
 ### Python API
@@ -173,9 +198,12 @@ investment-analyzer/
 │   ├── sync_service.py # 数据同步
 │   └── chart_service.py# 图表服务
 ├── skills/             # Claude Code Skills
-│   ├── portfolio_analyzer/
-│   ├── technical_analyzer/
-│   └── report_generator/
+│   ├── analyst/        # 分析师 (OBV + VCP)
+│   ├── risk_controller/# 风控师
+│   ├── trading_coach/  # 交易导师
+│   ├── market_observer/# 市场观察员
+│   ├── deep_analyzer/  # 深度分析
+│   └── shared/         # 共享组件
 ├── scripts/            # 脚本工具
 │   ├── init_db.py      # 数据库初始化
 │   └── import_csv.py   # CSV 导入
@@ -256,7 +284,7 @@ python -m pytest tests/ -v --cov=.
 python -m pytest tests/test_portfolio.py -v
 ```
 
-当前测试覆盖: **526 tests passed**
+当前测试覆盖: **1068 tests passed**
 
 ## 开发
 
@@ -284,6 +312,7 @@ python -m flake8 .
 
 ## 文档
 
+- [使用指南](docs/guide/README.md) - 完整使用手册
 - [需求设计](docs/design/requirements.md)
 - [架构设计](docs/design/architecture.md)
 - [数据库设计](docs/database/schema.md)

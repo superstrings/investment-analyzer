@@ -283,7 +283,7 @@ class DataProvider:
         Get K-line data from database.
 
         Args:
-            market: Market code (HK, US, A)
+            market: Market code (HK, US, A, SH, SZ)
             code: Stock code
             days: Number of days
             end_date: End date (default: today)
@@ -295,6 +295,11 @@ class DataProvider:
             end_date = date.today()
         start_date = end_date - timedelta(days=days)
 
+        # Normalize A-share market codes (SH/SZ -> A)
+        db_market = market
+        if market in ("SH", "SZ"):
+            db_market = "A"
+
         cache_key = f"klines:{market}:{code}:{days}:{end_date}"
         cached = self._get_cache(cache_key)
         if cached:
@@ -304,7 +309,7 @@ class DataProvider:
         with get_session() as session:
             query = (
                 session.query(Kline)
-                .filter_by(market=market, code=code)
+                .filter_by(market=db_market, code=code)
                 .filter(Kline.trade_date >= start_date)
                 .filter(Kline.trade_date <= end_date)
                 .order_by(Kline.trade_date.asc())
