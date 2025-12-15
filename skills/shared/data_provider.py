@@ -12,7 +12,7 @@ from typing import Optional
 
 import pandas as pd
 
-from db import Kline, Position, Trade, User, WatchlistItem, get_session
+from db import Account, Kline, Position, Trade, User, WatchlistItem, get_session
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +148,18 @@ class DataProvider:
 
         positions = []
         with get_session() as session:
-            query = session.query(Position).filter_by(user_id=user_id)
+            # Get user's account IDs first
+            account_ids = [
+                acc.id
+                for acc in session.query(Account).filter_by(user_id=user_id).all()
+            ]
+
+            if not account_ids:
+                self._set_cache(cache_key, positions)
+                return positions
+
+            # Query positions by account IDs
+            query = session.query(Position).filter(Position.account_id.in_(account_ids))
             if markets:
                 query = query.filter(Position.market.in_(markets))
 

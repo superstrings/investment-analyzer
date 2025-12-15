@@ -17,6 +17,137 @@ from .scheduler import ScheduledTask, WorkflowPhase, WorkflowScheduler
 logger = logging.getLogger(__name__)
 
 
+# =============================================================================
+# Skill Adapters - Wrap non-BaseSkill classes to provide execute() interface
+# =============================================================================
+
+
+class _AnalystSkillAdapter(BaseSkill):
+    """Adapter to make StockAnalyzer compatible with BaseSkill interface."""
+
+    def __init__(self, data_provider: DataProvider = None):
+        super().__init__(
+            name="analyst",
+            description="技术分析师 - OBV + VCP 双核心分析",
+        )
+        self.data_provider = data_provider or DataProvider()
+
+    def execute(self, context: SkillContext) -> SkillResult:
+        """Execute analyst skill."""
+        from skills.analyst import BatchAnalyzer, generate_batch_report
+
+        start_time = datetime.now()
+
+        try:
+            analyzer = BatchAnalyzer(data_provider=self.data_provider)
+
+            # Get codes to analyze
+            position_codes = self.data_provider.get_position_codes(
+                context.user_id, context.markets
+            )
+            watchlist_codes = self.data_provider.get_watchlist_codes(
+                context.user_id, context.markets
+            )
+            all_codes = list(set(position_codes + watchlist_codes))
+
+            if not all_codes:
+                return SkillResult(
+                    success=True,
+                    skill_name=self.name,
+                    result_type="batch",
+                    data={"analyzed": 0, "results": []},
+                    report_content="无持仓或关注列表数据可分析",
+                    execution_time_ms=(datetime.now() - start_time).total_seconds()
+                    * 1000,
+                )
+
+            # Run batch analysis
+            batch_result = analyzer.analyze_codes(all_codes)
+            report = generate_batch_report(batch_result)
+
+            elapsed = (datetime.now() - start_time).total_seconds() * 1000
+
+            return SkillResult(
+                success=True,
+                skill_name=self.name,
+                result_type="batch",
+                data={
+                    "analyzed": batch_result.total_analyzed,
+                    "successful": batch_result.successful,
+                    "failed": batch_result.failed,
+                },
+                report_content=report,
+                execution_time_ms=elapsed,
+            )
+
+        except Exception as e:
+            logger.exception("Analyst skill execution failed")
+            return SkillResult.error(self.name, str(e))
+
+    def get_capabilities(self) -> list[str]:
+        return ["single", "batch", "watchlist", "positions"]
+
+
+class _RiskSkillAdapter(BaseSkill):
+    """Adapter to make RiskController compatible with BaseSkill interface."""
+
+    def __init__(self, data_provider: DataProvider = None):
+        super().__init__(
+            name="risk",
+            description="风控师 - 持仓监控与风险预警",
+        )
+        self.data_provider = data_provider or DataProvider()
+
+    def execute(self, context: SkillContext) -> SkillResult:
+        """Execute risk skill."""
+        from skills.risk_controller import RiskController, generate_risk_report
+
+        start_time = datetime.now()
+
+        try:
+            controller = RiskController(data_provider=self.data_provider)
+
+            # Check if user has positions
+            positions = self.data_provider.get_positions(
+                context.user_id, context.markets
+            )
+
+            if not positions:
+                return SkillResult(
+                    success=True,
+                    skill_name=self.name,
+                    result_type="check",
+                    data={"positions": 0},
+                    report_content="无持仓数据可分析",
+                    execution_time_ms=(datetime.now() - start_time).total_seconds()
+                    * 1000,
+                )
+
+            # Run analysis - pass user_id and markets, not positions
+            result = controller.analyze_portfolio_risk(
+                context.user_id, markets=context.markets
+            )
+            report = generate_risk_report(result)
+
+            elapsed = (datetime.now() - start_time).total_seconds() * 1000
+
+            return SkillResult(
+                success=True,
+                skill_name=self.name,
+                result_type="check",
+                data=result,
+                report_content=report,
+                execution_time_ms=elapsed,
+            )
+
+        except Exception as e:
+            logger.exception("Risk skill execution failed")
+            return SkillResult.error(self.name, str(e))
+
+    def get_capabilities(self) -> list[str]:
+        return ["check", "report", "monthly_report"]
+
+
 @dataclass
 class TaskResult:
     """Result from executing a scheduled task."""
@@ -281,11 +412,9 @@ class DailyWorkflow(BaseSkill):
         skill = None
 
         if skill_type == "analyst":
-            from skills.analyst import StockAnalyzer
-            skill = StockAnalyzer(data_provider=self.data_provider)
+            skill = _AnalystSkillAdapter(data_provider=self.data_provider)
         elif skill_type == "risk":
-            from skills.risk_controller import RiskController
-            skill = RiskController(data_provider=self.data_provider)
+            skill = _RiskSkillAdapter(data_provider=self.data_provider)
         elif skill_type == "coach":
             from skills.trading_coach import TradingCoach
             skill = TradingCoach(data_provider=self.data_provider)
