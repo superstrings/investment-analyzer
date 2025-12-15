@@ -2530,6 +2530,54 @@ def workflow():
     pass
 
 
+def _save_workflow_report(
+    report: str,
+    workflow_type: str,
+    phase: str = None,
+    output: str = None,
+    save: bool = False,
+) -> str | None:
+    """
+    Save workflow report to file.
+
+    Args:
+        report: Report content (Markdown)
+        workflow_type: Type of workflow (daily, monthly, auto)
+        phase: Workflow phase (pre_market, post_market, auto)
+        output: Custom output path
+        save: Auto-generate filename if True
+
+    Returns:
+        Path to saved file or None
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    if not output and not save:
+        return None
+
+    # Determine output path
+    if output:
+        output_path = Path(output)
+    else:
+        # Auto-generate filename
+        output_dir = Path("reports/output")
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+        phase_suffix = f"_{phase}" if phase and phase != "auto" else ""
+        filename = f"workflow_{workflow_type}{phase_suffix}_{timestamp}.md"
+        output_path = output_dir / filename
+
+    # Ensure parent directory exists
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Write report
+    output_path.write_text(report, encoding="utf-8")
+
+    return str(output_path)
+
+
 @workflow.command("run")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option(
@@ -2549,12 +2597,16 @@ def workflow():
     help="工作流阶段 (仅 daily)",
 )
 @click.option("--force", "-f", is_flag=True, help="强制执行 (忽略时间检查)")
+@click.option("--output", "-o", help="输出文件路径")
+@click.option("--save", "-s", is_flag=True, help="自动保存到 reports/output/")
 def workflow_run(
     user: str,
     workflow_type: str,
     market: str,
     phase: str,
     force: bool,
+    output: str,
+    save: bool,
 ):
     """执行工作流"""
     from db.database import get_session
@@ -2589,6 +2641,18 @@ def workflow_run(
         if result.success:
             console.print(result.report_content)
             console.print()
+
+            # Save report if requested
+            saved_path = _save_workflow_report(
+                result.report_content,
+                workflow_type,
+                phase,
+                output,
+                save,
+            )
+            if saved_path:
+                print_success(f"报告已保存到: {saved_path}")
+
             if result.next_actions:
                 console.print("[bold]Next Actions:[/bold]")
                 for action in result.next_actions:
@@ -2610,7 +2674,9 @@ def workflow_run(
     default="auto",
     help="工作流阶段",
 )
-def workflow_daily(user: str, market: str, phase: str):
+@click.option("--output", "-o", help="输出文件路径")
+@click.option("--save", "-s", is_flag=True, help="自动保存到 reports/output/")
+def workflow_daily(user: str, market: str, phase: str, output: str, save: bool):
     """执行每日工作流"""
     from db.database import get_session
     from db.models import User
@@ -2633,6 +2699,11 @@ def workflow_daily(user: str, market: str, phase: str):
 
         console.print(report)
 
+        # Save report if requested
+        saved_path = _save_workflow_report(report, "daily", phase, output, save)
+        if saved_path:
+            print_success(f"报告已保存到: {saved_path}")
+
     except Exception as e:
         print_error(f"{e}", exit_code=1)
 
@@ -2641,7 +2712,9 @@ def workflow_daily(user: str, market: str, phase: str):
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
 @click.option("--market", "-m", default="HK", help="市场代码")
 @click.option("--force", "-f", is_flag=True, help="强制执行 (非月末)")
-def workflow_monthly(user: str, market: str, force: bool):
+@click.option("--output", "-o", help="输出文件路径")
+@click.option("--save", "-s", is_flag=True, help="自动保存到 reports/output/")
+def workflow_monthly(user: str, market: str, force: bool, output: str, save: bool):
     """执行月度工作流"""
     from db.database import get_session
     from db.models import User
@@ -2663,6 +2736,11 @@ def workflow_monthly(user: str, market: str, force: bool):
         )
 
         console.print(report)
+
+        # Save report if requested
+        saved_path = _save_workflow_report(report, "monthly", None, output, save)
+        if saved_path:
+            print_success(f"报告已保存到: {saved_path}")
 
     except Exception as e:
         print_error(f"{e}", exit_code=1)
