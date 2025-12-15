@@ -388,6 +388,7 @@ class DataProvider:
         start_date: date = None,
         end_date: date = None,
         markets: list[str] = None,
+        days: int = None,
     ) -> list[Trade]:
         """
         Get user trades.
@@ -397,20 +398,33 @@ class DataProvider:
             start_date: Start date (default: 30 days ago)
             end_date: End date (default: today)
             markets: Filter by markets
+            days: Shorthand for start_date (days ago from today)
 
         Returns:
             List of Trade objects
         """
         if end_date is None:
             end_date = date.today()
-        if start_date is None:
+        if days is not None:
+            start_date = end_date - timedelta(days=days)
+        elif start_date is None:
             start_date = end_date - timedelta(days=30)
 
         trades = []
         with get_session() as session:
+            # Get user's account IDs first
+            account_ids = [
+                acc.id
+                for acc in session.query(Account).filter_by(user_id=user_id).all()
+            ]
+
+            if not account_ids:
+                return trades
+
+            # Query trades by account IDs
             query = (
                 session.query(Trade)
-                .filter_by(user_id=user_id)
+                .filter(Trade.account_id.in_(account_ids))
                 .filter(
                     Trade.trade_time
                     >= datetime.combine(start_date, datetime.min.time())
