@@ -1,0 +1,48 @@
+# Investment Analyzer - User Configuration Example
+#
+# Copy this file to users.yaml and customize for your setup:
+#   cp users.yaml.example users.yaml
+#
+# IMPORTANT: Trade passwords should be stored in environment variables, NOT in this file.
+# Environment variable format: FUTU_PWD_{USERNAME} (uppercase)
+# Example: FUTU_PWD_YOUR_NAME=your_trade_password
+#
+# Each user can have their own FutuOpenD instance running on different ports.
+
+users:
+  # Example user configuration - replace with your settings
+  your_name:
+    display_name: "Your Name"
+    opend:
+      host: "127.0.0.1"
+      port: 11111
+    # Default markets to sync for this user
+    default_markets:
+      - HK
+      - US
+    # Default K-line days to fetch (250 days ~= 1 year of trading days)
+    kline_days: 250
+    # Whether this user is active
+    is_active: true
+
+  # Additional user example (for multiple accounts)
+  # user2:
+  #   display_name: "User 2"
+  #   opend:
+  #     host: "127.0.0.1"
+  #     port: 11112  # Different port for second OpenD instance
+  #   default_markets:
+  #     - HK
+  #     - A
+  #   kline_days: 120
+  #   is_active: true
+
+# Global defaults (can be overridden per user)
+defaults:
+  opend:
+    host: "127.0.0.1"
+    port: 11111
+  kline_days: 120
+  markets:
+    - HK
+    - US

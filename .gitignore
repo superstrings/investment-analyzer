@@ -67,6 +67,9 @@ Thumbs.db
 *.key
 secrets/
 
+# User configuration (use users.yaml.example as template)
+config/users.yaml
+
 # Temporary files
 tmp/
 temp/

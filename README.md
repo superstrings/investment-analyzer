@@ -284,7 +284,7 @@ python -m pytest tests/ -v --cov=.
 python -m pytest tests/test_portfolio.py -v
 ```
 
-当前测试覆盖: **1068 tests passed**
+当前测试覆盖: **1097 tests passed**
 
 ## 开发
 
@@ -319,9 +319,15 @@ python -m flake8 .
 - [API 文档](docs/api/README.md)
 - [开发指南](docs/development/README.md)
 
+## 贡献
+
+欢迎贡献代码！请查阅 [CONTRIBUTING.md](CONTRIBUTING.md) 了解贡献指南。
+
+参与项目请遵守我们的 [行为准则](CODE_OF_CONDUCT.md)。
+
 ## 许可证
 
-MIT License
+MIT License - 详见 [LICENSE](LICENSE)
 
 ## 致谢
 
