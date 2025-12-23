@@ -6,6 +6,8 @@
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue.svg)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
+**语言: 简体中文 | [English](README.en.md) | [繁體中文 (台灣)](README.zh-TW.md) | [繁體中文 (香港)](README.zh-HK.md) | [日本語](README.ja.md)**
+
 ## 功能特性
 
 - **数据采集**: 富途 OpenAPI 持仓/交易/K线 + akshare A股数据
@@ -65,7 +67,7 @@ python scripts/init_db.py seed
 
 ### 配置用户
 
-编辑 `config/users.yaml`:
+复制 `config/users.yaml.example` 至 `config/users.yaml` 并编辑:
 
 ```yaml
 users:
