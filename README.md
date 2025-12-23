@@ -33,7 +33,7 @@
 
 ```bash
 # 克隆项目
-git clone <repository-url>
+git clone https://github.com/superstrings/investment-analyzer.git
 cd investment-analyzer
 
 # 设置 Python 版本 (使用 asdf)

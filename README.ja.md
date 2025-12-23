@@ -33,7 +33,7 @@
 
 ```bash
 # プロジェクトをクローン
-git clone <repository-url>
+git clone https://github.com/superstrings/investment-analyzer.git
 cd investment-analyzer
 
 # Python バージョンを設定 (asdf使用)
