@@ -3095,5 +3095,189 @@ def trade_analyze(
         print_error(f"分析失败: {e}", exit_code=1)
 
 
+# =============================================================================
+# Derivative Contract Commands (衍生品合约管理)
+# =============================================================================
+
+
+@cli.group("contract")
+def contract_group():
+    """衍生品合约管理命令"""
+    pass
+
+
+@contract_group.command("list")
+@click.option("--market", "-m", type=click.Choice(["HK", "US"]), help="筛选市场")
+@click.option("--type", "-t", "contract_type", type=click.Choice(["WARRANT", "OPTION"]), help="合约类型")
+@click.option("--expired", is_flag=True, help="显示已到期合约")
+def contract_list(market: str, contract_type: str, expired: bool):
+    """列出衍生品合约信息"""
+    from services.derivative_service import DerivativeService
+
+    service = DerivativeService()
+    contracts = service.list_contracts(
+        market=market,
+        contract_type=contract_type,
+        expired=expired,
+    )
+
+    if not contracts:
+        print_info("没有找到合约记录")
+        return
+
+    print(f"\n{'代码':<25} {'类型':<10} {'乘数/比率':<12} {'来源':<8} {'到期日':<12}")
+    print("-" * 70)
+
+    for c in contracts:
+        multiplier = c.contract_multiplier or c.conversion_ratio or 1
+        expiry = c.expiry_date.isoformat() if c.expiry_date else "N/A"
+        print(f"{c.full_code:<25} {c.contract_type:<10} {float(multiplier):<12.2f} {c.data_source:<8} {expiry:<12}")
+
+    print(f"\n共 {len(contracts)} 条记录")
+    service.close()
+
+
+@contract_group.command("set")
+@click.argument("code")
+@click.option("--ratio", "-r", type=float, help="换股比率 (港股窝轮)")
+@click.option("--multiplier", "-m", type=float, help="合约乘数 (美股期权)")
+def contract_set(code: str, ratio: float, multiplier: float):
+    """设置衍生品合约的换股比率或合约乘数
+
+    CODE: 完整代码，如 HK.ZJM260429C45000 或 US.NVDA260220C195000
+    """
+    from decimal import Decimal
+    from services.derivative_service import DerivativeService, get_derivative_type
+
+    if "." not in code:
+        print_error("请使用完整代码格式，如 HK.ZJM260429C45000")
+        return
+
+    market, code_only = code.split(".", 1)
+    contract_type = get_derivative_type(market, code_only)
+
+    if not contract_type:
+        print_error(f"{code} 不是有效的衍生品代码")
+        return
+
+    service = DerivativeService()
+
+    if contract_type == "WARRANT" and ratio:
+        service.save_contract(
+            market=market,
+            code=code_only,
+            contract_type="WARRANT",
+            conversion_ratio=Decimal(str(ratio)),
+            data_source="MANUAL",
+        )
+        print_success(f"已设置 {code} 换股比率为 {ratio}")
+
+    elif contract_type == "OPTION" and multiplier:
+        service.save_contract(
+            market=market,
+            code=code_only,
+            contract_type="OPTION",
+            contract_multiplier=Decimal(str(multiplier)),
+            data_source="MANUAL",
+        )
+        print_success(f"已设置 {code} 合约乘数为 {multiplier}")
+
+    else:
+        if contract_type == "WARRANT":
+            print_error("港股窝轮请使用 --ratio 设置换股比率")
+        else:
+            print_error("美股期权请使用 --multiplier 设置合约乘数")
+
+    service.close()
+
+
+@contract_group.command("sync")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+def contract_sync(user: str):
+    """从交易记录同步衍生品合约信息（使用默认值）"""
+    from db import get_session, Trade
+    from services.derivative_service import DerivativeService, is_derivative_code
+
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found")
+        return
+
+    with get_session() as session:
+        # 获取用户的所有交易
+        trades = session.query(Trade.market, Trade.code, Trade.stock_name).join(
+            Account, Trade.account_id == Account.id
+        ).filter(Account.user_id == db_user.id).distinct().all()
+
+        # 筛选衍生品
+        derivatives = [(m, c, n) for m, c, n in trades if is_derivative_code(m, c)]
+
+        if not derivatives:
+            print_info("没有找到衍生品交易记录")
+            return
+
+        print_info(f"找到 {len(derivatives)} 个衍生品代码")
+
+        service = DerivativeService(session)
+        synced = 0
+
+        for market, code, stock_name in derivatives:
+            existing = service.get_contract(market, code)
+            if existing:
+                continue
+
+            contract = service.auto_populate_from_code(market, code, stock_name)
+            if contract:
+                synced += 1
+
+        print_success(f"同步完成: 新增 {synced} 条合约记录")
+
+
+@contract_group.command("info")
+@click.argument("code")
+def contract_info(code: str):
+    """查看单个衍生品合约详情
+
+    CODE: 完整代码，如 HK.ZJM260429C45000
+    """
+    from services.derivative_service import DerivativeService, parse_option_code
+
+    if "." not in code:
+        print_error("请使用完整代码格式，如 HK.ZJM260429C45000")
+        return
+
+    market, code_only = code.split(".", 1)
+
+    service = DerivativeService()
+    contract = service.get_contract(market, code_only)
+
+    print(f"\n=== {code} 合约信息 ===")
+
+    if contract:
+        print(f"名称: {contract.stock_name or 'N/A'}")
+        print(f"类型: {contract.contract_type}")
+        print(f"正股: {contract.underlying_code or 'N/A'}")
+        print(f"期权类型: {contract.option_type or 'N/A'}")
+        print(f"行权价: {contract.strike_price or 'N/A'}")
+        print(f"到期日: {contract.expiry_date or 'N/A'}")
+        print(f"换股比率: {contract.conversion_ratio or 'N/A'}")
+        print(f"合约乘数: {contract.contract_multiplier or 'N/A'}")
+        print(f"有效乘数: {contract.multiplier}")
+        print(f"数据来源: {contract.data_source}")
+    else:
+        # 尝试解析代码
+        parsed = parse_option_code(market, code_only)
+        if parsed:
+            print(f"(数据库中无记录，以下为解析结果)")
+            print(f"正股: {parsed.get('underlying')}")
+            print(f"期权类型: {parsed.get('option_type')}")
+            print(f"行权价: {parsed.get('strike_price')}")
+            print(f"到期日: {parsed.get('expiry_date')}")
+        else:
+            print("数据库中无记录且无法解析代码")
+
+    service.close()
+
+
 if __name__ == "__main__":
     cli()

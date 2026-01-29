@@ -431,3 +431,80 @@ class PriceAlert(Base):
         else:  # CHANGE_UP/CHANGE_DOWN
             sign = "+" if self.alert_type == "CHANGE_UP" else "-"
             return f"{sign}{abs(float(self.target_change_pct or 0)):.2%}"
+
+
+class DerivativeContract(Base):
+    """
+    衍生品合约信息表 - 存储期权/窝轮的换股比率和合约乘数
+
+    用于正确计算期权和窝轮的交易金额。
+    - 港股窝轮: 使用 conversion_ratio (换股比率)
+    - 美股期权: 使用 contract_multiplier (合约乘数，通常为100)
+    """
+
+    __tablename__ = "derivative_contracts"
+    __table_args__ = (
+        UniqueConstraint("market", "code", name="uq_derivative_contracts_market_code"),
+        Index("idx_derivative_contracts_underlying", "underlying_code"),
+        Index("idx_derivative_contracts_expiry", "expiry_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market: Mapped[str] = mapped_column(String(10), nullable=False)  # HK/US
+    code: Mapped[str] = mapped_column(String(30), nullable=False)  # 期权/窝轮代码
+    stock_name: Mapped[Optional[str]] = mapped_column(String(100))
+
+    # 合约类型
+    contract_type: Mapped[str] = mapped_column(
+        String(20), nullable=False
+    )  # WARRANT (窝轮) / OPTION (期权)
+
+    # 正股信息
+    underlying_code: Mapped[Optional[str]] = mapped_column(String(20))  # 正股代码
+
+    # 合约乘数/换股比率 (二选一使用)
+    contract_multiplier: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(18, 6)
+    )  # 美股期权合约乘数 (通常100)
+    conversion_ratio: Mapped[Optional[Decimal]] = mapped_column(
+        Numeric(18, 6)
+    )  # 港股窝轮换股比率
+
+    # 期权/窝轮详情
+    option_type: Mapped[Optional[str]] = mapped_column(String(10))  # CALL/PUT
+    strike_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))  # 行权价
+    expiry_date: Mapped[Optional[date]] = mapped_column(Date)  # 到期日
+    lot_size: Mapped[Optional[int]] = mapped_column(Integer)  # 每手数量
+
+    # 数据来源
+    data_source: Mapped[str] = mapped_column(
+        String(20), default="MANUAL"
+    )  # FUTU/WEB/MANUAL
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.now, onupdate=datetime.now
+    )
+
+    def __repr__(self) -> str:
+        return f"<DerivativeContract(id={self.id}, code='{self.market}.{self.code}', type='{self.contract_type}')>"
+
+    @property
+    def full_code(self) -> str:
+        """Get full code with market prefix."""
+        return f"{self.market}.{self.code}"
+
+    @property
+    def multiplier(self) -> Decimal:
+        """
+        获取有效的乘数。
+
+        - 港股窝轮: 返回 conversion_ratio
+        - 美股期权: 返回 contract_multiplier
+        - 默认: 返回 1
+        """
+        if self.contract_type == "WARRANT" and self.conversion_ratio:
+            return self.conversion_ratio
+        if self.contract_type == "OPTION" and self.contract_multiplier:
+            return self.contract_multiplier
+        return Decimal("1")

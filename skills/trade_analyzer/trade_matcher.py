@@ -5,16 +5,19 @@ Trade Matcher - 买卖配对模块
 支持部分成交、多次加仓等复杂场景。
 股票与期权分开配对和统计。
 支持多币种，自动转换为港币 (HKD) 统一计算。
+衍生品合约乘数从数据库获取。
 """
 
+import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
-from db import Trade
+from db import DerivativeContract, Trade, get_session
 
+logger = logging.getLogger(__name__)
 
 # 汇率配置 (转换为 HKD)
 # 注意：实际应用中应使用实时汇率或配置文件
@@ -23,6 +26,12 @@ CURRENCY_TO_HKD = {
     "USD": Decimal("7.78"),  # 美元兑港币
     "CNY": Decimal("1.07"),  # 人民币兑港币
 }
+
+# 默认期权合约乘数 (当数据库中没有记录时使用)
+# 美股期权：1张 = 100股 (标准)
+# 港股窝轮：换股比率默认为 1
+DEFAULT_US_OPTION_MULTIPLIER = Decimal("100")
+DEFAULT_HK_WARRANT_RATIO = Decimal("1")
 
 
 @dataclass
@@ -147,12 +156,53 @@ class TradeMatcher:
 
     使用 LIFO（后进先出）算法将买入和卖出记录配对。
     最近买入的股票优先与卖出记录配对。
+    衍生品合约乘数从数据库获取。
     """
 
     def __init__(self):
         self.matched_trades: list[MatchedTrade] = []
         self.unmatched_buys: dict[str, list[BuyRecord]] = {}  # code -> [BuyRecord]
         self.unmatched_sells: list[Trade] = []
+        # 合约乘数缓存: {market.code: multiplier}
+        self._multiplier_cache: dict[str, Decimal] = {}
+        self._load_contract_multipliers()
+
+    def _load_contract_multipliers(self) -> None:
+        """从数据库加载所有衍生品合约乘数到缓存"""
+        try:
+            with get_session() as session:
+                contracts = session.query(DerivativeContract).all()
+                for c in contracts:
+                    key = f"{c.market}.{c.code}"
+                    self._multiplier_cache[key] = c.multiplier
+                logger.info(f"Loaded {len(self._multiplier_cache)} contract multipliers")
+        except Exception as e:
+            logger.warning(f"Failed to load contract multipliers: {e}")
+
+    def get_contract_multiplier(self, market: str, code: str) -> Decimal:
+        """
+        获取衍生品的合约乘数。
+
+        优先从缓存获取，如果没有则返回默认值。
+        - 美股期权默认: 100
+        - 港股窝轮默认: 1
+
+        Args:
+            market: 市场 (HK/US)
+            code: 期权/窝轮代码
+
+        Returns:
+            合约乘数
+        """
+        key = f"{market}.{code}"
+        if key in self._multiplier_cache:
+            return self._multiplier_cache[key]
+
+        # 返回默认值
+        if market == "US":
+            return DEFAULT_US_OPTION_MULTIPLIER
+        else:
+            return DEFAULT_HK_WARRANT_RATIO
 
     @staticmethod
     def is_option_code(market: str, code: str) -> bool:
@@ -276,6 +326,9 @@ class TradeMatcher:
         # 获取货币（买卖应该使用相同货币）
         currency = buy_record.currency
 
+        # 判断是否为期权/窝轮
+        is_option = self.is_option_code(trade.market, trade.code)
+
         # 计算买入手续费（按比例分摊）
         buy_fee_ratio = match_qty / buy_record.qty
         buy_fee_orig = buy_record.fee * buy_fee_ratio
@@ -283,6 +336,14 @@ class TradeMatcher:
         # 计算原始金额
         buy_amount_orig = buy_record.price * match_qty
         sell_amount_orig = sell_price * match_qty
+
+        # 期权/窝轮需要乘以合约乘数
+        # - 美股期权: 1张 = 100股
+        # - 港股窝轮: 换股比率从数据库获取
+        if is_option:
+            multiplier = self.get_contract_multiplier(trade.market, trade.code)
+            buy_amount_orig = buy_amount_orig * multiplier
+            sell_amount_orig = sell_amount_orig * multiplier
 
         # 转换为 HKD
         buy_amount_hkd = convert_to_hkd(buy_amount_orig, currency)
@@ -294,7 +355,7 @@ class TradeMatcher:
             market=trade.market,
             code=trade.code,
             stock_name=trade.stock_name or "",
-            is_option=self.is_option_code(trade.market, trade.code),
+            is_option=is_option,
             currency=currency,
             buy_price=buy_record.price,  # 保留原始价格
             buy_qty=match_qty,

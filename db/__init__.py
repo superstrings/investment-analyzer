@@ -34,6 +34,7 @@ from .models import (
     Account,
     AccountSnapshot,
     Base,
+    DerivativeContract,
     Kline,
     Position,
     PriceAlert,
@@ -64,4 +65,5 @@ __all__ = [
     "WatchlistItem",
     "SyncLog",
     "PriceAlert",
+    "DerivativeContract",
 ]
