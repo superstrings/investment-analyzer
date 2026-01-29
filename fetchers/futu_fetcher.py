@@ -59,6 +59,13 @@ FUTU_SIDE_MAP = {
     TrdSide.SELL_SHORT: TradeSide.SELL,
 }
 
+# Currency mapping by market
+MARKET_CURRENCY_MAP = {
+    Market.HK: "HKD",
+    Market.US: "USD",
+    Market.A: "CNY",
+}
+
 
 def _parse_market(market_str: str) -> Market:
     """Parse market string to Market enum."""
@@ -330,7 +337,10 @@ class FutuFetcher(BaseFetcher):
         return FetchResult.ok([acc_info])
 
     def get_today_deals(
-        self, acc_id: int, trd_env: Optional[TrdEnv] = None
+        self,
+        acc_id: int,
+        trd_env: Optional[TrdEnv] = None,
+        query_fees: bool = True,
     ) -> FetchResult:
         """
         Get today's executed trades/deals.
@@ -338,6 +348,7 @@ class FutuFetcher(BaseFetcher):
         Args:
             acc_id: Account ID
             trd_env: Trading environment (default: use instance setting)
+            query_fees: Whether to query fees (may be slow due to API limits)
 
         Returns:
             FetchResult containing list of TradeInfo
@@ -351,7 +362,57 @@ class FutuFetcher(BaseFetcher):
         if ret != RET_OK:
             return FetchResult.error(str(data))
 
-        return self._parse_deals(data)
+        # Query fees if requested
+        fee_map = {}
+        if query_fees and len(data) > 0:
+            order_ids = data["order_id"].astype(str).tolist()
+            fee_map = self._query_order_fees(order_ids, acc_id, env)
+
+        return self._parse_deals(data, fee_map)
+
+    def _query_order_fees(
+        self,
+        order_ids: list[str],
+        acc_id: int,
+        trd_env: TrdEnv,
+    ) -> dict[str, Decimal]:
+        """
+        Query fees for orders using order_fee_query API.
+
+        Args:
+            order_ids: List of order IDs
+            acc_id: Account ID
+            trd_env: Trading environment
+
+        Returns:
+            Dict mapping order_id to fee amount
+        """
+        fees = {}
+        if not order_ids:
+            return fees
+
+        # Remove duplicates and batch in groups of 400 (API limit)
+        unique_order_ids = list(set(order_ids))
+        batch_size = 400
+
+        for i in range(0, len(unique_order_ids), batch_size):
+            batch = unique_order_ids[i : i + batch_size]
+            try:
+                ret, data = self._ctx.order_fee_query(
+                    order_id_list=batch,
+                    acc_id=acc_id,
+                    trd_env=trd_env,
+                )
+                if ret == RET_OK and data is not None and len(data) > 0:
+                    for _, row in data.iterrows():
+                        order_id = str(row.get("order_id", ""))
+                        fee_amount = row.get("fee_amount", 0)
+                        if order_id:
+                            fees[order_id] = Decimal(str(fee_amount))
+            except Exception as e:
+                logger.warning(f"Failed to query fees for batch: {e}")
+
+        return fees
 
     def get_history_deals(
         self,
@@ -359,6 +420,7 @@ class FutuFetcher(BaseFetcher):
         start_date: Optional[date] = None,
         end_date: Optional[date] = None,
         trd_env: Optional[TrdEnv] = None,
+        query_fees: bool = True,
     ) -> FetchResult:
         """
         Get historical executed trades/deals.
@@ -368,6 +430,7 @@ class FutuFetcher(BaseFetcher):
             start_date: Start date (default: 90 days ago)
             end_date: End date (default: today)
             trd_env: Trading environment (default: use instance setting)
+            query_fees: Whether to query fees (may be slow due to API limits)
 
         Returns:
             FetchResult containing list of TradeInfo
@@ -397,10 +460,28 @@ class FutuFetcher(BaseFetcher):
         if ret != RET_OK:
             return FetchResult.error(str(data))
 
-        return self._parse_deals(data)
+        # Query fees if requested
+        fee_map = {}
+        if query_fees and len(data) > 0:
+            order_ids = data["order_id"].astype(str).tolist()
+            fee_map = self._query_order_fees(order_ids, acc_id, env)
+            logger.info(f"Queried fees for {len(fee_map)} orders")
 
-    def _parse_deals(self, data) -> FetchResult:
-        """Parse deals DataFrame into list of TradeInfo."""
+        return self._parse_deals(data, fee_map)
+
+    def _parse_deals(
+        self, data, fee_map: Optional[dict[str, Decimal]] = None
+    ) -> FetchResult:
+        """
+        Parse deals DataFrame into list of TradeInfo.
+
+        Args:
+            data: DataFrame from Futu API
+            fee_map: Optional dict mapping order_id to fee amount
+        """
+        if fee_map is None:
+            fee_map = {}
+
         trades = []
         for _, row in data.iterrows():
             market, code = _parse_code(row.get("code", ""))
@@ -421,6 +502,13 @@ class FutuFetcher(BaseFetcher):
             trd_side = row.get("trd_side")
             side = FUTU_SIDE_MAP.get(trd_side, TradeSide.BUY)
 
+            # Get currency based on market (API doesn't return it)
+            currency = MARKET_CURRENCY_MAP.get(market, "HKD")
+
+            # Get fee from fee_map if available
+            order_id = str(row.get("order_id", ""))
+            fee = fee_map.get(order_id, Decimal("0"))
+
             trade = TradeInfo(
                 deal_id=str(row.get("deal_id", "")),
                 market=market,
@@ -430,11 +518,11 @@ class FutuFetcher(BaseFetcher):
                 qty=Decimal(str(row.get("qty", 0))),
                 price=Decimal(str(row.get("price", 0))),
                 trade_time=trade_time,
-                order_id=str(row.get("order_id", "")),
+                order_id=order_id,
                 amount=Decimal(str(row.get("qty", 0)))
                 * Decimal(str(row.get("price", 0))),
-                fee=Decimal("0"),  # Fee not directly available
-                currency=row.get("currency", "HKD"),
+                fee=fee,
+                currency=currency,
             )
             trades.append(trade)
 

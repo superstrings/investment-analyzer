@@ -4,6 +4,7 @@ Trade Matcher - 买卖配对模块
 使用 LIFO (后进先出) 算法将买入和卖出记录配对成完整交易。
 支持部分成交、多次加仓等复杂场景。
 股票与期权分开配对和统计。
+支持多币种，自动转换为港币 (HKD) 统一计算。
 """
 
 import re
@@ -15,6 +16,15 @@ from typing import Optional
 from db import Trade
 
 
+# 汇率配置 (转换为 HKD)
+# 注意：实际应用中应使用实时汇率或配置文件
+CURRENCY_TO_HKD = {
+    "HKD": Decimal("1.0"),
+    "USD": Decimal("7.78"),  # 美元兑港币
+    "CNY": Decimal("1.07"),  # 人民币兑港币
+}
+
+
 @dataclass
 class MatchedTrade:
     """配对后的完整交易记录"""
@@ -24,23 +34,24 @@ class MatchedTrade:
     code: str
     stock_name: str
     is_option: bool = False
+    currency: str = "HKD"  # 原始货币
 
-    # 买入信息
+    # 买入信息 (已转换为 HKD)
     buy_price: Decimal = Decimal("0")
     buy_qty: Decimal = Decimal("0")
-    buy_amount: Decimal = Decimal("0")
+    buy_amount: Decimal = Decimal("0")  # HKD
     buy_date: Optional[datetime] = None
-    buy_fee: Decimal = Decimal("0")
+    buy_fee: Decimal = Decimal("0")  # HKD
 
-    # 卖出信息
+    # 卖出信息 (已转换为 HKD)
     sell_price: Decimal = Decimal("0")
     sell_qty: Decimal = Decimal("0")
-    sell_amount: Decimal = Decimal("0")
+    sell_amount: Decimal = Decimal("0")  # HKD
     sell_date: Optional[datetime] = None
-    sell_fee: Decimal = Decimal("0")
+    sell_fee: Decimal = Decimal("0")  # HKD
 
-    # 计算字段
-    profit_loss: Decimal = Decimal("0")  # 盈亏额
+    # 计算字段 (HKD)
+    profit_loss: Decimal = Decimal("0")  # 盈亏额 (HKD)
     profit_loss_ratio: Decimal = Decimal("0")  # 盈亏率
     holding_days: int = 0  # 持仓天数
 
@@ -85,6 +96,7 @@ class MatchedTrade:
             "code": self.code,
             "stock_name": self.stock_name,
             "is_option": self.is_option,
+            "currency": self.currency,
             "buy_price": float(self.buy_price),
             "buy_qty": float(self.buy_qty),
             "buy_amount": float(self.buy_amount),
@@ -111,6 +123,22 @@ class BuyRecord:
     qty: Decimal
     remaining_qty: Decimal  # 剩余未配对数量
     fee: Decimal
+    currency: str = "HKD"  # 原始货币
+
+
+def convert_to_hkd(amount: Decimal, currency: str) -> Decimal:
+    """
+    将金额转换为港币 (HKD)
+
+    Args:
+        amount: 原始金额
+        currency: 原始货币代码
+
+    Returns:
+        转换后的港币金额
+    """
+    rate = CURRENCY_TO_HKD.get(currency.upper(), Decimal("1.0"))
+    return amount * rate
 
 
 class TradeMatcher:
@@ -176,9 +204,7 @@ class TradeMatcher:
         if full_code not in self.unmatched_buys:
             self.unmatched_buys[full_code] = []
 
-        # 计算单股手续费
         qty = Decimal(str(trade.qty))
-        fee_per_share = Decimal(str(trade.fee or 0)) / qty if qty > 0 else Decimal("0")
 
         buy_record = BuyRecord(
             trade_id=trade.deal_id,
@@ -187,6 +213,7 @@ class TradeMatcher:
             qty=qty,
             remaining_qty=qty,
             fee=Decimal(str(trade.fee or 0)),
+            currency=trade.currency or "HKD",
         )
 
         # 添加到买入栈（LIFO 栈顶）
@@ -245,31 +272,45 @@ class TradeMatcher:
         sell_price: Decimal,
         sell_fee: Decimal,
     ) -> MatchedTrade:
-        """创建配对后的交易记录"""
+        """创建配对后的交易记录，金额统一转换为 HKD"""
+        # 获取货币（买卖应该使用相同货币）
+        currency = buy_record.currency
+
         # 计算买入手续费（按比例分摊）
         buy_fee_ratio = match_qty / buy_record.qty
-        buy_fee = buy_record.fee * buy_fee_ratio
+        buy_fee_orig = buy_record.fee * buy_fee_ratio
+
+        # 计算原始金额
+        buy_amount_orig = buy_record.price * match_qty
+        sell_amount_orig = sell_price * match_qty
+
+        # 转换为 HKD
+        buy_amount_hkd = convert_to_hkd(buy_amount_orig, currency)
+        sell_amount_hkd = convert_to_hkd(sell_amount_orig, currency)
+        buy_fee_hkd = convert_to_hkd(buy_fee_orig, currency)
+        sell_fee_hkd = convert_to_hkd(sell_fee, currency)
 
         matched = MatchedTrade(
             market=trade.market,
             code=trade.code,
             stock_name=trade.stock_name or "",
             is_option=self.is_option_code(trade.market, trade.code),
-            buy_price=buy_record.price,
+            currency=currency,
+            buy_price=buy_record.price,  # 保留原始价格
             buy_qty=match_qty,
-            buy_amount=buy_record.price * match_qty,
+            buy_amount=buy_amount_hkd,  # HKD
             buy_date=buy_record.trade_time,
-            buy_fee=buy_fee,
-            sell_price=sell_price,
+            buy_fee=buy_fee_hkd,  # HKD
+            sell_price=sell_price,  # 保留原始价格
             sell_qty=match_qty,
-            sell_amount=sell_price * match_qty,
+            sell_amount=sell_amount_hkd,  # HKD
             sell_date=trade.trade_time,
-            sell_fee=sell_fee,
+            sell_fee=sell_fee_hkd,  # HKD
             buy_trade_ids=[buy_record.trade_id],
             sell_trade_ids=[trade.deal_id],
         )
 
-        # 计算盈亏和持仓天数
+        # 计算盈亏和持仓天数 (金额已经是 HKD)
         matched.calculate()
 
         return matched
