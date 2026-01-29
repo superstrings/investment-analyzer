@@ -20,6 +20,7 @@ from docx.enum.table import WD_TABLE_ALIGNMENT
 from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
+from .chart_generator import ChartGenerator
 from .statistics import TradeStatistics, StatisticsCalculator
 from .trade_matcher import MatchedTrade
 
@@ -195,7 +196,7 @@ class DocxExporter:
         # 添加图表
         if "holding_days_hist" in charts and charts["holding_days_hist"]:
             self.doc.add_paragraph()
-            self._add_image(charts["holding_days_hist"], "持仓天数分布")
+            self._add_image(charts["holding_days_hist"], "holding_days_hist")
 
     def _add_market_section(
         self, stats: TradeStatistics, charts: dict[str, bytes]
@@ -245,7 +246,7 @@ class DocxExporter:
 
         # 添加图表
         if "market_distribution" in charts and charts["market_distribution"]:
-            self._add_image(charts["market_distribution"], "市场分布")
+            self._add_image(charts["market_distribution"], "market_distribution")
 
     def _add_top_winners_section(self, stats: TradeStatistics) -> None:
         """添加最佳交易 Top 5 章节"""
@@ -358,7 +359,7 @@ class DocxExporter:
 
         # 添加图表
         if "profit_loss_bucket_bar" in charts and charts["profit_loss_bucket_bar"]:
-            self._add_image(charts["profit_loss_bucket_bar"], "盈亏率分布")
+            self._add_image(charts["profit_loss_bucket_bar"], "profit_loss_bucket_bar")
 
     def _add_monthly_section(
         self, stats: TradeStatistics, charts: dict[str, bytes]
@@ -386,7 +387,7 @@ class DocxExporter:
 
         # 添加图表
         if "monthly_profit_bar" in charts and charts["monthly_profit_bar"]:
-            self._add_image(charts["monthly_profit_bar"], "月度盈亏趋势")
+            self._add_image(charts["monthly_profit_bar"], "monthly_profit_bar")
 
     def _add_option_section(
         self, stats: TradeStatistics, option_trades: list[MatchedTrade]
@@ -509,8 +510,8 @@ class DocxExporter:
                         for paragraph in cell.paragraphs:
                             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-    def _add_image(self, image_data: bytes, caption: str) -> None:
-        """添加图片"""
+    def _add_image(self, image_data: bytes, chart_key: str) -> None:
+        """添加图片，使用双语图注"""
         if not image_data:
             return
 
@@ -524,8 +525,9 @@ class DocxExporter:
         last_paragraph = self.doc.paragraphs[-1]
         last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-        # 添加图注
-        caption_para = self.doc.add_paragraph(f"图：{caption}")
+        # 添加双语图注 (英文 + 中文)
+        bilingual_caption = ChartGenerator.get_chart_caption(chart_key)
+        caption_para = self.doc.add_paragraph(f"图：{bilingual_caption}")
         caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
         caption_para.runs[0].font.size = Pt(9)
         caption_para.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)

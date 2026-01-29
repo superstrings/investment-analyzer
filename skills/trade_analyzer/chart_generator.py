@@ -8,6 +8,9 @@ Chart Generator - 图表生成模块
 - 盈亏率分布直方图
 - 市场分布饼图
 - 累计盈亏曲线
+
+Note: Uses English labels for cross-platform compatibility.
+Chinese translations are provided in the Word report captions.
 """
 
 import io
@@ -16,10 +19,21 @@ from pathlib import Path
 from typing import Optional
 
 import matplotlib.pyplot as plt
-import matplotlib.font_manager as fm
 
 from .statistics import TradeStatistics
 from .trade_matcher import MatchedTrade
+
+
+# Chart title translations (English -> Chinese) for Word report captions
+CHART_TRANSLATIONS = {
+    "win_loss_pie": "Win/Loss Distribution (盈亏分布)",
+    "monthly_profit_bar": "Monthly P&L Trend (月度盈亏趋势)",
+    "holding_days_hist": "Holding Period Distribution (持仓天数分布)",
+    "profit_loss_ratio_hist": "P&L Ratio Distribution (盈亏率分布)",
+    "market_distribution": "Market Distribution (市场分布)",
+    "cumulative_profit_line": "Cumulative P&L Curve (累计盈亏曲线)",
+    "profit_loss_bucket_bar": "P&L Ratio Range Distribution (盈亏率区间分布)",
+}
 
 
 class ChartGenerator:
@@ -33,31 +47,7 @@ class ChartGenerator:
             output_dir: 图表输出目录，如果不指定则返回字节流
         """
         self.output_dir = output_dir
-        self._setup_chinese_font()
-
-    def _setup_chinese_font(self) -> None:
-        """设置中文字体"""
-        # 尝试使用系统中文字体
-        chinese_fonts = [
-            "PingFang SC",
-            "Heiti SC",
-            "STHeiti",
-            "Microsoft YaHei",
-            "SimHei",
-            "Arial Unicode MS",
-        ]
-
-        for font_name in chinese_fonts:
-            try:
-                font_path = fm.findfont(fm.FontProperties(family=font_name))
-                if font_path and "LastResort" not in font_path:
-                    plt.rcParams["font.family"] = font_name
-                    plt.rcParams["axes.unicode_minus"] = False
-                    return
-            except Exception:
-                continue
-
-        # 如果找不到中文字体，使用默认设置
+        # Use default font - no Chinese font needed
         plt.rcParams["axes.unicode_minus"] = False
 
     def _save_or_return(self, fig: plt.Figure, filename: str) -> bytes:
@@ -76,10 +66,10 @@ class ChartGenerator:
         return data
 
     def generate_win_loss_pie(self, stats: TradeStatistics) -> bytes:
-        """生成盈亏分布饼图"""
+        """生成盈亏分布饼图 (Win/Loss Distribution)"""
         fig, ax = plt.subplots(figsize=(8, 6))
 
-        labels = ["盈利", "亏损", "持平"]
+        labels = ["Win", "Loss", "Breakeven"]
         sizes = [
             stats.winning_trades,
             stats.losing_trades,
@@ -103,16 +93,16 @@ class ChartGenerator:
             explode=explode,
             labels=labels,
             colors=colors,
-            autopct=lambda pct: f"{pct:.1f}%\n({int(pct/100*sum(sizes))}笔)",
+            autopct=lambda pct: f"{pct:.1f}%\n({int(pct/100*sum(sizes))})",
             shadow=False,
             startangle=90,
         )
-        ax.set_title(f"盈亏分布 (共{stats.total_trades}笔交易)")
+        ax.set_title(f"Win/Loss Distribution (Total: {stats.total_trades} trades)")
 
         return self._save_or_return(fig, "win_loss_pie.png")
 
     def generate_monthly_profit_bar(self, stats: TradeStatistics) -> bytes:
-        """生成月度盈亏柱状图"""
+        """生成月度盈亏柱状图 (Monthly P&L Trend)"""
         if not stats.monthly_stats:
             return b""
 
@@ -138,9 +128,9 @@ class ChartGenerator:
                 fontsize=8,
             )
 
-        ax.set_xlabel("月份")
-        ax.set_ylabel("盈亏额")
-        ax.set_title("月度盈亏趋势")
+        ax.set_xlabel("Month")
+        ax.set_ylabel("Profit/Loss")
+        ax.set_title("Monthly P&L Trend")
         ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -148,7 +138,7 @@ class ChartGenerator:
         return self._save_or_return(fig, "monthly_profit_bar.png")
 
     def generate_holding_days_hist(self, trades: list[MatchedTrade]) -> bytes:
-        """生成持仓天数分布直方图"""
+        """生成持仓天数分布直方图 (Holding Period Distribution)"""
         holding_days = [t.holding_days for t in trades if t.holding_days >= 0]
         if not holding_days:
             return b""
@@ -157,23 +147,22 @@ class ChartGenerator:
 
         ax.hist(holding_days, bins=20, color="#2196F3", edgecolor="white", alpha=0.7)
 
-        ax.set_xlabel("持仓天数")
-        ax.set_ylabel("交易笔数")
-        ax.set_title(
-            f"持仓天数分布 (平均: {sum(holding_days)/len(holding_days):.1f}天)"
-        )
+        ax.set_xlabel("Holding Days")
+        ax.set_ylabel("Number of Trades")
+
+        avg_days = sum(holding_days) / len(holding_days)
+        ax.set_title(f"Holding Period Distribution (Avg: {avg_days:.1f} days)")
 
         # 添加平均线
-        avg_days = sum(holding_days) / len(holding_days)
         ax.axvline(
-            x=avg_days, color="red", linestyle="--", label=f"平均: {avg_days:.1f}天"
+            x=avg_days, color="red", linestyle="--", label=f"Avg: {avg_days:.1f} days"
         )
         ax.legend()
 
         return self._save_or_return(fig, "holding_days_hist.png")
 
     def generate_profit_loss_ratio_hist(self, trades: list[MatchedTrade]) -> bytes:
-        """生成盈亏率分布直方图"""
+        """生成盈亏率分布直方图 (P&L Ratio Distribution)"""
         ratios = [float(t.profit_loss_ratio) * 100 for t in trades]
         if not ratios:
             return b""
@@ -185,15 +174,15 @@ class ChartGenerator:
 
         ax.hist(ratios_clipped, bins=30, color="#9C27B0", edgecolor="white", alpha=0.7)
 
-        ax.set_xlabel("盈亏率 (%)")
-        ax.set_ylabel("交易笔数")
-        ax.set_title("盈亏率分布")
+        ax.set_xlabel("P&L Ratio (%)")
+        ax.set_ylabel("Number of Trades")
+        ax.set_title("P&L Ratio Distribution")
         ax.axvline(x=0, color="black", linestyle="-", linewidth=1)
 
         return self._save_or_return(fig, "profit_loss_ratio_hist.png")
 
     def generate_market_distribution_pie(self, stats: TradeStatistics) -> bytes:
-        """生成市场分布饼图"""
+        """生成市场分布饼图 (Market Distribution)"""
         if not stats.market_stats:
             return b""
 
@@ -203,32 +192,26 @@ class ChartGenerator:
         markets = list(stats.market_stats.keys())
         trade_counts = [ms.total_trades for ms in stats.market_stats.values()]
 
-        market_labels = {
-            "HK": "港股",
-            "US": "美股",
-            "SH": "沪市",
-            "SZ": "深市",
-        }
-        labels = [market_labels.get(m, m) for m in markets]
+        # Use market codes directly (HK, US, SH, SZ are recognizable)
         colors = ["#FF9800", "#2196F3", "#E91E63", "#4CAF50"]
 
         ax1.pie(
             trade_counts,
-            labels=labels,
+            labels=markets,
             colors=colors[: len(markets)],
-            autopct=lambda pct: f"{pct:.1f}%\n({int(pct/100*sum(trade_counts))}笔)",
+            autopct=lambda pct: f"{pct:.1f}%\n({int(pct/100*sum(trade_counts))})",
             startangle=90,
         )
-        ax1.set_title("交易笔数分布")
+        ax1.set_title("Trade Count by Market")
 
         # 右图：盈亏额分布（柱状图）
         net_profits = [float(ms.net_profit) for ms in stats.market_stats.values()]
         bar_colors = ["#4CAF50" if p >= 0 else "#F44336" for p in net_profits]
 
-        bars = ax2.bar(labels, net_profits, color=bar_colors)
-        ax2.set_xlabel("市场")
-        ax2.set_ylabel("净盈亏")
-        ax2.set_title("各市场净盈亏")
+        bars = ax2.bar(markets, net_profits, color=bar_colors)
+        ax2.set_xlabel("Market")
+        ax2.set_ylabel("Net P&L")
+        ax2.set_title("Net P&L by Market")
         ax2.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
 
         # 添加数值标签
@@ -247,7 +230,7 @@ class ChartGenerator:
         return self._save_or_return(fig, "market_distribution.png")
 
     def generate_cumulative_profit_line(self, trades: list[MatchedTrade]) -> bytes:
-        """生成累计盈亏曲线"""
+        """生成累计盈亏曲线 (Cumulative P&L Curve)"""
         # 按卖出日期排序
         sorted_trades = sorted(
             [t for t in trades if t.sell_date],
@@ -285,9 +268,9 @@ class ChartGenerator:
             alpha=0.3,
         )
 
-        ax.set_xlabel("日期")
-        ax.set_ylabel("累计盈亏")
-        ax.set_title("累计盈亏曲线")
+        ax.set_xlabel("Date")
+        ax.set_ylabel("Cumulative P&L")
+        ax.set_title("Cumulative P&L Curve")
         ax.axhline(y=0, color="black", linestyle="-", linewidth=0.5)
         plt.xticks(rotation=45)
         plt.tight_layout()
@@ -295,13 +278,30 @@ class ChartGenerator:
         return self._save_or_return(fig, "cumulative_profit_line.png")
 
     def generate_profit_loss_bucket_bar(self, stats: TradeStatistics) -> bytes:
-        """生成盈亏率区间分布柱状图"""
+        """生成盈亏率区间分布柱状图 (P&L Ratio Range Distribution)"""
         if not stats.profit_loss_buckets:
             return b""
 
         fig, ax = plt.subplots(figsize=(12, 6))
 
-        bucket_names = [b.bucket_name for b in stats.profit_loss_buckets]
+        # Convert Chinese bucket names to English
+        bucket_name_map = {
+            "-50%以下": "<-50%",
+            "-50%~-30%": "-50%~-30%",
+            "-30%~-20%": "-30%~-20%",
+            "-20%~-10%": "-20%~-10%",
+            "-10%~0%": "-10%~0%",
+            "0~10%": "0~10%",
+            "10%~20%": "10%~20%",
+            "20%~30%": "20%~30%",
+            "30%~50%": "30%~50%",
+            "50%以上": ">50%",
+        }
+
+        bucket_names = [
+            bucket_name_map.get(b.bucket_name, b.bucket_name)
+            for b in stats.profit_loss_buckets
+        ]
         counts = [b.count for b in stats.profit_loss_buckets]
 
         # 根据是盈利还是亏损区间设置颜色
@@ -330,9 +330,9 @@ class ChartGenerator:
                     fontsize=9,
                 )
 
-        ax.set_xlabel("盈亏率区间")
-        ax.set_ylabel("交易笔数")
-        ax.set_title("盈亏率区间分布")
+        ax.set_xlabel("P&L Ratio Range")
+        ax.set_ylabel("Number of Trades")
+        ax.set_title("P&L Ratio Range Distribution")
         plt.xticks(rotation=45)
         plt.tight_layout()
 
@@ -359,3 +359,16 @@ class ChartGenerator:
 
         # 过滤掉空图表
         return {k: v for k, v in charts.items() if v}
+
+    @staticmethod
+    def get_chart_caption(chart_name: str) -> str:
+        """
+        Get bilingual caption for a chart.
+
+        Args:
+            chart_name: Chart key name (e.g., "win_loss_pie")
+
+        Returns:
+            Bilingual caption (English + Chinese)
+        """
+        return CHART_TRANSLATIONS.get(chart_name, chart_name)
