@@ -7,6 +7,7 @@ CLI 主程序入口
 
 import logging
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -2982,6 +2983,116 @@ def deep_analyze(
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text(combined_report, encoding="utf-8")
         print_success(f"报告已保存到: {output_path}")
+
+
+# =============================================================================
+# Trade Analysis Command
+# =============================================================================
+
+
+@cli.command("trade-analyze")
+@click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
+@click.option("--start", type=click.DateTime(formats=["%Y-%m-%d"]), help="开始日期 (YYYY-MM-DD)")
+@click.option("--end", type=click.DateTime(formats=["%Y-%m-%d"]), help="结束日期 (YYYY-MM-DD)")
+@click.option("--days", type=int, help="分析最近 N 天的交易")
+@click.option("--output", "-o", type=click.Path(), help="输出目录路径")
+@click.option("--no-excel", is_flag=True, help="不生成 Excel 文件")
+@click.option("--no-docx", is_flag=True, help="不生成 Word 报告")
+@click.option("--no-charts", is_flag=True, help="不生成图表")
+def trade_analyze(
+    user: str,
+    start: Optional[datetime],
+    end: Optional[datetime],
+    days: Optional[int],
+    output: Optional[str],
+    no_excel: bool,
+    no_docx: bool,
+    no_charts: bool,
+):
+    """
+    交易记录分析 - 统计分析历史交易表现并生成报告
+
+    分析指定日期范围内的交易记录，计算胜率、盈亏比等关键指标，
+    并生成 Excel 统计表和 Word 分析报告。
+
+    Examples:
+        # 分析 2025 年全年交易
+        python main.py trade-analyze -u dyson --start 2025-01-01 --end 2025-12-31
+
+        # 分析最近 90 天的交易
+        python main.py trade-analyze -u dyson --days 90
+
+        # 指定输出目录
+        python main.py trade-analyze -u dyson --output /path/to/output
+
+        # 仅生成 Excel，不生成 Word 报告
+        python main.py trade-analyze -u dyson --no-docx
+    """
+    from datetime import date
+    from pathlib import Path
+
+    from skills.trade_analyzer import TradeAnalyzer
+
+    # Get user from database
+    db_user = get_user_by_name(user)
+    if not db_user:
+        print_error(f"User '{user}' not found in database.", exit_code=1)
+        return
+
+    # Determine date range
+    start_date = start.date() if start else None
+    end_date = end.date() if end else None
+
+    if not days and not start_date and not end_date:
+        # Default to current year
+        today = date.today()
+        start_date = date(today.year, 1, 1)
+        end_date = today
+        print_info(f"未指定日期范围，默认分析 {today.year} 年 ({start_date} ~ {end_date})")
+
+    # Determine output directory
+    if output:
+        output_dir = Path(output)
+    else:
+        output_dir = Path("output")
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    print_info(f"输出目录: {output_dir.absolute()}")
+
+    # Run analysis
+    print_info(f"开始分析用户 '{user}' 的交易记录...")
+
+    try:
+        analyzer = TradeAnalyzer()
+        result = analyzer.analyze(
+            user_id=db_user.id,
+            start_date=start_date,
+            end_date=end_date,
+            days=days,
+            output_dir=output_dir,
+            generate_excel=not no_excel,
+            generate_docx=not no_docx,
+            generate_charts=not no_charts,
+        )
+
+        # Print summary
+        summary = analyzer.get_summary(result)
+        console.print("\n" + summary + "\n")
+
+        if result.total_raw_trades == 0:
+            print_warning("未找到交易记录，请检查日期范围或同步交易数据")
+            return
+
+        # Success message
+        print_success(
+            f"分析完成: {len(result.matched_trades)} 笔交易, "
+            f"胜率 {result.statistics.win_rate:.1%}, "
+            f"净利润 {float(result.statistics.net_profit):,.2f}"
+        )
+
+    except Exception as e:
+        logger.exception("Trade analysis failed")
+        print_error(f"分析失败: {e}", exit_code=1)
 
 
 if __name__ == "__main__":
