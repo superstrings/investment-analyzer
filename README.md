@@ -15,9 +15,11 @@
 - **技术分析**: MA/MACD/RSI/布林带/OBV/VCP 指标计算
 - **形态识别**: VCP (波动收缩形态) 自动检测与评分
 - **组合分析**: 仓位权重、风险评估、HHI 集中度指数
+- **交易分析**: 配对交易匹配、胜率/盈亏比/手续费统计、Excel+Word 报告
+- **AI 投资教练**: 基于 V10.10 框架的 LLM 智能建议，自动嵌入报告
 - **图表生成**: K线图 + 均线 + 成交量 (mplfinance)
-- **报告输出**: Markdown/JSON/HTML 多格式报告
-- **Skills 系统**: 分析师/风控/交易指导/市场观察多角色
+- **报告输出**: Markdown/JSON/HTML/Word/Excel 多格式报告
+- **Skills 系统**: 分析师/风控/交易指导/市场观察/投资教练多角色
 - **Claude 命令**: 便捷的 Slash 命令快速操作
 - **CLI 工具**: 完整的命令行交互界面
 
@@ -114,6 +116,8 @@ python main.py account info -u your_name
 | `/deep-analyze HK` | 深度分析指定市场 |
 | `/market-summary` | 三市场汇总报告 |
 | `/sync-all` | 同步所有数据 |
+| `/analyze-trades` | 交易分析 + AI 投资教练点评 |
+| `/investment-coach` | 投资教练 (基于 V10.10 框架) |
 
 ### CLI 命令
 
@@ -133,6 +137,11 @@ python main.py chart positions -u your_name
 # 报告生成
 python main.py report portfolio -u your_name
 python main.py report technical -u your_name --codes "HK.00700"
+
+# 交易分析 (年度/自定义时段)
+python main.py trade-analyze -u your_name --start 2025-01-01 --end 2025-12-31
+python main.py trade-analyze -u your_name --start 2025-01-01 --end 2025-12-31 --output-context
+# 输出: Excel 交易记录 + Word 分析报告 + AI 上下文文件
 
 # 账户信息
 python main.py account list -u your_name
@@ -205,6 +214,7 @@ investment-analyzer/
 │   ├── trading_coach/  # 交易导师
 │   ├── market_observer/# 市场观察员
 │   ├── deep_analyzer/  # 深度分析
+│   ├── trade_analyzer/ # 交易分析 (配对交易+统计+报告)
 │   └── shared/         # 共享组件
 ├── scripts/            # 脚本工具
 │   ├── init_db.py      # 数据库初始化
@@ -224,7 +234,8 @@ investment-analyzer/
 | ORM | SQLAlchemy 2.0 |
 | 数据采集 | futu-api, akshare |
 | 图表 | mplfinance, matplotlib |
-| 报告 | Jinja2 |
+| 报告 | Jinja2, python-docx, openpyxl |
+| 文档转换 | pandoc (md → docx) |
 | CLI | Click |
 | 测试 | pytest |
 
@@ -270,8 +281,29 @@ result = detect_vcp(df, config)
 | Technical | 技术分析报告 |
 | Daily | 每日投资简报 |
 | Weekly | 周度投资回顾 |
+| Trade Analysis | 年度/时段交易分析 (Excel+Word) |
 
-支持输出格式: Markdown, JSON, HTML
+支持输出格式: Markdown, JSON, HTML, Word (docx), Excel (xlsx)
+
+### 交易分析报告
+
+交易分析功能提供完整的交易复盘:
+
+- **配对交易匹配**: 自动匹配买入卖出形成完整交易
+- **统计指标**: 胜率、盈亏比、平均持仓、手续费统计
+- **市场分布**: 港股/美股/A股分别统计
+- **盈亏分布**: 按收益率区间统计
+- **AI 投资教练**: 基于 V10.10 框架的 LLM 智能建议
+
+```bash
+# 生成 2025 年交易分析报告
+python main.py trade-analyze -u your_name --start 2025-01-01 --end 2025-12-31
+
+# 输出文件:
+# - output/2025年美港股交易记录.xlsx      # 交易明细
+# - output/2025年美港股交易分析报告.docx  # 分析报告
+# - output/2025年交易分析上下文.md        # AI 上下文
+```
 
 ## 测试
 
