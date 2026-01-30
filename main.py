@@ -2999,7 +2999,7 @@ def deep_analyze(
 @click.option("--no-excel", is_flag=True, help="不生成 Excel 文件")
 @click.option("--no-docx", is_flag=True, help="不生成 Word 报告")
 @click.option("--no-charts", is_flag=True, help="不生成图表")
-@click.option("--output-context", is_flag=True, help="输出 AI 分析上下文文件 (供 Claude Code 生成建议)")
+@click.option("--output-context", is_flag=True, hidden=True, help="[已废弃] 现在默认输出上下文文件")
 def trade_analyze(
     user: str,
     start: Optional[datetime],
@@ -3085,12 +3085,13 @@ def trade_analyze(
             print_warning("未找到交易记录，请检查日期范围或同步交易数据")
             return
 
-        # Output AI context file if requested
-        if output_context:
-            context_path = output_dir / f"{result.year}年交易分析上下文.md"
-            ai_context = analyzer.get_ai_context(result)
-            context_path.write_text(ai_context, encoding="utf-8")
-            print_success(f"AI 分析上下文已保存: {context_path}")
+        # Always output AI context file for investment coach
+        context_path = output_dir / f"{result.year}年交易分析上下文.md"
+        ai_context = analyzer.get_ai_context(result)
+        context_path.write_text(ai_context, encoding="utf-8")
+
+        # Hint for next step
+        console.print(f"\n[dim]提示: 使用 /investment-coach {context_path} 生成 AI 投资教练点评[/dim]")
 
         # Success message
         print_success(
