@@ -342,3 +342,89 @@ class TradeAnalyzer:
                 lines.append(f"Word: {result.docx_path}")
 
         return "\n".join(lines)
+
+    def get_ai_context(self, result: AnalysisResult) -> str:
+        """
+        获取用于 AI 分析的上下文数据（供 Claude Code 使用）
+
+        Args:
+            result: 分析结果
+
+        Returns:
+            格式化的上下文字符串，供 AI 生成建议
+        """
+        stats = result.statistics
+
+        # 构建详细的上下文
+        context_parts = [
+            f"# {result.year}年交易分析数据",
+            "",
+            "## 基本信息",
+            f"- 分析期间: {result.start_date} ~ {result.end_date}",
+            f"- 配对交易: {len(result.matched_trades)} 笔",
+            f"- 股票交易: {len(result.stock_trades)} 笔",
+            f"- 期权交易: {len(result.option_trades)} 笔",
+            "",
+            "## 股票交易统计",
+            f"- 胜率: {stats.win_rate:.1%} ({stats.winning_trades}盈/{stats.losing_trades}亏)",
+            f"- 盈亏比: {float(stats.profit_loss_ratio):.2f}",
+            f"- 净利润: {float(stats.net_profit):,.0f} HKD",
+            f"- 总盈利: {float(stats.total_profit):,.0f} HKD",
+            f"- 总亏损: {float(stats.total_loss):,.0f} HKD",
+            f"- 平均盈利: {float(stats.avg_profit):,.0f} HKD/笔",
+            f"- 平均亏损: {float(stats.avg_loss):,.0f} HKD/笔",
+            f"- 平均持仓天数: {stats.avg_holding_days:.1f} 天",
+            f"- 盈利交易平均持仓: {stats.avg_winning_holding_days:.1f} 天",
+            f"- 亏损交易平均持仓: {stats.avg_losing_holding_days:.1f} 天",
+        ]
+
+        # 期权统计
+        if stats.option_total_trades > 0:
+            context_parts.extend([
+                "",
+                "## 期权交易统计",
+                f"- 期权交易数: {stats.option_total_trades} 笔",
+                f"- 期权胜率: {stats.option_win_rate:.1%}",
+                f"- 期权净盈亏: {float(stats.option_net_profit):,.0f} HKD",
+            ])
+
+        # 市场分布
+        if stats.market_stats:
+            context_parts.extend(["", "## 市场分布"])
+            for market, ms in stats.market_stats.items():
+                market_name = {"HK": "港股", "US": "美股", "SH": "A股沪", "SZ": "A股深"}.get(market, market)
+                context_parts.append(
+                    f"- {market_name}: {ms.total_trades}笔, "
+                    f"胜率{ms.win_rate:.1%}, "
+                    f"净利润{float(ms.net_profit):,.0f}"
+                )
+
+        # 盈亏分布
+        if stats.profit_loss_buckets:
+            total_bucket_count = sum(b.count for b in stats.profit_loss_buckets)
+            context_parts.extend(["", "## 盈亏率分布"])
+            for bucket in stats.profit_loss_buckets:
+                pct = bucket.count / total_bucket_count if total_bucket_count > 0 else 0
+                context_parts.append(f"- {bucket.bucket_name}: {bucket.count}笔 ({pct:.1%})")
+
+        # Top 5 盈利和亏损
+        if result.stock_trades:
+            sorted_by_pl = sorted(result.stock_trades, key=lambda t: t.profit_loss, reverse=True)
+
+            context_parts.extend(["", "## 最佳交易 Top 5"])
+            for t in sorted_by_pl[:5]:
+                if t.profit_loss > 0:
+                    context_parts.append(
+                        f"- {t.stock_name}: +{float(t.profit_loss):,.0f} ({t.profit_loss_ratio:.1%}), "
+                        f"持仓{t.holding_days}天"
+                    )
+
+            context_parts.extend(["", "## 最大亏损 Top 5"])
+            for t in sorted_by_pl[-5:]:
+                if t.profit_loss < 0:
+                    context_parts.append(
+                        f"- {t.stock_name}: {float(t.profit_loss):,.0f} ({t.profit_loss_ratio:.1%}), "
+                        f"持仓{t.holding_days}天"
+                    )
+
+        return "\n".join(context_parts)

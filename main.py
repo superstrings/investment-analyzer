@@ -2999,6 +2999,7 @@ def deep_analyze(
 @click.option("--no-excel", is_flag=True, help="不生成 Excel 文件")
 @click.option("--no-docx", is_flag=True, help="不生成 Word 报告")
 @click.option("--no-charts", is_flag=True, help="不生成图表")
+@click.option("--output-context", is_flag=True, help="输出 AI 分析上下文文件 (供 Claude Code 生成建议)")
 def trade_analyze(
     user: str,
     start: Optional[datetime],
@@ -3008,6 +3009,7 @@ def trade_analyze(
     no_excel: bool,
     no_docx: bool,
     no_charts: bool,
+    output_context: bool,
 ):
     """
     交易记录分析 - 统计分析历史交易表现并生成报告
@@ -3082,6 +3084,13 @@ def trade_analyze(
         if result.total_raw_trades == 0:
             print_warning("未找到交易记录，请检查日期范围或同步交易数据")
             return
+
+        # Output AI context file if requested
+        if output_context:
+            context_path = output_dir / f"{result.year}年交易分析上下文.md"
+            ai_context = analyzer.get_ai_context(result)
+            context_path.write_text(ai_context, encoding="utf-8")
+            print_success(f"AI 分析上下文已保存: {context_path}")
 
         # Success message
         print_success(

@@ -116,3 +116,19 @@
   - 分析 2025 年: 393笔交易, 胜率58.8%, 净利润+108,663
   - 分析 2026 年: 42笔交易, 胜率14.3%, 净利润+5,915
   - 生成 Excel 和 Word 报告到 output/ 目录
+[2026-01-30 11:18:30] 更新港股窝轮换股比率:
+  - 通过 Futu API get_warrant 接口获取窝轮列表和换股比率
+  - 按正股、行权价、到期日匹配更新了 10 个窝轮的比率
+  - 手动修正了 5 个不一致的比率 (PAI=100, SMC=50, HOS=50)
+  - 数据来源: FUTU (API匹配), ESTIMATED (默认估计), MANUAL (手动修正)
+  - 24 个未过期港股窝轮换股比率已更新
+[2026-01-30 11:35:52] 修正港股期权合约乘数:
+  - 港股代码如 ALB260330C165000 是股票期权(OPTION)，不是窝轮(WARRANT)
+  - 港交所股票期权标准合约乘数: 100 (1张期权 = 100股正股)
+  - 更新 89 个港股期权: contract_type=OPTION, contract_multiplier=100
+  - 重新分析历年交易: 2024年(-51,718), 2025年(+108,663), 2026年(+5,915)
+[2026-01-30 11:52:43] 完成 AI 建议集成功能:
+  - 添加 --output-context 参数到 trade-analyze CLI 命令
+  - 修复 get_ai_context 方法 bug (bucket.bucket_name)
+  - 生成 AI 分析上下文文件供 Claude Code 读取生成建议
+  - 更新 .claude/commands/analyze-trades.md 三步工作流

@@ -1,5 +1,5 @@
 ---
-description: 分析交易记录并生成统计报告
+description: 分析交易记录并生成统计报告（含 AI 智能建议）
 arguments:
   - name: start_date
     description: 开始日期 (YYYY-MM-DD)，可选
@@ -9,47 +9,43 @@ arguments:
 
 # 交易记录分析
 
-分析用户 dyson 的交易记录，生成 Excel 统计表和 Word 分析报告。
+分析用户 dyson 的交易记录，生成 Excel 统计表和 Word 分析报告，并由 AI 生成智能建议。
 
-## 参数说明
+## 执行步骤
 
-- `start_date`: 开始日期，格式 YYYY-MM-DD，不指定则为当年 1 月 1 日
-- `end_date`: 结束日期，格式 YYYY-MM-DD，不指定则为今天
-
-## 执行命令
+### 第一步：运行 Python 分析
 
 ```bash
-# 如果指定了日期范围
-python main.py trade-analyze -u dyson {{#if start_date}}--start {{start_date}}{{/if}} {{#if end_date}}--end {{end_date}}{{/if}}
+source .venv/bin/activate && PYTHONPATH=. python main.py trade-analyze -u dyson {{#if start_date}}--start {{start_date}}{{/if}} {{#if end_date}}--end {{end_date}}{{/if}} --output-context
+```
 
-# 默认分析当年
-python main.py trade-analyze -u dyson
+这会生成：
+- `output/{year}年美港股交易记录.xlsx` - Excel 统计表
+- `output/{year}年美港股交易分析报告.docx` - Word 报告
+- `output/{year}年交易分析上下文.md` - AI 分析用的上下文数据
+
+### 第二步：生成 AI 建议
+
+读取 `output/{year}年交易分析上下文.md` 文件，基于数据生成专业的投资建议。
+
+建议应包含以下部分：
+1. **核心问题诊断** - 基于胜率、盈亏比、持仓时间等数据识别主要问题
+2. **具体改进措施** - 针对问题给出可操作的建议
+3. **风险提示** - 基于交易特征的风险警示
+4. **下一步行动** - 具体的行动计划
+
+### 第三步：追加 AI 建议到报告
+
+将生成的建议保存为临时文件，然后追加到 Word 报告：
+
+```bash
+source .venv/bin/activate && PYTHONPATH=. python scripts/append_ai_recommendations.py "output/{year}年美港股交易分析报告.docx" /tmp/ai_recommendations.md
 ```
 
 ## 输出文件
 
-分析完成后会在 `output/` 目录生成：
-
 1. **Excel 文件**: `{year}年美港股交易记录.xlsx`
-   - 股票交易明细（配对后的完整交易）
-   - 期权交易明细（单独统计）
-   - 统计汇总
-
-2. **Word 报告**: `{year}年美港股交易分析报告.docx`
-   - 整体交易表现
-   - 盈亏统计
-   - 持仓时间分析
-   - 市场分布
-   - 最佳/最差交易
-   - 结论与建议
-
-## 分析内容
-
-- **胜率**: 盈利交易占总交易的比例
-- **盈亏比**: 平均盈利 / 平均亏损
-- **持仓分析**: 平均持仓天数，盈利/亏损交易的持仓差异
-- **市场分布**: 港股/美股/A股的交易表现对比
-- **标的统计**: 交易频次最高的股票
+2. **Word 报告**: `{year}年美港股交易分析报告.docx`（含 AI 智能建议）
 
 ## 使用示例
 
