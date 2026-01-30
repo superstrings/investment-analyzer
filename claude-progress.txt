@@ -132,3 +132,11 @@
   - 修复 get_ai_context 方法 bug (bucket.bucket_name)
   - 生成 AI 分析上下文文件供 Claude Code 读取生成建议
   - 更新 .claude/commands/analyze-trades.md 三步工作流
+[2026-01-30 12:13:30] 修复港股期权合约乘数:
+  - 港股期权合约乘数 = 正股每手股数（不是统一的100）
+  - 通过 Futu API get_stock_basicinfo 获取正股 lot_size
+  - 更新 46 个港股期权合约乘数
+  - 重新分析历年交易:
+    - 2024年: 期权净盈亏 +529 (修正后)
+    - 2025年: 期权净盈亏 +21,683 (从 -7,316 变为正)
+    - 2026年: 期权净盈亏 +14,946 (修正后)
