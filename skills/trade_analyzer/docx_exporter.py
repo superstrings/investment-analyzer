@@ -6,6 +6,11 @@ Word Exporter - Word 报告导出模块
 - 统计表格
 - 嵌入图表（PNG 格式）
 - 结论与改进建议
+
+报告结构：
+- 第一部分：正股交易（一～九）
+- 第二部分：期权交易（十～十八）
+- 第三部分：结论与建议
 """
 
 import io
@@ -80,47 +85,122 @@ class DocxExporter:
         stock_trades = [t for t in trades if not t.is_option]
         option_trades = [t for t in trades if t.is_option]
 
-        # 一、整体交易表现
-        self._add_overall_section(stats)
+        # 计算股票和期权的独立统计（使用 treat_all_as_stock=True 将所有交易作为同类处理）
+        calculator = StatisticsCalculator()
+        stock_stats = calculator.calculate(stock_trades, treat_all_as_stock=True) if stock_trades else None
+        option_stats = calculator.calculate(option_trades, treat_all_as_stock=True) if option_trades else None
 
-        # 二、盈亏统计
-        self._add_profit_loss_section(stats)
+        # 使用原始 stats 中的手续费信息更新独立统计
+        if stock_stats:
+            stock_stats.stock_fees = stats.stock_fees
+            stock_stats.total_fees = stats.stock_fees
+        if option_stats:
+            option_stats.option_fees = stats.option_fees
+            option_stats.total_fees = stats.option_fees
 
-        # 三、持仓时间分析
-        self._add_holding_section(stats, charts)
+        # ========================
+        # 第一部分：正股交易
+        # ========================
+        if stock_trades and stock_stats:
+            self._add_part_header("第一部分：正股交易")
+            self._add_stock_sections(stock_stats, charts, stock_trades)
 
-        # 四、市场分布分析
-        self._add_market_section(stats, charts)
+        # ========================
+        # 第二部分：期权交易
+        # ========================
+        if option_trades and option_stats:
+            self._add_part_header("第二部分：期权交易")
+            self._add_option_sections(option_stats, charts, option_trades)
 
-        # 五、最佳交易 Top 5
-        self._add_top_winners_section(stats)
-
-        # 六、最大亏损 Top 5
-        self._add_top_losers_section(stats)
-
-        # 七、交易标的统计 Top 10
-        self._add_stock_stats_section(stats)
-
-        # 八、盈亏率分布
-        self._add_profit_loss_distribution_section(stats, charts)
-
-        # 九、月度盈亏趋势
-        self._add_monthly_section(stats, charts)
-
-        # 十、期权交易统计（如果有）
-        if option_trades:
-            self._add_option_section(stats, option_trades)
-
-        # 十一、结论与建议（基于投资框架 V10.10 的智能建议）
+        # ========================
+        # 第三部分：结论与建议
+        # ========================
         self._add_conclusion_section(stats, stock_trades, option_trades)
 
         # 保存文件
         self.doc.save(output_path)
         return output_path
 
-    def _add_overall_section(self, stats: TradeStatistics) -> None:
+    def _add_part_header(self, title: str) -> None:
+        """添加部分标题"""
+        self.doc.add_page_break()
+        para = self.doc.add_heading(title, level=0)
+        para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    def _add_stock_sections(
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        trades: list[MatchedTrade],
+    ) -> None:
+        """添加正股交易的九个章节"""
+        # 一、整体交易表现
+        self._add_overall_section(stats, "一")
+
+        # 二、盈亏统计
+        self._add_profit_loss_section(stats, "二", is_option=False)
+
+        # 三、持仓时间分析
+        self._add_holding_section(stats, charts, "三", prefix="stock_")
+
+        # 四、市场分布分析
+        self._add_market_section(stats, charts, "四", prefix="stock_")
+
+        # 五、最佳交易 Top 5
+        self._add_top_winners_section(stats, "五")
+
+        # 六、最大亏损 Top 5
+        self._add_top_losers_section(stats, "六")
+
+        # 七、交易标的统计 Top 10
+        self._add_stock_stats_section(stats, "七")
+
+        # 八、盈亏率分布
+        self._add_profit_loss_distribution_section(stats, charts, "八", prefix="stock_")
+
+        # 九、月度盈亏趋势
+        self._add_monthly_section(stats, charts, "九", prefix="stock_")
+
+    def _add_option_sections(
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        trades: list[MatchedTrade],
+    ) -> None:
+        """添加期权交易的九个章节"""
+        # 十、整体交易表现
+        self._add_overall_section(stats, "十", is_option=True)
+
+        # 十一、盈亏统计
+        self._add_profit_loss_section(stats, "十一", is_option=True)
+
+        # 十二、持仓时间分析
+        self._add_holding_section(stats, charts, "十二", prefix="option_")
+
+        # 十三、市场分布分析（期权通常只有港股）
+        self._add_market_section(stats, charts, "十三", prefix="option_")
+
+        # 十四、最佳交易 Top 5
+        self._add_top_winners_section(stats, "十四")
+
+        # 十五、最大亏损 Top 5
+        self._add_top_losers_section(stats, "十五")
+
+        # 十六、交易标的统计 Top 10
+        self._add_stock_stats_section(stats, "十六", is_option=True)
+
+        # 十七、盈亏率分布
+        self._add_profit_loss_distribution_section(stats, charts, "十七", prefix="option_")
+
+        # 十八、月度盈亏趋势
+        self._add_monthly_section(stats, charts, "十八", prefix="option_")
+
+    def _add_overall_section(
+        self, stats: TradeStatistics, section_num: str, is_option: bool = False
+    ) -> None:
         """添加整体交易表现章节"""
-        self.doc.add_heading("一、整体交易表现", level=1)
+        asset_type = "期权" if is_option else "正股"
+        self.doc.add_heading(f"{section_num}、整体交易表现", level=1)
 
         # 创建表格
         table = self.doc.add_table(rows=6, cols=3)
@@ -129,7 +209,7 @@ class DocxExporter:
 
         headers = ["指标", "数值", "说明"]
         data = [
-            ("总交易笔数", f"{stats.total_trades}笔", "已配对完成的买卖交易"),
+            ("总交易笔数", f"{stats.total_trades}笔", f"已配对完成的{asset_type}买卖交易"),
             ("盈利笔数", f"{stats.winning_trades}笔", f"占比{stats.win_rate:.1%}"),
             ("亏损笔数", f"{stats.losing_trades}笔", f"占比{1-stats.win_rate:.1%}"),
             ("胜率", f"{stats.win_rate:.1%}", "盈利交易占总交易的比例"),
@@ -138,12 +218,22 @@ class DocxExporter:
 
         self._fill_table(table, headers, data)
 
-    def _add_profit_loss_section(self, stats: TradeStatistics) -> None:
+    def _add_profit_loss_section(
+        self, stats: TradeStatistics, section_num: str, is_option: bool = False
+    ) -> None:
         """添加盈亏统计章节"""
-        self.doc.add_heading("二、盈亏统计", level=1)
+        self.doc.add_heading(f"{section_num}、盈亏统计", level=1)
 
         table = self.doc.add_table(rows=7, cols=3)
         table.style = "Table Grid"
+
+        # 根据类型显示对应的手续费
+        if is_option:
+            fees = stats.option_fees if hasattr(stats, 'option_fees') else stats.total_fees
+            fees_note = "期权交易手续费"
+        else:
+            fees = stats.stock_fees if hasattr(stats, 'stock_fees') else stats.total_fees
+            fees_note = "正股交易手续费"
 
         headers = ["项目", "金额 (HKD)", "备注"]
         data = [
@@ -152,13 +242,13 @@ class DocxExporter:
             ("净利润", f"{float(stats.net_profit):,.2f}", "总盈利-总亏损"),
             ("平均盈利", f"+{float(stats.avg_profit):,.2f}", "单笔盈利交易平均"),
             ("平均亏损", f"-{float(stats.avg_loss):,.2f}", "单笔亏损交易平均"),
-            ("总手续费", f"-{float(stats.total_fees):,.2f}", f"股票{float(stats.stock_fees):,.0f}+期权{float(stats.option_fees):,.0f}"),
+            ("手续费", f"-{float(fees):,.2f}", fees_note),
         ]
 
         self._fill_table(table, headers, data)
 
         # 关键发现
-        if stats.profit_loss_ratio < 1:
+        if stats.profit_loss_ratio < 1 and stats.profit_loss_ratio > 0:
             finding = (
                 f"关键发现：虽然胜率达到{stats.win_rate:.1%}，"
                 f"但盈亏比仅为{float(stats.profit_loss_ratio):.2f}（低于1），"
@@ -168,10 +258,14 @@ class DocxExporter:
             para.runs[0].font.color.rgb = RGBColor(0x9C, 0x00, 0x06)
 
     def _add_holding_section(
-        self, stats: TradeStatistics, charts: dict[str, bytes]
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        section_num: str,
+        prefix: str = "",
     ) -> None:
         """添加持仓时间分析章节"""
-        self.doc.add_heading("三、持仓时间分析", level=1)
+        self.doc.add_heading(f"{section_num}、持仓时间分析", level=1)
 
         table = self.doc.add_table(rows=5, cols=3)
         table.style = "Table Grid"
@@ -195,15 +289,23 @@ class DocxExporter:
         self._fill_table(table, headers, data)
 
         # 添加图表
-        if "holding_days_hist" in charts and charts["holding_days_hist"]:
+        chart_key = f"{prefix}holding_days_hist"
+        if chart_key in charts and charts[chart_key]:
+            self.doc.add_paragraph()
+            self._add_image(charts[chart_key], chart_key)
+        elif "holding_days_hist" in charts and charts["holding_days_hist"]:
             self.doc.add_paragraph()
             self._add_image(charts["holding_days_hist"], "holding_days_hist")
 
     def _add_market_section(
-        self, stats: TradeStatistics, charts: dict[str, bytes]
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        section_num: str,
+        prefix: str = "",
     ) -> None:
         """添加市场分布分析章节"""
-        self.doc.add_heading("四、市场分布分析", level=1)
+        self.doc.add_heading(f"{section_num}、市场分布分析", level=1)
 
         if stats.market_stats:
             table = self.doc.add_table(rows=len(stats.market_stats) + 1, cols=5)
@@ -244,14 +346,21 @@ class DocxExporter:
                 self.doc.add_paragraph(
                     f"分析：{market_name}贡献了最大利润（{float(top_market[1].net_profit):,.0f} HKD）。"
                 )
+        else:
+            self.doc.add_paragraph("仅单一市场交易。")
 
         # 添加图表
-        if "market_distribution" in charts and charts["market_distribution"]:
+        chart_key = f"{prefix}market_distribution"
+        if chart_key in charts and charts[chart_key]:
+            self._add_image(charts[chart_key], chart_key)
+        elif "market_distribution" in charts and charts["market_distribution"]:
             self._add_image(charts["market_distribution"], "market_distribution")
 
-    def _add_top_winners_section(self, stats: TradeStatistics) -> None:
+    def _add_top_winners_section(
+        self, stats: TradeStatistics, section_num: str
+    ) -> None:
         """添加最佳交易 Top 5 章节"""
-        self.doc.add_heading("五、最佳交易 Top 5", level=1)
+        self.doc.add_heading(f"{section_num}、最佳交易 Top 5", level=1)
 
         if stats.top_winners:
             table = self.doc.add_table(rows=len(stats.top_winners) + 1, cols=6)
@@ -275,9 +384,11 @@ class DocxExporter:
         else:
             self.doc.add_paragraph("暂无盈利交易记录。")
 
-    def _add_top_losers_section(self, stats: TradeStatistics) -> None:
+    def _add_top_losers_section(
+        self, stats: TradeStatistics, section_num: str
+    ) -> None:
         """添加最大亏损 Top 5 章节"""
-        self.doc.add_heading("六、最大亏损 Top 5", level=1)
+        self.doc.add_heading(f"{section_num}、最大亏损 Top 5", level=1)
 
         if stats.top_losers:
             table = self.doc.add_table(rows=len(stats.top_losers) + 1, cols=6)
@@ -301,9 +412,12 @@ class DocxExporter:
         else:
             self.doc.add_paragraph("暂无亏损交易记录。")
 
-    def _add_stock_stats_section(self, stats: TradeStatistics) -> None:
+    def _add_stock_stats_section(
+        self, stats: TradeStatistics, section_num: str, is_option: bool = False
+    ) -> None:
         """添加交易标的统计 Top 10 章节"""
-        self.doc.add_heading("七、交易标的统计 Top 10", level=1)
+        asset_type = "期权" if is_option else "标的"
+        self.doc.add_heading(f"{section_num}、交易{asset_type}统计 Top 10", level=1)
 
         calculator = StatisticsCalculator()
         top_stocks = calculator.get_top_traded_stocks(stats, 10)
@@ -331,10 +445,14 @@ class DocxExporter:
             self.doc.add_paragraph("暂无交易记录。")
 
     def _add_profit_loss_distribution_section(
-        self, stats: TradeStatistics, charts: dict[str, bytes]
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        section_num: str,
+        prefix: str = "",
     ) -> None:
         """添加盈亏率分布章节"""
-        self.doc.add_heading("八、盈亏率分布", level=1)
+        self.doc.add_heading(f"{section_num}、盈亏率分布", level=1)
 
         if stats.profit_loss_buckets:
             # 只显示有数据的区间
@@ -357,16 +475,27 @@ class DocxExporter:
                     )
 
                 self._fill_table(table, headers, data)
+            else:
+                self.doc.add_paragraph("暂无分布数据。")
+        else:
+            self.doc.add_paragraph("暂无分布数据。")
 
         # 添加图表
-        if "profit_loss_bucket_bar" in charts and charts["profit_loss_bucket_bar"]:
+        chart_key = f"{prefix}profit_loss_bucket_bar"
+        if chart_key in charts and charts[chart_key]:
+            self._add_image(charts[chart_key], chart_key)
+        elif "profit_loss_bucket_bar" in charts and charts["profit_loss_bucket_bar"]:
             self._add_image(charts["profit_loss_bucket_bar"], "profit_loss_bucket_bar")
 
     def _add_monthly_section(
-        self, stats: TradeStatistics, charts: dict[str, bytes]
+        self,
+        stats: TradeStatistics,
+        charts: dict[str, bytes],
+        section_num: str,
+        prefix: str = "",
     ) -> None:
         """添加月度盈亏趋势章节"""
-        self.doc.add_heading("九、月度盈亏趋势", level=1)
+        self.doc.add_heading(f"{section_num}、月度盈亏趋势", level=1)
 
         if stats.monthly_stats:
             table = self.doc.add_table(rows=len(stats.monthly_stats) + 1, cols=4)
@@ -385,37 +514,15 @@ class DocxExporter:
                 )
 
             self._fill_table(table, headers, data)
+        else:
+            self.doc.add_paragraph("暂无月度数据。")
 
         # 添加图表
-        if "monthly_profit_bar" in charts and charts["monthly_profit_bar"]:
+        chart_key = f"{prefix}monthly_profit_bar"
+        if chart_key in charts and charts[chart_key]:
+            self._add_image(charts[chart_key], chart_key)
+        elif "monthly_profit_bar" in charts and charts["monthly_profit_bar"]:
             self._add_image(charts["monthly_profit_bar"], "monthly_profit_bar")
-
-    def _add_option_section(
-        self, stats: TradeStatistics, option_trades: list[MatchedTrade]
-    ) -> None:
-        """添加期权交易统计章节"""
-        self.doc.add_heading("十、期权交易统计", level=1)
-
-        table = self.doc.add_table(rows=4, cols=3)
-        table.style = "Table Grid"
-
-        headers = ["指标", "数值", "说明"]
-        data = [
-            ("期权交易笔数", f"{stats.option_total_trades}笔", ""),
-            ("期权胜率", f"{stats.option_win_rate:.1%}", ""),
-            ("期权净盈亏", f"{float(stats.option_net_profit):,.2f}", ""),
-        ]
-
-        self._fill_table(table, headers, data)
-
-        # 期权风险提示
-        if stats.option_net_profit < 0:
-            warning = (
-                "风险提示：期权交易整体亏损，建议控制期权仓位比例（不超过总资产的15%），"
-                "并严格执行止损策略。"
-            )
-            para = self.doc.add_paragraph(warning)
-            para.runs[0].font.color.rgb = RGBColor(0x9C, 0x00, 0x06)
 
     def _add_conclusion_section(
         self,
@@ -431,8 +538,8 @@ class DocxExporter:
 
         参考框架: ~/Documents/trade/prompt/daily-analysis-prompt-v10_10.md
         """
-        section_num = "十一" if stats.option_total_trades > 0 else "十"
-        self.doc.add_heading(f"{section_num}、结论与建议", level=1)
+        self.doc.add_page_break()
+        self.doc.add_heading("第三部分：结论与建议", level=0).alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # 占位符说明（将被 LLM 生成的内容替换）
         placeholder = self.doc.add_paragraph(
@@ -477,14 +584,3 @@ class DocxExporter:
 
         # 添加图片
         self.doc.add_picture(image_stream, width=Inches(6))
-
-        # 图片居中
-        last_paragraph = self.doc.paragraphs[-1]
-        last_paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-
-        # 添加双语图注 (英文 + 中文)
-        bilingual_caption = ChartGenerator.get_chart_caption(chart_key)
-        caption_para = self.doc.add_paragraph(f"图：{bilingual_caption}")
-        caption_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        caption_para.runs[0].font.size = Pt(9)
-        caption_para.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)

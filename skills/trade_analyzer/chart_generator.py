@@ -339,23 +339,28 @@ class ChartGenerator:
         return self._save_or_return(fig, "profit_loss_bucket_bar.png")
 
     def generate_all_charts(
-        self, trades: list[MatchedTrade], stats: TradeStatistics
+        self, trades: list[MatchedTrade], stats: TradeStatistics, prefix: str = ""
     ) -> dict[str, bytes]:
         """
         生成所有图表
 
+        Args:
+            trades: 交易列表
+            stats: 统计数据
+            prefix: 图表名称前缀，用于区分股票/期权图表 (e.g., "stock_", "option_")
+
         Returns:
-            字典，键为图表名称，值为 PNG 字节数据
+            字典，键为图表名称（带前缀），值为 PNG 字节数据
         """
         charts = {}
 
-        charts["win_loss_pie"] = self.generate_win_loss_pie(stats)
-        charts["monthly_profit_bar"] = self.generate_monthly_profit_bar(stats)
-        charts["holding_days_hist"] = self.generate_holding_days_hist(trades)
-        charts["profit_loss_ratio_hist"] = self.generate_profit_loss_ratio_hist(trades)
-        charts["market_distribution"] = self.generate_market_distribution_pie(stats)
-        charts["cumulative_profit_line"] = self.generate_cumulative_profit_line(trades)
-        charts["profit_loss_bucket_bar"] = self.generate_profit_loss_bucket_bar(stats)
+        charts[f"{prefix}win_loss_pie"] = self.generate_win_loss_pie(stats)
+        charts[f"{prefix}monthly_profit_bar"] = self.generate_monthly_profit_bar(stats)
+        charts[f"{prefix}holding_days_hist"] = self.generate_holding_days_hist(trades)
+        charts[f"{prefix}profit_loss_ratio_hist"] = self.generate_profit_loss_ratio_hist(trades)
+        charts[f"{prefix}market_distribution"] = self.generate_market_distribution_pie(stats)
+        charts[f"{prefix}cumulative_profit_line"] = self.generate_cumulative_profit_line(trades)
+        charts[f"{prefix}profit_loss_bucket_bar"] = self.generate_profit_loss_bucket_bar(stats)
 
         # 过滤掉空图表
         return {k: v for k, v in charts.items() if v}

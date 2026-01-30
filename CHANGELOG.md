@@ -7,6 +7,32 @@
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-01-30
+
+### 修复
+
+- **Word 报告结构重构**
+  - 报告分为三部分：正股交易、期权交易、结论与建议
+  - 第一部分（一～九）：正股交易统计
+  - 第二部分（十～十八）：期权交易统计（独立计算）
+  - 第三部分：结论与建议（AI 投资教练点评）
+
+- **期权统计数据修复**
+  - `StatisticsCalculator.calculate()` 新增 `treat_all_as_stock` 参数
+  - 修复期权交易独立统计时数据为空的问题
+  - 期权交易现在有完整的 Top Winners/Losers、月度统计等数据
+
+- **独立图表生成**
+  - 股票和期权分别生成独立图表（带前缀 `stock_`/`option_`）
+  - `ChartGenerator.generate_all_charts()` 新增 `prefix` 参数
+
+- **手续费分离显示**
+  - 正股部分显示 `stock_fees`
+  - 期权部分显示 `option_fees`
+
+- **结论章节匹配更新**
+  - `update_docx_conclusion.py` 支持新格式"第三部分：结论与建议"
+
 ## [0.5.0] - 2025-01-30
 
 ### 新增

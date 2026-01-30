@@ -177,11 +177,23 @@ class TradeAnalyzer:
             statistics=statistics,
         )
 
-        # 生成图表
+        # 生成图表（股票和期权分别生成）
         if generate_charts:
             chart_gen = ChartGenerator(output_dir=output_dir)
-            result.charts = chart_gen.generate_all_charts(stock_trades, statistics)
-            logger.info(f"生成了 {len(result.charts)} 张图表")
+
+            # 为股票交易生成图表（带前缀 stock_）
+            if stock_trades:
+                stock_stats = self.calculator.calculate(stock_trades, treat_all_as_stock=True)
+                stock_charts = chart_gen.generate_all_charts(stock_trades, stock_stats, prefix="stock_")
+                result.charts.update(stock_charts)
+                logger.info(f"生成了 {len(stock_charts)} 张股票图表")
+
+            # 为期权交易生成图表（带前缀 option_）
+            if option_trades:
+                option_stats = self.calculator.calculate(option_trades, treat_all_as_stock=True)
+                option_charts = chart_gen.generate_all_charts(option_trades, option_stats, prefix="option_")
+                result.charts.update(option_charts)
+                logger.info(f"生成了 {len(option_charts)} 张期权图表")
 
         # 导出文件
         if output_dir:

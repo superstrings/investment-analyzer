@@ -32,7 +32,10 @@ def find_conclusion_section(doc: Document) -> int:
     """
     for i, para in enumerate(doc.paragraphs):
         text = para.text.strip()
-        # 匹配 "十、结论与建议" 或 "十一、结论与建议" 等
+        # 匹配新格式 "第三部分：结论与建议" 或 "第三部分: 结论与建议"
+        if re.match(r'^第三部分[：:]\s*结论与建议', text):
+            return i
+        # 匹配旧格式 "十、结论与建议" 或 "十一、结论与建议" 等
         if re.match(r'^(十[一二三四五六七八九十]*)?[、．.]?\s*结论与建议', text):
             return i
         # 也匹配英文格式

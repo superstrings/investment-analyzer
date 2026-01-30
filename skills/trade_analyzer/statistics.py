@@ -195,12 +195,15 @@ class StatisticsCalculator:
         ("50%以上", 0.5, float("inf")),
     ]
 
-    def calculate(self, trades: list[MatchedTrade]) -> TradeStatistics:
+    def calculate(
+        self, trades: list[MatchedTrade], treat_all_as_stock: bool = False
+    ) -> TradeStatistics:
         """
         计算所有统计指标
 
         Args:
             trades: 配对后的交易列表
+            treat_all_as_stock: 如果为True，将所有交易视为同类计算（用于独立统计期权）
 
         Returns:
             完整的统计数据
@@ -210,33 +213,39 @@ class StatisticsCalculator:
         if not trades:
             return stats
 
-        # 分离股票和期权交易
-        stock_trades = [t for t in trades if not t.is_option]
-        option_trades = [t for t in trades if t.is_option]
+        if treat_all_as_stock:
+            # 将所有交易作为同类处理（用于独立统计股票或期权）
+            all_trades = trades
+            option_trades = []
+        else:
+            # 分离股票和期权交易
+            all_trades = [t for t in trades if not t.is_option]
+            option_trades = [t for t in trades if t.is_option]
 
-        # 计算整体统计（股票）
-        self._calculate_overall_stats(stock_trades, stats)
+        # 计算整体统计
+        self._calculate_overall_stats(all_trades, stats)
 
-        # 计算期权统计
-        self._calculate_option_stats(option_trades, stats)
+        # 计算期权统计（仅在非独立模式下）
+        if not treat_all_as_stock:
+            self._calculate_option_stats(option_trades, stats)
 
         # 计算持仓时间统计
-        self._calculate_holding_stats(stock_trades, stats)
+        self._calculate_holding_stats(all_trades, stats)
 
         # 计算市场分布
-        self._calculate_market_stats(stock_trades, stats)
+        self._calculate_market_stats(all_trades, stats)
 
         # 计算股票统计
-        self._calculate_stock_stats(stock_trades, stats)
+        self._calculate_stock_stats(all_trades, stats)
 
         # 计算最佳/最差交易
-        self._calculate_rankings(stock_trades, stats)
+        self._calculate_rankings(all_trades, stats)
 
         # 计算盈亏率分布
-        self._calculate_profit_loss_distribution(stock_trades, stats)
+        self._calculate_profit_loss_distribution(all_trades, stats)
 
         # 计算月度统计
-        self._calculate_monthly_stats(stock_trades, stats)
+        self._calculate_monthly_stats(all_trades, stats)
 
         return stats
 
