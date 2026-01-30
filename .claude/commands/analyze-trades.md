@@ -9,48 +9,66 @@ arguments:
 
 # 交易记录分析
 
-分析用户 dyson 的交易记录，生成 Excel 统计表和 Word 分析报告，并由 AI 生成智能建议。
+分析用户 dyson 的交易记录，生成 Excel 统计表和 Word 分析报告。
+
+**报告包含基于投资框架 V10.10 的智能建议**，由内置的"投资教练"模块自动生成。
 
 ## 执行步骤
 
-### 第一步：运行 Python 分析
+### 运行交易分析
 
 ```bash
-source .venv/bin/activate && PYTHONPATH=. python main.py trade-analyze -u dyson {{#if start_date}}--start {{start_date}}{{/if}} {{#if end_date}}--end {{end_date}}{{/if}} --output-context
+source .venv/bin/activate && PYTHONPATH=. python main.py trade-analyze -u dyson {{#if start_date}}--start {{start_date}}{{/if}} {{#if end_date}}--end {{end_date}}{{/if}}
 ```
 
 这会生成：
 - `output/{year}年美港股交易记录.xlsx` - Excel 统计表
-- `output/{year}年美港股交易分析报告.docx` - Word 报告
-- `output/{year}年交易分析上下文.md` - AI 分析用的上下文数据
+- `output/{year}年美港股交易分析报告.docx` - Word 报告（含 AI 智能建议）
 
-### 第二步：生成 AI 建议
+## Word 报告内容
 
-读取 `output/{year}年交易分析上下文.md` 文件，基于数据生成专业的投资建议。
+报告包含以下章节：
 
-建议应包含以下部分：
-1. **核心问题诊断** - 基于胜率、盈亏比、持仓时间等数据识别主要问题
-2. **具体改进措施** - 针对问题给出可操作的建议
-3. **风险提示** - 基于交易特征的风险警示
-4. **下一步行动** - 具体的行动计划
+1. **整体交易表现** - 胜率、盈亏比等核心指标
+2. **盈亏统计** - 总盈利、总亏损、净利润
+3. **持仓时间分析** - 平均持仓天数、盈亏交易持仓对比
+4. **市场分布分析** - 港股/美股/A股表现
+5. **最佳交易 Top 5** - 盈利最多的交易
+6. **最大亏损 Top 5** - 亏损最多的交易
+7. **交易标的统计 Top 10** - 交易频次最高的标的
+8. **盈亏率分布** - 盈亏幅度分布直方图
+9. **月度盈亏趋势** - 月度盈亏柱状图
+10. **期权交易统计** - 期权交易专项统计
+11. **结论与建议** - **基于 V10.10 框架的智能建议**
 
-### 第三步：追加 AI 建议到报告
+## AI 智能建议内容
 
-将生成的建议保存为临时文件，然后追加到 Word 报告：
+投资教练模块基于投资分析框架 V10.10 生成专业建议：
 
-```bash
-source .venv/bin/activate && PYTHONPATH=. python scripts/append_ai_recommendations.py "output/{year}年美港股交易分析报告.docx" /tmp/ai_recommendations.md
-```
+- **⚠️ 风险警示** - 高优先级风险提醒
+- **✅ 优势** - 交易策略的优点
+- **❌ 需改进** - 发现的问题及原因
+- **💡 改进建议** - 具体可操作的建议
+- **📋 框架核心原则** - V10.10 框架的核心规则
 
-## 输出文件
+### 框架核心原则
 
-1. **Excel 文件**: `{year}年美港股交易记录.xlsx`
-2. **Word 报告**: `{year}年美港股交易分析报告.docx`（含 AI 智能建议）
+1. 止损优先：股票 -10% 止损，期权 OCO 订单（+30%/-30%）
+2. 估值先行：Forward PE + PB-ROE 双重筛选
+3. 周期顺势：牛市满仓成长，熊市只做低估值
+4. 量价确认：不追涨，等60分钟量价转换确认后入场
+5. 完整计划：没有操作计划的交易 = 赌博
 
 ## 使用示例
 
 ```
-/analyze-trades 2025-01-01 2025-12-31
-/analyze-trades 2025-06-01
-/analyze-trades
+/analyze-trades 2025-01-01 2025-12-31   # 指定日期范围
+/analyze-trades 2025-06-01              # 从指定日期到今天
+/analyze-trades                         # 当年全部交易
 ```
+
+## 相关文件
+
+- 投资框架: `~/Documents/trade/prompt/daily-analysis-prompt-v10_10.md`
+- 投资教练模块: `skills/trade_analyzer/recommendation.py`
+- 港股期权乘数: `config/hk_option_multipliers.py`

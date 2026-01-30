@@ -21,6 +21,7 @@ from docx.oxml.ns import qn
 from docx.shared import Inches, Pt, RGBColor
 
 from .chart_generator import ChartGenerator
+from .recommendation import InvestmentCoach, TradeRecommendation
 from .statistics import TradeStatistics, StatisticsCalculator
 from .trade_matcher import MatchedTrade
 
@@ -111,8 +112,8 @@ class DocxExporter:
         if option_trades:
             self._add_option_section(stats, option_trades)
 
-        # 十一、结论与建议
-        self._add_conclusion_section(stats)
+        # 十一、结论与建议（基于投资框架 V10.10 的智能建议）
+        self._add_conclusion_section(stats, stock_trades, option_trades)
 
         # 保存文件
         self.doc.save(output_path)
@@ -416,74 +417,113 @@ class DocxExporter:
             para = self.doc.add_paragraph(warning)
             para.runs[0].font.color.rgb = RGBColor(0x9C, 0x00, 0x06)
 
-    def _add_conclusion_section(self, stats: TradeStatistics) -> None:
-        """添加结论与建议章节"""
+    def _add_conclusion_section(
+        self,
+        stats: TradeStatistics,
+        stock_trades: list[MatchedTrade] = None,
+        option_trades: list[MatchedTrade] = None,
+    ) -> None:
+        """
+        添加结论与建议章节（基于投资框架 V10.10 的智能建议）
+
+        使用 InvestmentCoach 生成专业的交易改进建议，
+        参考框架: ~/Documents/trade/prompt/daily-analysis-prompt-v10_10.md
+        """
         section_num = "十一" if stats.option_total_trades > 0 else "十"
         self.doc.add_heading(f"{section_num}、结论与建议", level=1)
 
-        # 优势
-        self.doc.add_heading("优势", level=2)
-        advantages = []
-        if stats.win_rate >= 0.5:
-            advantages.append(
-                f"胜率较高（{stats.win_rate:.1%}），说明选股和择时能力良好"
-            )
-        if stats.net_profit > 0:
-            advantages.append(f"整体盈利，净赚约{float(stats.net_profit):,.0f} HKD")
-        if stats.avg_winning_holding_days > stats.avg_losing_holding_days:
-            advantages.append("盈利交易持有时间长于亏损交易，具有良好的持股纪律")
+        # 使用投资教练生成智能建议
+        coach = InvestmentCoach()
+        recommendation = coach.analyze(
+            stats=stats,
+            stock_trades=stock_trades or [],
+            option_trades=option_trades or [],
+        )
 
-        if advantages:
-            for i, adv in enumerate(advantages, 1):
-                self.doc.add_paragraph(f"{i}. {adv}")
+        # 添加框架版本说明
+        framework_note = self.doc.add_paragraph(
+            f"（基于投资分析框架 {recommendation.framework_version}）"
+        )
+        framework_note.runs[0].font.size = Pt(9)
+        framework_note.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # === 风险警示（优先显示）===
+        if recommendation.risk_alerts:
+            self.doc.add_heading("⚠️ 风险警示", level=2)
+            for alert in recommendation.risk_alerts:
+                # 标题（加粗红色）
+                para = self.doc.add_paragraph()
+                title_run = para.add_run(f"• {alert.title}")
+                title_run.font.bold = True
+                title_run.font.color.rgb = RGBColor(0x9C, 0x00, 0x06)
+                # 内容
+                self.doc.add_paragraph(alert.content)
+                # 框架参考
+                if alert.framework_ref:
+                    ref_para = self.doc.add_paragraph(f"📖 {alert.framework_ref}")
+                    ref_para.runs[0].font.size = Pt(9)
+                    ref_para.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+
+        # === 优势 ===
+        self.doc.add_heading("✅ 优势", level=2)
+        if recommendation.strengths:
+            for strength in recommendation.strengths:
+                para = self.doc.add_paragraph()
+                title_run = para.add_run(f"• {strength.title}")
+                title_run.font.bold = True
+                title_run.font.color.rgb = RGBColor(0x00, 0x80, 0x00)
+                self.doc.add_paragraph(strength.content)
         else:
             self.doc.add_paragraph("暂无明显优势，建议持续优化交易策略。")
 
-        # 需改进
-        self.doc.add_heading("需改进", level=2)
-        improvements = []
-        if stats.profit_loss_ratio < 1:
-            improvements.append(
-                f"盈亏比（{float(stats.profit_loss_ratio):.2f}）低于1，需加强止损纪律"
-            )
-
-        # 检查大幅亏损交易
-        big_loss_count = sum(
-            1
-            for b in stats.profit_loss_buckets
-            if b.min_ratio < -0.5
-            for _ in range(b.count)
-        )
-        if big_loss_count > 0:
-            improvements.append(
-                f"{big_loss_count}笔交易亏损超过50%，大幅亏损拖累整体表现"
-            )
-
-        if stats.option_net_profit < 0:
-            improvements.append("期权交易亏损严重，建议控制期权仓位")
-
-        if improvements:
-            for i, imp in enumerate(improvements, 1):
-                self.doc.add_paragraph(f"{i}. {imp}")
+        # === 问题 ===
+        self.doc.add_heading("❌ 需改进", level=2)
+        if recommendation.weaknesses:
+            for weakness in recommendation.weaknesses:
+                para = self.doc.add_paragraph()
+                title_run = para.add_run(f"• {weakness.title}")
+                title_run.font.bold = True
+                title_run.font.color.rgb = RGBColor(0xCC, 0x66, 0x00)
+                self.doc.add_paragraph(weakness.content)
+                if weakness.framework_ref:
+                    ref_para = self.doc.add_paragraph(f"📖 {weakness.framework_ref}")
+                    ref_para.runs[0].font.size = Pt(9)
+                    ref_para.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
         else:
             self.doc.add_paragraph("整体表现良好，继续保持。")
 
-        # 建议
-        self.doc.add_heading("建议", level=2)
-        suggestions = [
-            "设置严格止损线（如-20%），避免单笔大幅亏损",
-            "盈利交易可适当延长持有时间，提高盈亏比",
+        # === 建议 ===
+        self.doc.add_heading("💡 改进建议", level=2)
+        if recommendation.suggestions:
+            for i, suggestion in enumerate(recommendation.suggestions, 1):
+                # 标题（编号 + 加粗）
+                para = self.doc.add_paragraph()
+                title_run = para.add_run(f"{i}. {suggestion.title}")
+                title_run.font.bold = True
+                # 内容（处理多行）
+                for line in suggestion.content.split("\n"):
+                    if line.strip():
+                        self.doc.add_paragraph(line)
+                # 框架参考
+                if suggestion.framework_ref:
+                    ref_para = self.doc.add_paragraph(f"📖 {suggestion.framework_ref}")
+                    ref_para.runs[0].font.size = Pt(9)
+                    ref_para.runs[0].font.color.rgb = RGBColor(0x66, 0x66, 0x66)
+                self.doc.add_paragraph()  # 空行分隔
+        else:
+            self.doc.add_paragraph("继续保持当前策略。")
+
+        # === 框架核心原则 ===
+        self.doc.add_heading("📋 框架核心原则", level=2)
+        principles = [
+            "止损优先：股票 -10% 止损，期权 OCO 订单（+30%/-30%）",
+            "估值先行：Forward PE + PB-ROE 双重筛选",
+            "周期顺势：牛市满仓成长，熊市只做低估值",
+            "量价确认：不追涨，等60分钟量价转换确认后入场",
+            "完整计划：没有操作计划的交易 = 赌博",
         ]
-
-        if stats.market_stats:
-            best_market = max(stats.market_stats.items(), key=lambda x: x[1].win_rate)
-            market_name = {"HK": "港股", "US": "美股"}.get(
-                best_market[0], best_market[0]
-            )
-            suggestions.append(f"继续关注{market_name}市场（胜率最高）")
-
-        for i, sug in enumerate(suggestions, 1):
-            self.doc.add_paragraph(f"{i}. {sug}")
+        for p in principles:
+            self.doc.add_paragraph(f"• {p}")
 
     def _fill_table(self, table, headers: list[str], data: list[tuple]) -> None:
         """填充表格数据"""
