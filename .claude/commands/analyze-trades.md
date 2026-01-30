@@ -68,9 +68,19 @@ source .venv/bin/activate && PYTHONPATH=. python main.py trade-analyze -u dyson 
 [鼓励性的话，但保持严格要求]
 ```
 
-### 第三步：将建议追加到 Word 报告
+### 第三步：更新报告的"结论与建议"章节
 
-将生成的建议追加到 Word 报告末尾。
+将生成的建议更新到 Word 报告的"结论与建议"章节。
+
+使用脚本：
+```bash
+source .venv/bin/activate && python scripts/update_docx_conclusion.py output/{year}年美港股交易分析报告.docx /tmp/coach.md
+```
+
+或从标准输入：
+```bash
+echo "<LLM生成的建议>" | python scripts/update_docx_conclusion.py output/{year}年美港股交易分析报告.docx
+```
 
 ## 框架核心原则 (V10.10)
 

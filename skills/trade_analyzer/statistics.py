@@ -158,6 +158,11 @@ class TradeStatistics:
     option_winning_trades: int = 0
     option_net_profit: Decimal = Decimal("0")
 
+    # 手续费统计
+    total_fees: Decimal = Decimal("0")  # 总手续费 (HKD)
+    stock_fees: Decimal = Decimal("0")  # 股票手续费 (HKD)
+    option_fees: Decimal = Decimal("0")  # 期权手续费 (HKD)
+
     @property
     def win_rate(self) -> float:
         """胜率"""
@@ -243,10 +248,14 @@ class StatisticsCalculator:
 
         total_profit = Decimal("0")
         total_loss = Decimal("0")
+        total_fees = Decimal("0")
         winning_count = 0
         losing_count = 0
 
         for trade in trades:
+            # 累计手续费
+            total_fees += trade.buy_fee + trade.sell_fee
+
             if trade.profit_loss > 0:
                 winning_count += 1
                 total_profit += trade.profit_loss
@@ -261,6 +270,7 @@ class StatisticsCalculator:
         stats.total_profit = total_profit
         stats.total_loss = total_loss
         stats.net_profit = total_profit - total_loss
+        stats.stock_fees = total_fees
 
         # 平均盈利/亏损
         if winning_count > 0:
@@ -282,14 +292,18 @@ class StatisticsCalculator:
 
         winning_count = 0
         net_profit = Decimal("0")
+        option_fees = Decimal("0")
 
         for trade in trades:
             if trade.profit_loss > 0:
                 winning_count += 1
             net_profit += trade.profit_loss
+            option_fees += trade.buy_fee + trade.sell_fee
 
         stats.option_winning_trades = winning_count
         stats.option_net_profit = net_profit
+        stats.option_fees = option_fees
+        stats.total_fees = stats.stock_fees + option_fees
 
     def _calculate_holding_stats(
         self, trades: list[MatchedTrade], stats: TradeStatistics

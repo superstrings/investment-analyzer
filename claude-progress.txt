@@ -146,3 +146,18 @@
   - 更新 skills/trade_analyzer/__init__.py - 导出新模块
   - 更新 .claude/commands/analyze-trades.md - 简化流程文档
   - 智能建议包含: 风险警示、优势、问题、改进建议、框架核心原则
+[2026-01-30 13:26] 将投资教练改为 LLM 能力:
+  - 新增 .claude/commands/investment-coach.md - LLM 投资教练 skill
+  - 更新 .claude/commands/analyze-trades.md - 集成 LLM 分析流程
+  - 新增 scripts/append_coach_to_docx.py - 追加建议到 Word
+  - 保留 recommendation.py 作为备选方案
+  - LLM 建议基于交易数据 + V10.10 框架
+[2026-01-30 13:34] 重构投资教练为 LLM 能力:
+- 简化 docx_exporter._add_conclusion_section() 为占位符
+- 创建 scripts/update_docx_conclusion.py 更新'结论与建议'章节
+- 更新 analyze-trades.md 工作流使用新脚本
+- 移除 docx_exporter 中未使用的 InvestmentCoach 导入
+[2026-01-30 13:57] 修复完成:
+1. 使用 pandoc 优化 docx 排版 (md->docx 转换)
+2. 添加手续费统计 (stock_fees, option_fees, total_fees)
+3. 更新 docx_exporter 显示手续费信息
