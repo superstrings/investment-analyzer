@@ -162,6 +162,10 @@ class SyncService:
             account_details = {}
 
             for account in accounts:
+                # Skip manual accounts (futu_acc_id=0) — no Futu data to sync
+                if not account.futu_acc_id:
+                    continue
+
                 # Fetch positions from Futu
                 result = self.futu_fetcher.get_positions(acc_id=account.futu_acc_id)
 
@@ -314,6 +318,10 @@ class SyncService:
             account_details = {}
 
             for account in accounts:
+                # Skip manual accounts (futu_acc_id=0) — no Futu data to sync
+                if not account.futu_acc_id:
+                    continue
+
                 # Fetch historical trades from Futu
                 result = self.futu_fetcher.get_history_deals(
                     acc_id=account.futu_acc_id,

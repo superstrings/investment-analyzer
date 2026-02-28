@@ -55,6 +55,10 @@ class SignalService:
         expires_at: datetime = None,
     ) -> Signal:
         """Create a new trading signal."""
+        # Normalize A-share market prefix: SH/SZ → A
+        if market in ("SH", "SZ"):
+            market = "A"
+
         with get_session() as session:
             signal = Signal(
                 user_id=user_id,
@@ -151,6 +155,9 @@ class SignalService:
             result: dict[str, list[Signal]] = {}
             for s in signals:
                 fc = f"{s.market}.{s.code}"
+                # Normalize A-share: SH/SZ → A for matching
+                if s.market in ("SH", "SZ"):
+                    fc = f"A.{s.code}"
                 if fc in code_set:
                     session.expunge(s)
                     result.setdefault(fc, []).append(s)

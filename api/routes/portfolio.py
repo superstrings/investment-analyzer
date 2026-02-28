@@ -69,7 +69,16 @@ async def api_portfolio(
     if market:
         query = query.filter(Position.market == market)
 
-    positions = query.order_by(Position.market, Position.pl_ratio.desc()).all()
+    all_positions = query.order_by(Position.market, Position.pl_ratio.desc()).all()
+
+    # Deduplicate by (market, code) — manual account may duplicate Futu positions
+    seen = set()
+    positions = []
+    for p in all_positions:
+        key = (p.market, p.code)
+        if key not in seen:
+            seen.add(key)
+            positions.append(p)
 
     fx = create_exchange_rate_service()
 

@@ -163,13 +163,14 @@ function createPositionRow(p) {
 }
 
 function createSignalRow(s) {
-    const typeColors = {BUY:'text-profit', SELL:'text-loss', HOLD:'text-yellow-400', WATCH:'text-blue-400'};
+    const typeColors = {BUY:'text-profit', SELL:'text-loss', HOLD:'text-yellow-400', WATCH:'text-blue-400', REDUCE:'text-orange-400'};
+    const typeLabels = {BUY:'买入', SELL:'卖出', HOLD:'持有', WATCH:'观察', REDUCE:'减仓'};
     const row = document.createElement('div');
     row.className = 'px-4 py-2 flex justify-between items-center';
     const left = document.createElement('div');
     const typeSpan = document.createElement('span');
     typeSpan.className = 'text-xs font-bold ' + (typeColors[s.type] || '');
-    typeSpan.textContent = s.type;
+    typeSpan.textContent = typeLabels[s.type] || s.type;
     const codeSpan = document.createElement('span');
     codeSpan.className = 'text-sm ml-1';
     codeSpan.textContent = s.code;

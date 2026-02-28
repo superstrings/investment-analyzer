@@ -35,7 +35,9 @@
 <script>
 function createSignalDetailRow(s) {
     const typeColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300',
-                        HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
+                        HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300',
+                        REDUCE:'bg-orange-900 text-orange-300'};
+    const typeLabels = {BUY:'买入', SELL:'卖出', HOLD:'持有', WATCH:'观察', REDUCE:'减仓'};
     const row = document.createElement('div');
     row.className = 'px-4 py-3';
 
@@ -45,7 +47,7 @@ function createSignalDetailRow(s) {
     leftDiv.className = 'flex items-center space-x-2';
     const badge = document.createElement('span');
     badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (typeColors[s.type] || 'bg-gray-800');
-    badge.textContent = s.type;
+    badge.textContent = (typeLabels[s.type] || s.type) + ' ' + s.type;
     const codeDiv = document.createElement('div');
     const codeSpan = document.createElement('span');
     codeSpan.className = 'font-medium';
@@ -79,7 +81,7 @@ function createSignalDetailRow(s) {
     if (s.reason) {
         const reasonEl = document.createElement('div');
         reasonEl.className = 'mt-1 text-xs text-gray-400';
-        reasonEl.textContent = s.reason.substring(0, 120);
+        reasonEl.textContent = s.reason;
         row.appendChild(reasonEl);
     }
 

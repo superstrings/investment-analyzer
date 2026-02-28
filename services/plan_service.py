@@ -36,6 +36,10 @@ class TradingPlanService:
         signal_id: int = None,
     ) -> TradingPlanRecord:
         """Create a new trading plan."""
+        # Normalize A-share market prefix: SH/SZ → A
+        if market in ("SH", "SZ"):
+            market = "A"
+
         if plan_date is None:
             plan_date = date.today()
 
@@ -170,6 +174,9 @@ class TradingPlanService:
             result: dict[str, list[TradingPlanRecord]] = {}
             for p in plans:
                 fc = p.full_code
+                # Normalize A-share: SH/SZ → A for matching
+                if p.market in ("SH", "SZ"):
+                    fc = f"A.{p.code}"
                 if fc in code_set:
                     session.expunge(p)
                     result.setdefault(fc, []).append(p)

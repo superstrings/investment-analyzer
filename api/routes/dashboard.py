@@ -47,7 +47,7 @@ async def api_dashboard_summary(
                 .group_by(Position.account_id)
                 .subquery()
             )
-            positions = (
+            all_positions = (
                 session.query(Position)
                 .join(
                     latest_dates,
@@ -57,6 +57,15 @@ async def api_dashboard_summary(
                 .order_by(Position.market, Position.pl_ratio.desc())
                 .all()
             )
+
+            # Deduplicate by (market, code)
+            seen = set()
+            positions = []
+            for p in all_positions:
+                key = (p.market, p.code)
+                if key not in seen:
+                    seen.add(key)
+                    positions.append(p)
 
     fx = create_exchange_rate_service()
 
