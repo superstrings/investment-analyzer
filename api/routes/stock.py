@@ -97,13 +97,17 @@ async def api_stock_detail(
             if pos:
                 if not stock_name:
                     stock_name = pos.stock_name or ""
+                # Normalize pl_ratio to percentage:
+                # HK/US/JP stored as percentage (17.68), A-share as decimal (0.2841)
+                raw_ratio = float(pos.pl_ratio or 0)
+                pct_ratio = raw_ratio if pos.market in ("HK", "US", "JP") else raw_ratio * 100
                 position = {
                     "qty": float(pos.qty),
                     "cost_price": float(pos.cost_price or 0),
                     "market_price": float(pos.market_price or 0),
                     "market_val": float(pos.market_val or 0),
                     "pl_val": float(pos.pl_val or 0),
-                    "pl_ratio": float(pos.pl_ratio or 0),
+                    "pl_ratio": pct_ratio,
                     "side": pos.position_side,
                 }
 
