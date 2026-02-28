@@ -25,6 +25,8 @@ async def api_portfolio(
     db: Session = Depends(get_db),
 ):
     """Get portfolio positions."""
+    from services.exchange_rate_service import create_exchange_rate_service
+
     user = resolve_user(db, username)
     if not user:
         return {"error": "User not found"}
@@ -54,34 +56,50 @@ async def api_portfolio(
 
     positions = query.all()
 
+    fx = create_exchange_rate_service()
     result = []
-    total_val = Decimal("0")
-    total_pl = Decimal("0")
+    total_val_cny = Decimal("0")
+    total_pl_cny = Decimal("0")
 
     for p in positions:
+        currency = fx.get_market_currency(p.market)
+        rate = fx.get_rate_to_cny(currency)
+        market_val = p.market_val or Decimal("0")
+        pl_val = p.pl_val or Decimal("0")
+        val_cny = market_val * rate
+        pl_cny = pl_val * rate
+
         result.append(
             {
+                "id": p.id,
                 "code": f"{p.market}.{p.code}",
                 "name": p.stock_name or "",
                 "qty": float(p.qty),
                 "cost_price": float(p.cost_price or 0),
                 "market_price": float(p.market_price or 0),
-                "market_val": float(p.market_val or 0),
-                "pl_val": float(p.pl_val or 0),
+                "market_val": float(market_val),
+                "market_val_cny": float(val_cny),
+                "pl_val": float(pl_val),
+                "pl_val_cny": float(pl_cny),
                 "pl_ratio": float(p.pl_ratio or 0),
+                "currency": currency,
                 "side": p.position_side,
+                "source": getattr(p, "source", "futu"),
             }
         )
-        total_val += p.market_val or Decimal("0")
-        total_pl += p.pl_val or Decimal("0")
+        total_val_cny += val_cny
+        total_pl_cny += pl_cny
 
     return {
         "positions": result,
         "summary": {
             "total_positions": len(result),
-            "total_market_val": float(total_val),
-            "total_pl": float(total_pl),
-            "total_pl_ratio": float(total_pl / total_val * 100) if total_val else 0,
+            "total_market_val": float(total_val_cny),
+            "total_pl": float(total_pl_cny),
+            "total_pl_ratio": (
+                float(total_pl_cny / total_val_cny * 100) if total_val_cny else 0
+            ),
+            "currency": "CNY",
         },
     }
 

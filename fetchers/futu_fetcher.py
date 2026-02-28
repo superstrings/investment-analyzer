@@ -49,6 +49,7 @@ FUTU_MARKET_MAP = {
     TrdMarket.US: Market.US,
     TrdMarket.CN: Market.A,
     TrdMarket.HKCC: Market.A,  # HK connect to A-shares
+    TrdMarket.JP: Market.JP,
 }
 
 # Mapping from Futu trade side to our TradeSide enum
@@ -64,6 +65,7 @@ MARKET_CURRENCY_MAP = {
     Market.HK: "HKD",
     Market.US: "USD",
     Market.A: "CNY",
+    Market.JP: "JPY",
 }
 
 
@@ -76,6 +78,8 @@ def _parse_market(market_str: str) -> Market:
         return Market.US
     elif market_str in ("SH", "SZ", "A", "CN"):
         return Market.A
+    elif market_str == "JP":
+        return Market.JP
     else:
         return Market.HK  # Default to HK
 
@@ -558,7 +562,9 @@ class FutuFetcher(BaseFetcher):
                 for group_name in groups:
                     ret, data = quote_ctx.get_user_security(group_name)
                     if ret != RET_OK:
-                        logger.warning(f"Failed to get watchlist for group '{group_name}': {data}")
+                        logger.warning(
+                            f"Failed to get watchlist for group '{group_name}': {data}"
+                        )
                         continue
 
                     for _, row in data.iterrows():

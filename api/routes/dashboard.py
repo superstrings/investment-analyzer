@@ -3,6 +3,7 @@ Dashboard summary API route.
 """
 
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 
@@ -18,6 +19,7 @@ async def api_dashboard_summary(
     """Get dashboard summary data (positions + signals + plans)."""
     from db.database import get_session
     from db.models import User
+    from services.exchange_rate_service import create_exchange_rate_service
     from services.plan_service import create_plan_service
     from services.signal_service import create_signal_service
     from skills.shared.data_provider import DataProvider
@@ -29,17 +31,25 @@ async def api_dashboard_summary(
         user_id = user.id
 
     dp = DataProvider(cache_ttl_seconds=60)
+    fx = create_exchange_rate_service()
 
-    # Positions
+    # Positions with CNY conversion
     positions = dp.get_positions(user_id)
-    total_val = sum(float(p.market_val) for p in positions)
-    total_pl = sum(float(p.pl_val) for p in positions)
 
-    # Market distribution
-    market_dist = {}
+    total_val_cny = Decimal("0")
+    total_pl_cny = Decimal("0")
+    market_dist = {}  # market -> CNY value
+
     for p in positions:
+        currency = fx.get_market_currency(p.market)
+        rate = fx.get_rate_to_cny(currency)
+        val_cny = p.market_val * rate
+        pl_cny = p.pl_val * rate
+
+        total_val_cny += val_cny
+        total_pl_cny += pl_cny
         market_dist.setdefault(p.market, 0)
-        market_dist[p.market] += float(p.market_val)
+        market_dist[p.market] += float(val_cny)
 
     # Active signals
     signal_svc = create_signal_service()
@@ -58,13 +68,19 @@ async def api_dashboard_summary(
     # Signal accuracy
     accuracy = signal_svc.get_signal_accuracy(user_id)
 
+    # Exchange rates
+    rates = fx.get_all_rates()
+
     return {
         "portfolio": {
             "total_positions": len(positions),
-            "total_market_val": total_val,
-            "total_pl": total_pl,
-            "total_pl_ratio": (total_pl / total_val * 100) if total_val else 0,
+            "total_market_val": float(total_val_cny),
+            "total_pl": float(total_pl_cny),
+            "total_pl_ratio": (
+                float(total_pl_cny / total_val_cny * 100) if total_val_cny else 0
+            ),
             "market_distribution": market_dist,
+            "currency": "CNY",
         },
         "signals": {
             "active_count": len(signals),
@@ -80,4 +96,5 @@ async def api_dashboard_summary(
             "profitable": accuracy.profitable,
             "loss": accuracy.loss,
         },
+        "exchange_rates": {k: float(v) for k, v in rates.items()},
     }

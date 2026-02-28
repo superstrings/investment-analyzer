@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block title %}交易日历 - Investment Analyzer{% endblock %}
+{% block nav_calendar %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div id="calendar-app">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-4">
+        <h1 class="text-xl font-bold">交易日历</h1>
+        <button onclick="syncCalendar()" id="sync-btn"
+            class="px-3 py-1.5 text-sm bg-blue-600 hover:bg-blue-700 rounded text-white">
+            同步数据
+        </button>
+    </div>
+
+    <!-- Month Navigation -->
+    <div class="flex items-center justify-center gap-4 mb-4">
+        <button onclick="changeMonth(-1)" class="px-3 py-1 text-gray-400 hover:text-white text-lg">&larr;</button>
+        <span id="month-label" class="text-lg font-semibold min-w-[140px] text-center"></span>
+        <button onclick="changeMonth(1)" class="px-3 py-1 text-gray-400 hover:text-white text-lg">&rarr;</button>
+    </div>
+
+    <!-- Legend & Market Filters -->
+    <div class="flex items-center justify-center gap-6 mb-4 text-sm text-gray-400">
+        <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" class="market-filter" value="HK" checked onchange="renderCalendar()">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-red-500"></span> HK
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" class="market-filter" value="US" checked onchange="renderCalendar()">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-blue-500"></span> US
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" class="market-filter" value="A" checked onchange="renderCalendar()">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-yellow-500"></span> A
+        </label>
+        <label class="flex items-center gap-1 cursor-pointer">
+            <input type="checkbox" class="market-filter" value="JP" checked onchange="renderCalendar()">
+            <span class="inline-block w-2.5 h-2.5 rounded-full bg-purple-500"></span> JP
+        </label>
+        <span class="border-l border-gray-700 pl-4 flex items-center gap-3">
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-green-500"></span> 全天</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-amber-500"></span> 半天</span>
+            <span class="flex items-center gap-1"><span class="inline-block w-2.5 h-2.5 rounded-full bg-gray-600"></span> 休市</span>
+        </span>
+    </div>
+
+    <!-- Calendar Grid -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+        <!-- Weekday Header -->
+        <div class="grid grid-cols-7 text-center text-sm text-gray-500 border-b border-gray-800">
+            <div class="py-2">一</div>
+            <div class="py-2">二</div>
+            <div class="py-2">三</div>
+            <div class="py-2">四</div>
+            <div class="py-2">五</div>
+            <div class="py-2 text-gray-600">六</div>
+            <div class="py-2 text-gray-600">日</div>
+        </div>
+        <!-- Days -->
+        <div id="calendar-grid" class="grid grid-cols-7"></div>
+    </div>
+
+    <!-- Sync Modal -->
+    <div id="sync-modal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div class="bg-gray-900 border border-gray-700 rounded-lg p-6 w-80">
+            <h3 class="text-lg font-semibold mb-4">同步交易日历</h3>
+            <div class="space-y-3">
+                <div>
+                    <label class="text-sm text-gray-400">市场</label>
+                    <select id="sync-market" class="w-full mt-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm">
+                        <option value="ALL">全部市场</option>
+                        <option value="HK">HK 港股</option>
+                        <option value="US">US 美股</option>
+                        <option value="A">A 沪深</option>
+                        <option value="JP">JP 日股</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-sm text-gray-400">年份</label>
+                    <input id="sync-year" type="number" class="w-full mt-1 px-3 py-2 bg-gray-800 border border-gray-700 rounded text-sm">
+                </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+                <button onclick="doSync()" id="do-sync-btn"
+                    class="flex-1 px-3 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm text-white">
+                    开始同步
+                </button>
+                <button onclick="closeSyncModal()"
+                    class="flex-1 px-3 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm">
+                    取消
+                </button>
+            </div>
+            <div id="sync-status" class="mt-3 text-sm text-gray-400 hidden"></div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const MARKET_COLORS = {
+    HK: { whole: 'bg-red-500', half: 'bg-red-400' },
+    US: { whole: 'bg-blue-500', half: 'bg-blue-400' },
+    A:  { whole: 'bg-yellow-500', half: 'bg-yellow-400' },
+    JP: { whole: 'bg-purple-500', half: 'bg-purple-400' },
+};
+
+let currentYear, currentMonth;
+let calendarData = [];
+
+function init() {
+    const now = new Date();
+    currentYear = now.getFullYear();
+    currentMonth = now.getMonth() + 1;
+    document.getElementById('sync-year').value = currentYear;
+    loadCalendar();
+}
+
+function changeMonth(delta) {
+    currentMonth += delta;
+    if (currentMonth > 12) { currentMonth = 1; currentYear++; }
+    if (currentMonth < 1) { currentMonth = 12; currentYear--; }
+    loadCalendar();
+}
+
+async function loadCalendar() {
+    document.getElementById('month-label').textContent = currentYear + '\u5e74' + currentMonth + '\u6708';
+    try {
+        const resp = await fetch('/api/calendar?year=' + currentYear + '&month=' + currentMonth);
+        const data = await resp.json();
+        calendarData = data.days || [];
+        renderCalendar();
+    } catch (e) {
+        console.error('Failed to load calendar:', e);
+    }
+}
+
+function getEnabledMarkets() {
+    return Array.from(document.querySelectorAll('.market-filter:checked')).map(function(el) { return el.value; });
+}
+
+function createDot(market, status) {
+    var colors = MARKET_COLORS[market];
+    var dot = document.createElement('span');
+    dot.className = 'w-3 h-3 rounded-full ';
+    if (status === 'WHOLE') {
+        dot.className += colors.whole;
+    } else if (status === 'MORNING' || status === 'AFTERNOON') {
+        dot.className += colors.half + ' ring-1 ring-white/30';
+    } else {
+        dot.className += 'bg-gray-700';
+    }
+    dot.title = market + ': ' + (status || '\u4f11\u5e02');
+    return dot;
+}
+
+function renderCalendar() {
+    var grid = document.getElementById('calendar-grid');
+    var enabled = getEnabledMarkets();
+    var today = new Date();
+    var todayStr = today.getFullYear() + '-' +
+        String(today.getMonth() + 1).padStart(2, '0') + '-' +
+        String(today.getDate()).padStart(2, '0');
+
+    // Clear grid using DOM API
+    while (grid.firstChild) { grid.removeChild(grid.firstChild); }
+
+    // Padding for first day of month
+    if (calendarData.length > 0) {
+        var firstWeekday = calendarData[0].weekday;
+        for (var i = 0; i < firstWeekday; i++) {
+            var pad = document.createElement('div');
+            pad.className = 'min-h-[80px] border-b border-r border-gray-800 bg-gray-950/50';
+            grid.appendChild(pad);
+        }
+    }
+
+    var allMarkets = ['HK', 'US', 'A', 'JP'];
+
+    for (var di = 0; di < calendarData.length; di++) {
+        var day = calendarData[di];
+        var isToday = day.date === todayStr;
+        var isWeekend = day.weekday >= 5;
+        var dayNum = parseInt(day.date.split('-')[2], 10);
+
+        var cell = document.createElement('div');
+        cell.className = 'min-h-[80px] border-b border-r border-gray-800 p-2 relative';
+        if (isWeekend) cell.className += ' bg-gray-900/70';
+        if (isToday) cell.className += ' ring-2 ring-inset ring-blue-500';
+
+        var numEl = document.createElement('div');
+        numEl.className = 'text-sm ';
+        if (isToday) numEl.className += 'text-blue-400 font-bold';
+        else if (isWeekend) numEl.className += 'text-gray-600';
+        else numEl.className += 'text-gray-300';
+        numEl.textContent = dayNum;
+        cell.appendChild(numEl);
+
+        var dotsRow = document.createElement('div');
+        dotsRow.className = 'flex flex-wrap gap-1 mt-1.5';
+        for (var mi = 0; mi < allMarkets.length; mi++) {
+            var m = allMarkets[mi];
+            if (enabled.indexOf(m) === -1) continue;
+            dotsRow.appendChild(createDot(m, day.markets[m]));
+        }
+        cell.appendChild(dotsRow);
+        grid.appendChild(cell);
+    }
+
+    // Trailing padding
+    var totalCells = calendarData.length > 0
+        ? calendarData[0].weekday + calendarData.length
+        : 0;
+    var remainder = totalCells % 7;
+    if (remainder > 0) {
+        for (var j = 0; j < 7 - remainder; j++) {
+            var padEnd = document.createElement('div');
+            padEnd.className = 'min-h-[80px] border-b border-r border-gray-800 bg-gray-950/50';
+            grid.appendChild(padEnd);
+        }
+    }
+}
+
+function syncCalendar() {
+    document.getElementById('sync-year').value = currentYear;
+    document.getElementById('sync-modal').classList.remove('hidden');
+    document.getElementById('sync-status').classList.add('hidden');
+}
+
+function closeSyncModal() {
+    document.getElementById('sync-modal').classList.add('hidden');
+}
+
+async function doSync() {
+    var market = document.getElementById('sync-market').value;
+    var year = parseInt(document.getElementById('sync-year').value, 10);
+    var btn = document.getElementById('do-sync-btn');
+    var status = document.getElementById('sync-status');
+
+    btn.disabled = true;
+    btn.textContent = '\u540c\u6b65\u4e2d...';
+    status.classList.remove('hidden');
+    status.textContent = '\u6b63\u5728\u540c\u6b65...';
+    status.className = 'mt-3 text-sm text-gray-400';
+
+    try {
+        var resp = await fetch('/api/calendar/sync', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ market: market, year: year }),
+        });
+        var data = await resp.json();
+        if (data.success) {
+            status.textContent = '\u540c\u6b65\u5b8c\u6210\uff0c\u5171 ' + data.count + ' \u4e2a\u4ea4\u6613\u65e5';
+            status.className = 'mt-3 text-sm text-green-400';
+            setTimeout(function() {
+                closeSyncModal();
+                loadCalendar();
+            }, 1000);
+        } else {
+            status.textContent = '\u540c\u6b65\u5931\u8d25: ' + (data.error || '\u672a\u77e5\u9519\u8bef');
+            status.className = 'mt-3 text-sm text-red-400';
+        }
+    } catch (e) {
+        status.textContent = '\u540c\u6b65\u5931\u8d25: ' + e.message;
+        status.className = 'mt-3 text-sm text-red-400';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '\u5f00\u59cb\u540c\u6b65';
+    }
+}
+
+init();
+</script>
+{% endblock %}

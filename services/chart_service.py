@@ -135,7 +135,7 @@ class ChartService:
         try:
             # Get watchlist items
             with get_session() as session:
-                items = session.query(WatchlistItem).filter_by(user_id=user_id).all()
+                items = session.query(WatchlistItem).filter_by(user_id=user_id, is_active=True).all()
                 codes = [f"{item.market}.{item.code}" for item in items]
 
             if not codes:

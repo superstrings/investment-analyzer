@@ -1,6 +1,6 @@
 # Investment Analyzer
 
-> 本地化投资分析自动化系统 - 整合富途数据、技术分析、图表生成和报告输出
+> 本地化投资分析自动化系统 - 整合富途数据、技术分析、Web Dashboard、钉钉推送和自动化工作流
 
 [![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-blue.svg)](https://www.postgresql.org/)
@@ -10,15 +10,20 @@
 
 ## 功能特性
 
+- **多市场支持**: 港股 (HK) / 美股 (US) / A股 / 日股 (JP) 四市场
 - **数据采集**: 富途 OpenAPI 持仓/交易/K线 + akshare A股数据
+- **Web Dashboard**: FastAPI Web UI - 持仓总览、手动持仓管理、多币种汇率转换
 - **深度分析**: 技术面 + 基本面 + 行业 + 消息综合评分
 - **技术分析**: MA/MACD/RSI/布林带/OBV/VCP 指标计算
 - **形态识别**: VCP (波动收缩形态) 自动检测与评分
-- **组合分析**: 仓位权重、风险评估、HHI 集中度指数
+- **组合分析**: 仓位权重、风险评估、HHI 集中度指数、多币种汇总 (CNY)
 - **交易分析**: 配对交易匹配、胜率/盈亏比/手续费统计、Excel+Word 报告
-- **AI 投资教练**: 基于 V10.10 框架的 LLM 智能建议，自动嵌入报告
+- **AI 投资教练**: 基于 V12 分析框架 + V2 估值模型的 LLM 智能建议
 - **图表生成**: K线图 + 均线 + 成交量 (mplfinance)
 - **报告输出**: Markdown/JSON/HTML/Word/Excel 多格式报告
+- **钉钉推送**: 自动化消息通知 (支持 Webhook + 签名验证)
+- **MCP Server**: Claude Desktop 集成，支持 MCP 协议调用分析能力
+- **定时调度**: 盘前/盘后自动分析 + 钉钉推送工作流
 - **Skills 系统**: 分析师/风控/交易指导/市场观察/投资教练多角色
 - **Claude 命令**: 便捷的 Slash 命令快速操作
 - **CLI 工具**: 完整的命令行交互界面
@@ -73,20 +78,33 @@ python scripts/init_db.py seed
 
 ```yaml
 users:
-  - username: your_name
-    futu:
-      host: 127.0.0.1
+  dyson:
+    display_name: "Dyson"
+    opend:
+      host: "127.0.0.1"
       port: 11111
-      trade_env: REAL  # 或 SIMULATE
-      security_firm: FUTUINC
-      markets: [HK, US]
-    settings:
-      default_kline_days: 120
+    default_markets: [HK, US, JP]
+    kline_days: 120
+    is_active: true
 ```
 
 ## 使用指南
 
 > 详细指南请参阅 [docs/guide/README.md](docs/guide/README.md)
+
+### Web Dashboard
+
+```bash
+# 启动 Web 服务 (默认 http://localhost:8000)
+python main.py web
+
+# 功能:
+# - 持仓总览 (多币种自动转换为人民币)
+# - 手动添加/编辑/删除持仓 (A股等非富途持仓)
+# - K线图表和技术分析
+# - 钉钉消息推送
+# - Token 认证保护
+```
 
 ### 日常分析 (推荐)
 
@@ -101,9 +119,13 @@ python main.py deep-analyze -u your_name -c HK.00700
 python main.py deep-analyze -u your_name --market HK --batch
 python main.py deep-analyze -u your_name --market US --batch
 python main.py deep-analyze -u your_name --market A --batch
+python main.py deep-analyze -u your_name --market JP --batch
 
 # 查看持仓
 python main.py account info -u your_name
+
+# 数据库迁移 (升级后运行)
+python main.py db-migrate
 ```
 
 ### Claude 快捷命令
@@ -185,29 +207,39 @@ report.save("reports/output/portfolio.md")
 
 ```
 investment-analyzer/
+├── api/                # Web API (FastAPI)
+│   ├── app.py          # 应用入口 + 认证中间件
+│   ├── routes/         # API 路由
+│   │   ├── dashboard.py    # 首页仪表盘
+│   │   ├── portfolio.py    # 持仓管理
+│   │   ├── manual_positions.py # 手动持仓 CRUD
+│   │   ├── analysis.py     # 分析接口
+│   │   ├── charts.py       # 图表接口
+│   │   ├── dingtalk.py     # 钉钉 Webhook
+│   │   └── signals.py      # 信号监控
+│   └── templates/      # Jinja2 页面模板
 ├── analysis/           # 分析模块
 │   ├── indicators/     # 技术指标 (MA, RSI, MACD, BB, OBV, VCP)
 │   ├── portfolio.py    # 组合分析
 │   └── technical.py    # 技术分析器
 ├── charts/             # 图表生成
-│   ├── generator.py    # K线图生成器
-│   └── styles.py       # 图表样式
 ├── config/             # 配置管理
-│   ├── settings.py     # 全局设置
+│   ├── settings.py     # 全局设置 (从 .env 加载)
 │   └── users.py        # 用户配置
 ├── db/                 # 数据库
-│   ├── models.py       # SQLAlchemy 模型
+│   ├── models.py       # SQLAlchemy 2.0 模型
 │   ├── database.py     # 连接管理
 │   └── migrations/     # SQL 迁移脚本
 ├── fetchers/           # 数据采集
-│   ├── futu_fetcher.py # 富途 API
-│   └── kline_fetcher.py# K线数据 (akshare)
-├── reports/            # 报告生成
-│   ├── generator.py    # 报告生成器
-│   └── templates/      # Jinja2 模板
+│   ├── futu_fetcher.py # 富途 API (HK/US/JP)
+│   └── kline_fetcher.py# K线数据 (akshare + Futu)
+├── reports/            # 报告生成 (Jinja2 模板)
 ├── services/           # 业务服务
-│   ├── sync_service.py # 数据同步
-│   └── chart_service.py# 图表服务
+│   ├── sync_service.py         # 数据同步
+│   ├── chart_service.py        # 图表服务
+│   ├── exchange_rate_service.py # 汇率转换 (BOC)
+│   ├── dingtalk_service.py     # 钉钉消息推送
+│   └── ...
 ├── skills/             # Claude Code Skills
 │   ├── analyst/        # 分析师 (OBV + VCP)
 │   ├── risk_controller/# 风控师
@@ -215,12 +247,14 @@ investment-analyzer/
 │   ├── market_observer/# 市场观察员
 │   ├── deep_analyzer/  # 深度分析
 │   ├── trade_analyzer/ # 交易分析 (配对交易+统计+报告)
-│   └── shared/         # 共享组件
+│   ├── workflow/       # 自动化工作流 (定时调度)
+│   └── shared/         # 共享组件 (BaseSkill, DataProvider)
+├── backtest/           # 回测引擎
 ├── scripts/            # 脚本工具
-│   ├── init_db.py      # 数据库初始化
-│   └── import_csv.py   # CSV 导入
+├── deploy/             # 部署配置 (nginx, frpc, launchd)
 ├── tests/              # 测试用例
 ├── docs/               # 文档
+├── mcp_server.py       # MCP Server 入口
 ├── main.py             # CLI 入口
 └── CLAUDE.md           # Claude Code 指令
 ```
@@ -232,12 +266,15 @@ investment-analyzer/
 | 语言 | Python 3.12+ |
 | 数据库 | PostgreSQL 17 |
 | ORM | SQLAlchemy 2.0 |
+| Web | FastAPI + Jinja2 + Tailwind CSS |
 | 数据采集 | futu-api, akshare |
 | 图表 | mplfinance, matplotlib |
 | 报告 | Jinja2, python-docx, openpyxl |
-| 文档转换 | pandoc (md → docx) |
+| 消息推送 | 钉钉 Webhook |
+| MCP | Claude Desktop 集成 |
 | CLI | Click |
 | 测试 | pytest |
+| 部署 | launchd + Cloudflare Tunnel + nginx |
 
 ## 技术指标
 
@@ -318,7 +355,7 @@ python -m pytest tests/ -v --cov=.
 python -m pytest tests/test_portfolio.py -v
 ```
 
-当前测试覆盖: **1097 tests passed**
+当前测试覆盖: **1137 tests passed**
 
 ## 开发
 

@@ -402,7 +402,10 @@ class ExportService:
             session = self._get_session()
 
             # Build query
-            query = select(WatchlistItem).where(WatchlistItem.user_id == user_id)
+            query = select(WatchlistItem).where(
+                WatchlistItem.user_id == user_id,
+                WatchlistItem.is_active == True,
+            )
             watchlist = session.execute(query).scalars().all()
 
             if not watchlist:
@@ -525,7 +528,8 @@ class ExportService:
 
             # Watchlist
             watchlist_query = select(WatchlistItem).where(
-                WatchlistItem.user_id == user_id
+                WatchlistItem.user_id == user_id,
+                WatchlistItem.is_active == True,
             )
             watchlist = session.execute(watchlist_query).scalars().all()
             if watchlist:

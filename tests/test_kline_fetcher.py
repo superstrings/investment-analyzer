@@ -224,12 +224,20 @@ class TestKlineFetcherParseCode:
         assert market == Market.A
         assert code == "300750"
 
+    def test_parse_4digit_detects_jp(self):
+        """Test 4-digit numeric code detects as JP market."""
+        fetcher = KlineFetcher()
+        market, code = fetcher._parse_code("7203")
+        assert market == Market.JP
+        assert code == "7203"
+
     def test_parse_numeric_defaults_to_hk(self):
         """Test numeric code without pattern defaults to HK."""
         fetcher = KlineFetcher()
-        market, code = fetcher._parse_code("1234")
+        # 3-digit or other non-pattern numeric codes default to HK
+        market, code = fetcher._parse_code("123")
         assert market == Market.HK
-        assert code == "01234"  # Padded to 5 digits
+        assert code == "00123"  # Padded to 5 digits
 
 
 class TestKlineFetcherDetectMarket:
@@ -662,8 +670,8 @@ class TestFutuFetchPath:
         assert result.success is True
         assert result.records_count == 1
 
-    def test_us_never_uses_futu(self):
-        """Test that US stocks never attempt Futu API."""
+    def test_us_falls_back_to_akshare(self):
+        """Test that US stocks fall back to akshare when Futu fails."""
         mock_us_df = pd.DataFrame(
             {
                 "date": pd.to_datetime(["2025-12-14"]),
@@ -676,11 +684,9 @@ class TestFutuFetchPath:
         )
 
         fetcher = KlineFetcher()
-        # Set a _futu_ctx that would fail if called
+        # Set a _futu_ctx that fails (simulating Futu unavailable)
         mock_ctx = MagicMock()
-        mock_ctx.request_history_kline.side_effect = AssertionError(
-            "Futu should not be called for US stocks"
-        )
+        mock_ctx.request_history_kline.return_value = (1, "error", None)
         fetcher._futu_ctx = mock_ctx
 
         with patch("fetchers.kline_fetcher.ak") as mock_ak:
@@ -688,7 +694,6 @@ class TestFutuFetchPath:
             result = fetcher.fetch("US.NVDA", days=5)
 
         assert result.success is True
-        mock_ctx.request_history_kline.assert_not_called()
 
 
 class TestFutuContextLifecycle:

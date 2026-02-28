@@ -6,13 +6,19 @@
 <div class="space-y-4">
     <div class="flex justify-between items-center">
         <h1 class="text-lg font-bold">持仓详情</h1>
-        <select id="market-filter" onchange="loadPortfolio()"
-            class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
-            <option value="">全部市场</option>
-            <option value="HK">港股</option>
-            <option value="US">美股</option>
-            <option value="A">A股</option>
-        </select>
+        <div class="flex items-center gap-2">
+            <button onclick="showAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs rounded px-3 py-1">
+                + 手动添加
+            </button>
+            <select id="market-filter" onchange="loadPortfolio()"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="">全部市场</option>
+                <option value="HK">港股</option>
+                <option value="US">美股</option>
+                <option value="A">A股</option>
+                <option value="JP">日股</option>
+            </select>
+        </div>
     </div>
     <div class="grid grid-cols-3 gap-3">
         <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
@@ -34,10 +40,106 @@
         </div>
     </div>
 </div>
+
+<!-- Add Manual Position Modal -->
+<div id="add-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-sm mx-4 p-5">
+        <h3 class="font-bold mb-4">手动添加持仓</h3>
+        <form id="add-form" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">市场</label>
+                    <select id="m-market" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                        <option value="A">A股</option>
+                        <option value="HK">港股</option>
+                        <option value="US">美股</option>
+                        <option value="JP">日股</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">代码</label>
+                    <input id="m-code" type="text" placeholder="600519" required
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">名称</label>
+                <input id="m-name" type="text" placeholder="贵州茅台"
+                    class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div class="grid grid-cols-3 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">数量</label>
+                    <input id="m-qty" type="number" step="1" required placeholder="100"
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">成本价</label>
+                    <input id="m-cost" type="number" step="0.01" required placeholder="1500.00"
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">现价</label>
+                    <input id="m-price" type="number" step="0.01" placeholder="1520.00"
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+            <div id="add-error" class="text-xs text-loss hidden"></div>
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="hideAddModal()"
+                    class="flex-1 bg-gray-700 hover:bg-gray-600 text-sm rounded px-3 py-1.5">取消</button>
+                <button type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1.5">添加</button>
+            </div>
+        </form>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+function showAddModal() {
+    document.getElementById('add-modal').classList.remove('hidden');
+    document.getElementById('add-error').classList.add('hidden');
+}
+function hideAddModal() {
+    document.getElementById('add-modal').classList.add('hidden');
+    document.getElementById('add-form').reset();
+}
+
+document.getElementById('add-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('add-error');
+    errEl.classList.add('hidden');
+    const body = {
+        market: document.getElementById('m-market').value,
+        code: document.getElementById('m-code').value,
+        stock_name: document.getElementById('m-name').value,
+        qty: parseFloat(document.getElementById('m-qty').value),
+        cost_price: parseFloat(document.getElementById('m-cost').value),
+        market_price: parseFloat(document.getElementById('m-price').value) || 0,
+    };
+    const resp = await fetch('/api/positions/manual', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.success) {
+        hideAddModal();
+        loadPortfolio();
+    } else {
+        errEl.textContent = data.error || '添加失败';
+        errEl.classList.remove('hidden');
+    }
+});
+
+async function deleteManualPosition(id) {
+    if (!confirm('确定删除此手动持仓？')) return;
+    await fetch('/api/positions/manual/' + id, {method: 'DELETE'});
+    loadPortfolio();
+}
+
 function createDetailedPositionRow(p) {
     const row = document.createElement('div');
     row.className = 'px-4 py-3';
@@ -47,8 +149,16 @@ function createDetailedPositionRow(p) {
 
     const leftDiv = document.createElement('div');
     const codeLine = document.createElement('div');
-    codeLine.className = 'font-medium';
-    codeLine.textContent = p.code;
+    codeLine.className = 'font-medium flex items-center gap-1.5';
+    const codeText = document.createElement('span');
+    codeText.textContent = p.code;
+    codeLine.appendChild(codeText);
+    if (p.source === 'manual') {
+        const badge = document.createElement('span');
+        badge.className = 'text-[10px] bg-blue-900 text-blue-300 px-1 rounded';
+        badge.textContent = '手动';
+        codeLine.appendChild(badge);
+    }
     const nameLine = document.createElement('div');
     nameLine.className = 'text-xs text-gray-500';
     nameLine.textContent = p.name;
@@ -56,26 +166,37 @@ function createDetailedPositionRow(p) {
     leftDiv.appendChild(nameLine);
 
     const rightDiv = document.createElement('div');
-    rightDiv.className = 'text-right';
+    rightDiv.className = 'text-right flex items-center gap-2';
+    const plDiv = document.createElement('div');
     const plLine = document.createElement('div');
     plLine.className = 'font-medium ' + plColor(p.pl_val);
     plLine.textContent = '¥' + formatNum(p.pl_val);
     const ratioLine = document.createElement('div');
     ratioLine.className = 'text-sm ' + plColor(p.pl_ratio);
     ratioLine.textContent = formatPct(p.pl_ratio);
-    rightDiv.appendChild(plLine);
-    rightDiv.appendChild(ratioLine);
+    plDiv.appendChild(plLine);
+    plDiv.appendChild(ratioLine);
+    rightDiv.appendChild(plDiv);
+
+    if (p.source === 'manual') {
+        const delBtn = document.createElement('button');
+        delBtn.className = 'text-gray-600 hover:text-loss text-xs';
+        delBtn.textContent = '✕';
+        delBtn.onclick = () => deleteManualPosition(p.id);
+        rightDiv.appendChild(delBtn);
+    }
 
     topRow.appendChild(leftDiv);
     topRow.appendChild(rightDiv);
 
     const bottomRow = document.createElement('div');
     bottomRow.className = 'mt-2 flex justify-between text-xs text-gray-500';
+    const currSymbol = {CNY:'¥', HKD:'HK$', USD:'$', JPY:'¥'}[p.currency] || '';
     const fields = [
         '数量: ' + formatNum(p.qty),
-        '成本: ' + formatNum(p.cost_price, 2),
-        '现价: ' + formatNum(p.market_price, 2),
-        '市值: ¥' + formatNum(p.market_val),
+        '成本: ' + currSymbol + formatNum(p.cost_price, 2),
+        '现价: ' + currSymbol + formatNum(p.market_price, 2),
+        '市值: ¥' + formatNum(p.market_val_cny || p.market_val),
     ];
     fields.forEach(f => {
         const span = document.createElement('span');

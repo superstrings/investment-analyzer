@@ -116,7 +116,7 @@ class TestSkillContext:
         assert ctx.request_type == "test"
         assert ctx.parameters == {}
         assert ctx.market_state == MarketState.CLOSED
-        assert ctx.markets == ["HK", "US", "A"]
+        assert ctx.markets == ["HK", "US", "A", "JP"]
         assert ctx.codes == []
 
     def test_get_param(self):

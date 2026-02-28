@@ -76,6 +76,7 @@ def run_sync():
 
         # Notify via DingTalk
         try:
+            from config import settings
             from services.dingtalk_service import create_dingtalk_service
 
             dingtalk = create_dingtalk_service()
@@ -83,6 +84,8 @@ def run_sync():
             for name, result in results.items():
                 icon = "✅" if result.success else "❌"
                 lines.append(f"- {icon} {name}: {result.records_synced}条")
+            if settings.web.base_url:
+                lines.append(f"\n[查看持仓]({settings.web.base_url}/portfolio) | [查看信号]({settings.web.base_url}/signals)")
             dingtalk.send_markdown(
                 "数据同步",
                 "\n".join(lines),
@@ -136,6 +139,15 @@ def run_post_market(market: str):
     market_name = MARKET_NAMES.get(market, market)
     logger.info(f"Starting post-market analysis for {market_name}...")
 
+    from config import settings
+
+    base_url = settings.web.base_url
+    url_hint = ""
+    if base_url:
+        url_hint = f"""
+   - 在消息末尾加上相关页面链接:
+     [持仓详情]({base_url}/portfolio) | [信号]({base_url}/signals) | [计划]({base_url}/plans)"""
+
     prompt = f"""
 {market_name}盘后分析 ({date.today()}):
 
@@ -152,7 +164,7 @@ def run_post_market(market: str):
 8. 最后用 send_dingtalk_message 推送分析摘要 (markdown 格式)，包含:
    - 持仓盈亏概览
    - 重要信号
-   - 明日操作计划
+   - 明日操作计划{url_hint}
 """
 
     output = run_claude_prompt(prompt)
@@ -163,6 +175,15 @@ def run_pre_market(market: str):
     """Pre-market briefing via Claude CLI + MCP tools."""
     market_name = MARKET_NAMES.get(market, market)
     logger.info(f"Starting pre-market briefing for {market_name}...")
+
+    from config import settings
+
+    base_url = settings.web.base_url
+    url_hint = ""
+    if base_url:
+        url_hint = f"""
+   - 在消息末尾加上相关页面链接:
+     [持仓详情]({base_url}/portfolio) | [计划]({base_url}/plans) | [日历]({base_url}/calendar)"""
 
     prompt = f"""
 {market_name}盘前检查 ({date.today()}):
@@ -175,7 +196,7 @@ def run_pre_market(market: str):
 6. 用 send_dingtalk_message 推送盘前提醒 (markdown 格式)，包含:
    - 今日操作计划 (按优先级排列)
    - 持仓风险提醒
-   - 关键价位提示
+   - 关键价位提示{url_hint}
 """
 
     output = run_claude_prompt(prompt)

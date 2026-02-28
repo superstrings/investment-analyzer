@@ -53,7 +53,7 @@ class SkillContext:
     execution_time: datetime = field(default_factory=datetime.now)
 
     # Optional filters
-    markets: list[str] = field(default_factory=lambda: ["HK", "US", "A"])
+    markets: list[str] = field(default_factory=lambda: ["HK", "US", "A", "JP"])
     codes: list[str] = field(default_factory=list)
 
     def get_param(self, key: str, default: Any = None) -> Any:
@@ -230,6 +230,14 @@ class MarketSchedule:
     a_close: time = field(default_factory=lambda: time(15, 0))
     a_post_market: time = field(default_factory=lambda: time(15, 30))
 
+    # Japan (JST→Beijing: JST-1h. TSE: 9:00-11:30, 12:30-15:00 JST)
+    jp_pre_market: time = field(default_factory=lambda: time(7, 30))
+    jp_open: time = field(default_factory=lambda: time(8, 0))
+    jp_lunch_start: time = field(default_factory=lambda: time(10, 30))
+    jp_lunch_end: time = field(default_factory=lambda: time(11, 30))
+    jp_close: time = field(default_factory=lambda: time(14, 0))
+    jp_post_market: time = field(default_factory=lambda: time(14, 30))
+
     def get_market_state(self, market: str, current_time: time = None) -> MarketState:
         """
         Get current market state.
@@ -283,6 +291,20 @@ class MarketSchedule:
             elif current_time < self.us_close:
                 return MarketState.OPEN
             elif current_time < self.us_post_market:
+                return MarketState.POST_MARKET
+            else:
+                return MarketState.CLOSED
+
+        elif market == "JP":
+            if current_time < self.jp_pre_market:
+                return MarketState.CLOSED
+            elif current_time < self.jp_open:
+                return MarketState.PRE_MARKET
+            elif current_time < self.jp_close:
+                if self.jp_lunch_start <= current_time < self.jp_lunch_end:
+                    return MarketState.CLOSED
+                return MarketState.OPEN
+            elif current_time < self.jp_post_market:
                 return MarketState.POST_MARKET
             else:
                 return MarketState.CLOSED

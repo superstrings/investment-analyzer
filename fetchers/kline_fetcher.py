@@ -85,6 +85,7 @@ class KlineFetcher:
     US_PATTERN = re.compile(r"^([A-Z]{1,5})$")  # 1-5 uppercase letters: NVDA
     A_SH_PATTERN = re.compile(r"^(6\d{5})$")  # Starts with 6: 600519 (Shanghai)
     A_SZ_PATTERN = re.compile(r"^(0\d{5}|3\d{5})$")  # Starts with 0 or 3 (Shenzhen)
+    JP_PATTERN = re.compile(r"^(\d{4})$")  # 4 digits: 7203 (Toyota)
 
     def __init__(
         self,
@@ -145,6 +146,8 @@ class KlineFetcher:
                 return self._fetch_us(pure_code, start_date, end_date, adjust)
             elif market == Market.A:
                 return self._fetch_a_share(pure_code, start_date, end_date, adjust)
+            elif market == Market.JP:
+                return self._fetch_jp(pure_code, start_date, end_date, adjust)
             else:
                 return KlineFetchResult.error(f"Unsupported market: {market}")
         except Exception as e:
@@ -214,6 +217,8 @@ class KlineFetcher:
                 return f"SZ.{code}"
         elif market == Market.US:
             return f"US.{code}"
+        elif market == Market.JP:
+            return f"JP.{code}"
         return f"HK.{code}"
 
     def _fetch_via_futu(
@@ -336,21 +341,27 @@ class KlineFetcher:
     def _fetch_us(
         self, code: str, start_date: date, end_date: date, adjust: str
     ) -> KlineFetchResult:
-        """Fetch US stock K-line data."""
+        """Fetch US stock K-line data. Tries Futu first, then akshare."""
+        # 1. Try Futu API first
         try:
-            # akshare US stock daily data
+            futu_code = self._to_futu_code(Market.US, code)
+            return self._fetch_via_futu(
+                futu_code, start_date, end_date, Market.US, code
+            )
+        except Exception as e:
+            logger.info(
+                f"Futu fetch failed for US.{code}, falling back to akshare: {e}"
+            )
+
+        # 2. Fallback to akshare
+        try:
             df = ak.stock_us_daily(symbol=code, adjust=adjust)
 
             if df is None or df.empty:
                 return KlineFetchResult.error(f"No data returned for US.{code}")
 
-            # Standardize column names
             df = self._standardize_us_columns(df)
-
-            # Filter by date range
             df = self._filter_by_date(df, start_date, end_date)
-
-            # Convert to KlineData list
             klines = self._df_to_klines(df, Market.US, code)
 
             return KlineFetchResult.ok_with_df(klines, df)
@@ -393,6 +404,21 @@ class KlineFetcher:
         except Exception as e:
             logger.error(f"Error fetching A.{code}: {e}")
             return KlineFetchResult.error(f"A-share fetch error: {e}")
+
+    def _fetch_jp(
+        self, code: str, start_date: date, end_date: date, adjust: str
+    ) -> KlineFetchResult:
+        """Fetch Japan stock K-line data. Futu API only (no akshare support)."""
+        try:
+            futu_code = self._to_futu_code(Market.JP, code)
+            return self._fetch_via_futu(
+                futu_code, start_date, end_date, Market.JP, code
+            )
+        except Exception as e:
+            logger.error(f"Failed to fetch JP.{code} via Futu: {e}")
+            return KlineFetchResult.error(
+                f"JP fetch error (Futu only, no akshare fallback): {e}"
+            )
 
     def _standardize_hk_columns(self, df: pd.DataFrame) -> pd.DataFrame:
         """Standardize HK stock DataFrame columns."""
@@ -537,16 +563,21 @@ class KlineFetcher:
                 return Market.US, pure_code
             elif market_str in ("A", "SH", "SZ", "CN"):
                 return Market.A, pure_code
+            elif market_str == "JP":
+                return Market.JP, pure_code
 
         # Auto-detect market from code pattern
         pure_code = code.upper()
 
-        if self.HK_PATTERN.match(pure_code):
+        # JP before HK: 4-digit (JP) vs 5-digit (HK), A-share 6-digit checked first
+        if self.A_SH_PATTERN.match(pure_code) or self.A_SZ_PATTERN.match(pure_code):
+            return Market.A, pure_code
+        elif self.HK_PATTERN.match(pure_code):
             return Market.HK, pure_code
+        elif self.JP_PATTERN.match(pure_code):
+            return Market.JP, pure_code
         elif self.US_PATTERN.match(pure_code):
             return Market.US, pure_code
-        elif self.A_SH_PATTERN.match(pure_code) or self.A_SZ_PATTERN.match(pure_code):
-            return Market.A, pure_code
 
         # Default to HK for numeric codes
         if pure_code.isdigit():

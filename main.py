@@ -77,6 +77,9 @@ def _is_option_code(market: str, code: str) -> bool:
         # Pattern: letters + 6 digits + C or P + digits
         return bool(re.match(r"^[A-Z]+\d{6}[CP]\d+$", code))
 
+    if market == "JP":
+        return False
+
     return False
 
 
@@ -335,6 +338,10 @@ def sync_watchlist_cmd(user: str, clear: bool, groups: Optional[str]):
                 click.echo(f"Successfully synced watchlist:")
                 click.echo(f"  Synced: {result.records_synced}")
                 click.echo(f"  Skipped (duplicates): {result.records_skipped}")
+                if result.details.get("reactivated"):
+                    click.echo(f"  Reactivated: {result.details['reactivated']}")
+                if result.details.get("deactivated"):
+                    click.echo(f"  Deactivated: {result.details['deactivated']}")
             else:
                 click.echo(f"Warning: Watchlist sync completed with issues:")
                 click.echo(f"  {result.error_message}")
@@ -2057,12 +2064,16 @@ def skill_list():
 
     console.print("[cyan]coach[/cyan] - 交易导师")
     console.print("  交易计划制定、心理辅导、复利教育")
-    console.print("  Usage: skill run coach -u <user> --type <daily_plan|psychology_check|compound_lesson|full_coaching>")
+    console.print(
+        "  Usage: skill run coach -u <user> --type <daily_plan|psychology_check|compound_lesson|full_coaching>"
+    )
     console.print()
 
     console.print("[cyan]observer[/cyan] - 市场观察员")
     console.print("  盘前分析、盘后总结、板块轮动、情绪指数")
-    console.print("  Usage: skill run observer -u <user> --type <pre_market|post_market|sector|sentiment|full|auto>")
+    console.print(
+        "  Usage: skill run observer -u <user> --type <pre_market|post_market|sector|sentiment|full|auto>"
+    )
     console.print()
 
 
@@ -2213,7 +2224,9 @@ def _run_analyst_skill(context, report_format):
 
         # Run single stock analysis
         analyzer = StockAnalyzer(data_provider=provider)
-        analysis = analyzer.analyze_from_db(market, code, days=days, stock_name=stock_name)
+        analysis = analyzer.analyze_from_db(
+            market, code, days=days, stock_name=stock_name
+        )
 
         if analysis is None:
             return SkillResult.error(
@@ -2274,9 +2287,15 @@ def _get_analyst_next_actions(analysis) -> list[str]:
 
     if score.rating.value == "strong_buy":
         if analysis.vcp_analysis.stage.value == "breakout":
-            actions.append("VCP breakout in progress - consider entry if within risk tolerance")
+            actions.append(
+                "VCP breakout in progress - consider entry if within risk tolerance"
+            )
         elif analysis.vcp_analysis.stage.value == "mature":
-            actions.append(f"Watch for breakout above pivot: {score.pivot_price:.2f}" if score.pivot_price else "Watch for breakout")
+            actions.append(
+                f"Watch for breakout above pivot: {score.pivot_price:.2f}"
+                if score.pivot_price
+                else "Watch for breakout"
+            )
         actions.append("Set stop loss at 7-8% below entry")
     elif score.rating.value == "buy":
         if analysis.vcp_analysis.detected:
@@ -2335,7 +2354,10 @@ def _run_risk_skill(context, report_format):
     )
 
     if result.alerts.critical_count > 0:
-        next_actions.insert(0, f"{result.alerts.critical_count} CRITICAL alert(s) require immediate attention!")
+        next_actions.insert(
+            0,
+            f"{result.alerts.critical_count} CRITICAL alert(s) require immediate attention!",
+        )
 
     return SkillResult.ok(
         skill_name="risk_controller",
@@ -2782,7 +2804,7 @@ def workflow_status(market: str):
 
         console.print(f"Current Phase: [bold]{info['current_phase']}[/bold]")
         console.print(f"Next Phase: {info['next_phase']}")
-        if info['next_phase_time']:
+        if info["next_phase_time"]:
             console.print(f"Next Phase Time: {info['next_phase_time']}")
         console.print(f"Is Trading Day: {'Yes' if info['is_trading_day'] else 'No'}")
         console.print(f"Is Month End: {'Yes' if info['is_month_end'] else 'No'}")
@@ -2954,7 +2976,9 @@ def deep_analyze(
                     f"综合评分: {result.overall_score}/100 ({result.overall_rating})"
                 )
             else:
-                print_warning(f"{market}.{stock_code} 分析失败: {', '.join(result.errors)}")
+                print_warning(
+                    f"{market}.{stock_code} 分析失败: {', '.join(result.errors)}"
+                )
 
         except Exception as e:
             logger.exception(f"Error analyzing {full_code}")
@@ -2973,7 +2997,9 @@ def deep_analyze(
 
             timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
             if len(code_list) == 1:
-                filename = f"deep_analysis_{code_list[0].replace('.', '_')}_{timestamp}.md"
+                filename = (
+                    f"deep_analysis_{code_list[0].replace('.', '_')}_{timestamp}.md"
+                )
             elif selected_market:
                 filename = f"deep_analysis_{selected_market}_{timestamp}.md"
             else:
@@ -2992,14 +3018,23 @@ def deep_analyze(
 
 @cli.command("trade-analyze")
 @click.option("--user", "-u", required=True, callback=validate_user, help="用户名")
-@click.option("--start", type=click.DateTime(formats=["%Y-%m-%d"]), help="开始日期 (YYYY-MM-DD)")
-@click.option("--end", type=click.DateTime(formats=["%Y-%m-%d"]), help="结束日期 (YYYY-MM-DD)")
+@click.option(
+    "--start", type=click.DateTime(formats=["%Y-%m-%d"]), help="开始日期 (YYYY-MM-DD)"
+)
+@click.option(
+    "--end", type=click.DateTime(formats=["%Y-%m-%d"]), help="结束日期 (YYYY-MM-DD)"
+)
 @click.option("--days", type=int, help="分析最近 N 天的交易")
 @click.option("--output", "-o", type=click.Path(), help="输出目录路径")
 @click.option("--no-excel", is_flag=True, help="不生成 Excel 文件")
 @click.option("--no-docx", is_flag=True, help="不生成 Word 报告")
 @click.option("--no-charts", is_flag=True, help="不生成图表")
-@click.option("--output-context", is_flag=True, hidden=True, help="[已废弃] 现在默认输出上下文文件")
+@click.option(
+    "--output-context",
+    is_flag=True,
+    hidden=True,
+    help="[已废弃] 现在默认输出上下文文件",
+)
 def trade_analyze(
     user: str,
     start: Optional[datetime],
@@ -3050,7 +3085,9 @@ def trade_analyze(
         today = date.today()
         start_date = date(today.year, 1, 1)
         end_date = today
-        print_info(f"未指定日期范围，默认分析 {today.year} 年 ({start_date} ~ {end_date})")
+        print_info(
+            f"未指定日期范围，默认分析 {today.year} 年 ({start_date} ~ {end_date})"
+        )
 
     # Determine output directory
     if output:
@@ -3091,7 +3128,9 @@ def trade_analyze(
         context_path.write_text(ai_context, encoding="utf-8")
 
         # Hint for next step
-        console.print(f"\n[dim]提示: 使用 /investment-coach {context_path} 生成 AI 投资教练点评[/dim]")
+        console.print(
+            f"\n[dim]提示: 使用 /investment-coach {context_path} 生成 AI 投资教练点评[/dim]"
+        )
 
         # Success message
         print_success(
@@ -3118,7 +3157,13 @@ def contract_group():
 
 @contract_group.command("list")
 @click.option("--market", "-m", type=click.Choice(["HK", "US"]), help="筛选市场")
-@click.option("--type", "-t", "contract_type", type=click.Choice(["WARRANT", "OPTION"]), help="合约类型")
+@click.option(
+    "--type",
+    "-t",
+    "contract_type",
+    type=click.Choice(["WARRANT", "OPTION"]),
+    help="合约类型",
+)
 @click.option("--expired", is_flag=True, help="显示已到期合约")
 def contract_list(market: str, contract_type: str, expired: bool):
     """列出衍生品合约信息"""
@@ -3141,7 +3186,9 @@ def contract_list(market: str, contract_type: str, expired: bool):
     for c in contracts:
         multiplier = c.contract_multiplier or c.conversion_ratio or 1
         expiry = c.expiry_date.isoformat() if c.expiry_date else "N/A"
-        print(f"{c.full_code:<25} {c.contract_type:<10} {float(multiplier):<12.2f} {c.data_source:<8} {expiry:<12}")
+        print(
+            f"{c.full_code:<25} {c.contract_type:<10} {float(multiplier):<12.2f} {c.data_source:<8} {expiry:<12}"
+        )
 
     print(f"\n共 {len(contracts)} 条记录")
     service.close()
@@ -3215,9 +3262,13 @@ def contract_sync(user: str):
 
     with get_session() as session:
         # 获取用户的所有交易
-        trades = session.query(Trade.market, Trade.code, Trade.stock_name).join(
-            Account, Trade.account_id == Account.id
-        ).filter(Account.user_id == db_user.id).distinct().all()
+        trades = (
+            session.query(Trade.market, Trade.code, Trade.stock_name)
+            .join(Account, Trade.account_id == Account.id)
+            .filter(Account.user_id == db_user.id)
+            .distinct()
+            .all()
+        )
 
         # 筛选衍生品
         derivatives = [(m, c, n) for m, c, n in trades if is_derivative_code(m, c)]
@@ -3296,7 +3347,9 @@ def contract_info(code: str):
 
 @cli.command()
 @click.option("--host", default=None, help="Server host (default from config)")
-@click.option("--port", default=None, type=int, help="Server port (default from config)")
+@click.option(
+    "--port", default=None, type=int, help="Server port (default from config)"
+)
 @click.option("--reload", is_flag=True, help="Enable auto-reload for development")
 def serve(host, port, reload):
     """启动 Web 服务 (Dashboard + 钉钉网关)"""

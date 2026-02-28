@@ -435,6 +435,8 @@ class SyncService:
         def _sync(sess: Session) -> SyncResult:
             synced = 0
             skipped = 0
+            reactivated = 0
+            deactivated = 0
 
             # Optionally clear existing watchlist
             if clear_existing:
@@ -453,33 +455,55 @@ class SyncService:
                     error_message=result.error_message,
                 )
 
-            # Get existing codes for this user
-            existing = sess.execute(
-                select(WatchlistItem.market, WatchlistItem.code).where(
+            # Build set of codes from Futu
+            futu_codes = set()
+            for item in result.data:
+                item: WatchlistInfo
+                futu_codes.add((item.market.value, item.code))
+
+            # Get all existing DB items for this user (keyed by market+code)
+            db_items = sess.scalars(
+                select(WatchlistItem).where(
                     WatchlistItem.user_id == user_id
                 )
             ).all()
-            existing_codes = {(r.market, r.code) for r in existing}
+            db_map = {(item.market, item.code): item for item in db_items}
 
-            # Sync each item
+            # Sync each Futu item
             for item in result.data:
-                item: WatchlistInfo
                 key = (item.market.value, item.code)
+                existing = db_map.get(key)
 
-                if key in existing_codes:
-                    skipped += 1
-                    continue
+                if existing:
+                    if not existing.is_active:
+                        # Reactivate previously removed item
+                        existing.is_active = True
+                        existing.stock_name = item.stock_name
+                        existing.group_name = item.group_name
+                        reactivated += 1
+                    else:
+                        skipped += 1
+                else:
+                    # New item
+                    watchlist_item = WatchlistItem(
+                        user_id=user_id,
+                        market=item.market.value,
+                        code=item.code,
+                        stock_name=item.stock_name,
+                        group_name=item.group_name,
+                        is_active=True,
+                    )
+                    sess.add(watchlist_item)
+                    synced += 1
 
-                watchlist_item = WatchlistItem(
-                    user_id=user_id,
-                    market=item.market.value,
-                    code=item.code,
-                    stock_name=item.stock_name,
-                    group_name=item.group_name,
-                    is_active=True,
-                )
-                sess.add(watchlist_item)
-                synced += 1
+            # Soft-delete items no longer in Futu
+            for key, db_item in db_map.items():
+                if db_item.is_active and key not in futu_codes:
+                    db_item.is_active = False
+                    deactivated += 1
+                    logger.info(
+                        f"Deactivated watchlist item: {db_item.market}.{db_item.code} ({db_item.stock_name})"
+                    )
 
             sess.commit()
 
@@ -494,6 +518,8 @@ class SyncService:
                 details={
                     "groups": groups or ["全部", "港股", "美股", "沪深"],
                     "total_fetched": len(result.data),
+                    "reactivated": reactivated,
+                    "deactivated": deactivated,
                 },
             )
 

@@ -18,6 +18,7 @@ class Market(Enum):
     HK = "HK"  # Hong Kong
     US = "US"  # United States
     A = "A"  # China A-shares
+    JP = "JP"  # Japan
 
 
 class TradeSide(Enum):

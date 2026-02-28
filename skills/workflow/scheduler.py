@@ -192,6 +192,9 @@ class WorkflowScheduler:
         """
         Check if a date is a trading day.
 
+        Uses TradingCalendarService for holiday-aware checking,
+        falls back to weekday check if service is unavailable.
+
         Args:
             check_date: Date to check (default: today)
             market: Market code
@@ -202,12 +205,20 @@ class WorkflowScheduler:
         if check_date is None:
             check_date = date.today()
 
-        # Basic weekday check
-        if check_date.weekday() >= 5:  # Saturday = 5, Sunday = 6
+        # Basic weekday check first (fast path)
+        if check_date.weekday() >= 5:
             return False
 
-        # TODO: Add holiday calendar integration
-        return True
+        try:
+            from services.trading_calendar_service import (
+                create_trading_calendar_service,
+            )
+
+            svc = create_trading_calendar_service()
+            return svc.is_trading_day(market, check_date)
+        except Exception as e:
+            logger.warning(f"TradingCalendarService unavailable, using weekday check: {e}")
+            return True
 
     def get_last_trading_day_of_month(
         self,

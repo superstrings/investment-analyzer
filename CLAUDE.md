@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Investment Analyzer - a local investment analysis CLI tool for HK/US/A-share markets. Data comes from Futu OpenAPI (positions, trades) and akshare (K-line data), stored in PostgreSQL, analyzed with technical indicators, and output as charts/reports.
+Investment Analyzer - a local investment analysis system for HK/US/A/JP markets. Data comes from Futu OpenAPI (positions, trades) and akshare (K-line data), stored in PostgreSQL, analyzed with technical indicators, and output as charts/reports.
 
-No web interface. Interaction is via CLI (`python main.py ...`) and Claude Code slash commands.
+Interaction is via CLI (`python main.py ...`), Web Dashboard (FastAPI, `python main.py web`), MCP Server (Claude Desktop), and Claude Code slash commands.
 
 ## Commands
 
@@ -51,9 +51,9 @@ python main.py deep-analyze -u dyson --market HK --batch
 ```
 Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
                                                           ↓
-                              CLI (main.py)  ←  Services / Skills
-                                                    ↓
-                                            Analysis / Charts / Reports
+                    CLI / Web / MCP  ←  Services / Skills
+                                              ↓
+                                    Analysis / Charts / Reports / DingTalk
 ```
 
 ### Layer Responsibilities
@@ -62,7 +62,7 @@ Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
 
 - **`fetchers/`**: Two fetcher implementations, both following `BaseFetcher` → `FetchResult` pattern:
   - `FutuFetcher`: Connects to Futu OpenD for positions/trades/account info. Uses context manager for connection lifecycle.
-  - `KlineFetcher`: Uses akshare for candlestick data. Auto-detects market (HK/US/A) from stock code prefix and routes to the correct akshare API.
+  - `KlineFetcher`: Uses akshare (A/HK/US) and Futu API (JP) for candlestick data. Auto-detects market (HK/US/A/JP) from stock code prefix and routes to the correct API.
 
 - **`db/`**: SQLAlchemy 2.0 ORM with `Mapped[]` type annotations. Session management via `get_session()` context manager that auto-commits/rollbacks. Models: User → Account → Position/Trade, WatchlistItem, Kline, PriceAlert, SyncLog, DerivativeContract.
 
@@ -71,6 +71,8 @@ Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
   - `ChartService`: Generates mplfinance candlestick charts (single/batch)
   - `AlertService`: Price alert CRUD and triggering
   - `ExportService`: Multi-format data export (CSV/XLSX/JSON)
+  - `ExchangeRateService`: Real-time BOC exchange rates with 1hr cache for multi-currency CNY conversion
+  - `DingtalkService`: DingTalk bot message push (Webhook + HMAC signature)
 
 - **`analysis/`**: Technical analysis with `BaseIndicator.calculate(df)` pattern returning `IndicatorResult`. Indicators: MA/EMA/WMA, MACD, RSI, Bollinger Bands, OBV. Pattern detection: VCP, Cup-and-Handle, Head-and-Shoulders, Double Top/Bottom, Triangles. Also includes portfolio analysis (`PortfolioAnalyzer`) and support/resistance detection.
 
@@ -92,11 +94,15 @@ Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
 
 - **`cli/`**: Rich-based CLI utilities (colored output, tables, progress bars). Used by `main.py` Click commands.
 
+- **`api/`**: FastAPI web application with Jinja2 templates (Tailwind CSS dark theme). Token-based auth via cookie/Bearer/query param. Routes: dashboard, portfolio, manual positions CRUD, analysis, charts, signals, DingTalk webhook, plans. Auth middleware redirects unauthenticated users to `/login`.
+
+- **`mcp_server.py`**: MCP Server for Claude Desktop integration. Exposes analysis capabilities via MCP protocol.
+
 ### Key Patterns
 
 - **Factory functions**: Most components expose `create_*()` functions (e.g., `create_sync_service()`, `create_chart_service()`) that wire up dependencies.
 - **Dataclass results**: Operations return typed dataclass results (`FetchResult`, `SyncResult`, `ChartResult`, etc.) with `success` flag and `data`/`error` fields.
-- **Stock code format**: Always includes market prefix: `HK.00700`, `US.AAPL`, `SH.600519`, `SZ.000858`. The `KlineFetcher._parse_code()` method splits these.
+- **Stock code format**: Always includes market prefix: `HK.00700`, `US.AAPL`, `SH.600519`, `SZ.000858`, `JP.7203`. The `KlineFetcher._parse_code()` method splits these. Auto-detection: 6-digit→A, 5-digit→HK, 4-digit→JP, letters→US.
 - **Option detection**: `_is_option_code()` in `main.py` identifies options by code pattern (HK: letters in code; US: `SYMBOL+YYMMDD+C/P+STRIKE`).
 - **User resolution**: CLI commands take `-u dyson` flag → validated against `config/users.yaml` → looked up in DB as `User` record.
 
@@ -128,6 +134,8 @@ When starting a session: read `TASKS.md` and `claude-progress.txt` tail to under
 - Python 3.12 (asdf), venv in `.venv/`
 - PostgreSQL 17 (Homebrew, localhost:5432, DB: `investment_db`)
 - SQLAlchemy 2.0+ with `Mapped[]` annotations
+- FastAPI + Jinja2 + Tailwind CSS for Web UI
 - Click for CLI, Rich for output formatting
-- Futu OpenD must be running locally for data sync
+- Futu OpenD must be running locally for data sync (HK/US/JP markets)
 - Black + isort for formatting (configured in `pyproject.toml`)
+- Deployment: launchd (macOS) + frpc → nginx → Cloudflare Tunnel for external access

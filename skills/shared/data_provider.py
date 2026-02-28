@@ -43,6 +43,7 @@ class PositionData:
     pl_val: Decimal
     pl_ratio: Decimal
     position_side: str = "LONG"
+    source: str = "futu"
 
     @property
     def full_code(self) -> str:
@@ -188,6 +189,7 @@ class DataProvider:
                         pl_val=pos.pl_val,
                         pl_ratio=pos.pl_ratio,
                         position_side=pos.position_side,
+                        source=getattr(pos, "source", "futu"),
                     )
                 )
 
@@ -229,7 +231,9 @@ class DataProvider:
 
         watchlist = []
         with get_session() as session:
-            query = session.query(WatchlistItem).filter_by(user_id=user_id)
+            query = session.query(WatchlistItem).filter_by(
+                user_id=user_id, is_active=True
+            )
             if markets:
                 query = query.filter(WatchlistItem.market.in_(markets))
 
@@ -277,6 +281,8 @@ class DataProvider:
             # .SPX, .VIX are indices
             if code.startswith("."):
                 return False
+            return True
+        elif market == "JP":
             return True
         return True
 

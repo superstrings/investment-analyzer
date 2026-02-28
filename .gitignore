@@ -77,3 +77,7 @@ temp/
 
 # Export output
 exports/
+output/
+
+# Claude Code cache
+.claude/tsc-cache/

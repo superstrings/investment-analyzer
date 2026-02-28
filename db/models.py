@@ -154,6 +154,9 @@ class Position(Base):
     pl_val: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 2))  # 盈亏金额
     pl_ratio: Mapped[Optional[Decimal]] = mapped_column(Numeric(10, 4))  # 盈亏比例
     position_side: Mapped[str] = mapped_column(String(10), default="LONG")  # LONG/SHORT
+    source: Mapped[str] = mapped_column(
+        String(10), default="futu", server_default="futu"
+    )  # futu/manual
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     # Relationships
@@ -542,9 +545,7 @@ class Signal(Base):
     )  # stock/option/position
     score: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
     confidence: Mapped[Optional[Decimal]] = mapped_column(Numeric(5, 2))
-    strength: Mapped[Optional[str]] = mapped_column(
-        String(20)
-    )  # strong/moderate/weak
+    strength: Mapped[Optional[str]] = mapped_column(String(20))  # strong/moderate/weak
     trigger_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
     target_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
     stop_loss_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
@@ -660,9 +661,7 @@ class TradingPlanRecord(Base):
     target_price_2: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
     position_size: Mapped[Optional[str]] = mapped_column(String(50))
     reason: Mapped[Optional[str]] = mapped_column(Text)
-    signal_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("signals.id")
-    )
+    signal_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("signals.id"))
     status: Mapped[str] = mapped_column(
         String(20), default="pending"
     )  # pending/executed/cancelled/expired
@@ -676,9 +675,7 @@ class TradingPlanRecord(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User")
-    signal: Mapped[Optional["Signal"]] = relationship(
-        "Signal", back_populates="plans"
-    )
+    signal: Mapped[Optional["Signal"]] = relationship("Signal", back_populates="plans")
 
     def __repr__(self) -> str:
         return f"<TradingPlanRecord(id={self.id}, {self.action_type} {self.market}.{self.code})>"
@@ -733,6 +730,31 @@ class SignalFeedback(Base):
         return f"<SignalFeedback(id={self.id}, signal_id={self.signal_id}, {self.action_taken})>"
 
 
+class TradingCalendar(Base):
+    """
+    交易日历表 - 存储各市场交易日数据
+
+    Records trading days for HK/US/A/JP markets from Futu API or akshare.
+    trade_date_type: WHOLE (全天), MORNING (上午), AFTERNOON (下午)
+    """
+
+    __tablename__ = "trading_calendar"
+    __table_args__ = (
+        UniqueConstraint("market", "trade_date", name="uq_calendar_market_date"),
+        Index("ix_calendar_market", "market"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market: Mapped[str] = mapped_column(String(10), nullable=False)
+    trade_date: Mapped[date] = mapped_column(Date, nullable=False)
+    trade_date_type: Mapped[str] = mapped_column(String(20), default="WHOLE")
+    source: Mapped[str] = mapped_column(String(20), default="futu")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+    def __repr__(self) -> str:
+        return f"<TradingCalendar(market='{self.market}', date={self.trade_date}, type='{self.trade_date_type}')>"
+
+
 class NotificationLog(Base):
     """
     通知日志表
@@ -748,9 +770,7 @@ class NotificationLog(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id"))
-    channel: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="dingtalk"
-    )
+    channel: Mapped[str] = mapped_column(String(20), nullable=False, default="dingtalk")
     message_type: Mapped[str] = mapped_column(
         String(20), nullable=False
     )  # signal/alert/report/command
