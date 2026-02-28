@@ -172,8 +172,11 @@ function createAnalysisRow(r) {
 
     // Summary
     if (r.summary) {
+        const isError = r.summary.startsWith('分析出错') || r.summary.startsWith('分析超时') || r.summary.startsWith('分析失败');
         const summaryEl = document.createElement('div');
-        summaryEl.className = 'mt-1 text-xs text-gray-400 line-clamp-2';
+        summaryEl.className = isError
+            ? 'mt-1 text-xs text-red-400'
+            : 'mt-1 text-xs text-gray-400 line-clamp-2';
         summaryEl.textContent = r.summary;
         row.appendChild(summaryEl);
     }

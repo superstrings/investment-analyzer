@@ -55,9 +55,7 @@ async def api_analysis_results(
 
     data = []
     for r in results:
-        summary = ""
-        if r.result_json:
-            summary = r.result_json[:500]
+        summary = _make_summary(r.result_json)
         data.append(
             {
                 "id": r.id,
@@ -231,3 +229,37 @@ def _extract_rating(text: str) -> str | None:
         if kw in text:
             return kw
     return None
+
+
+def _make_summary(result_json: str | None) -> str:
+    """Extract a human-readable summary from result_json."""
+    if not result_json:
+        return ""
+    # Error messages
+    if result_json.startswith(("分析出错", "分析超时", "分析失败", "Claude CLI")):
+        return result_json
+    # Try JSON parse
+    try:
+        data = json.loads(result_json)
+    except (json.JSONDecodeError, TypeError):
+        return result_json[:300]
+    # Extract v12 analysis fields
+    v12 = data.get("v12_analysis") or data.get("v12_framework")
+    if v12:
+        labels = {
+            "1_trend": "趋势", "2_volume_price": "量价", "3_key_levels": "关键价位",
+            "4_pattern": "形态", "5_timing": "时机", "6_risk": "风险", "7_position": "仓位",
+            "trend": "趋势", "volume_price": "量价", "key_levels": "关键价位",
+            "pattern": "形态", "timing": "时机", "risk": "风险", "position": "仓位",
+        }
+        parts = []
+        for k, v in v12.items():
+            label = labels.get(k, k)
+            parts.append(f"{label}: {v}")
+        return " | ".join(parts)
+    # Generic JSON — return first-level string values
+    parts = []
+    for k, v in data.items():
+        if isinstance(v, str):
+            parts.append(v)
+    return " | ".join(parts) if parts else result_json[:300]

@@ -585,70 +585,136 @@ async function triggerAnalysis() {
     }, 5000);
 }
 
+function scoreColorClass(score) {
+    if (score >= 9) return 'bg-green-900 text-green-300';
+    if (score >= 7) return 'bg-blue-900 text-blue-300';
+    if (score >= 5) return 'bg-yellow-900 text-yellow-300';
+    if (score >= 3) return 'bg-orange-900 text-orange-300';
+    return 'bg-red-900 text-red-300';
+}
+
+const ratingColorMap = {
+    '极强加仓': 'bg-green-900 text-green-300', '强势持有': 'bg-blue-900 text-blue-300',
+    '观望': 'bg-yellow-900 text-yellow-300', '减仓': 'bg-orange-900 text-orange-300',
+    '止损': 'bg-red-900 text-red-300', 'HOLD': 'bg-yellow-900 text-yellow-300',
+    'BUY': 'bg-green-900 text-green-300', 'SELL': 'bg-red-900 text-red-300',
+    'WATCH': 'bg-blue-900 text-blue-300', 'REDUCE': 'bg-orange-900 text-orange-300',
+};
+
+// V12 analysis field labels
+const v12Labels = {
+    '1_trend': '趋势', '2_volume_price': '量价', '3_key_levels': '关键价位',
+    '4_pattern': '形态', '5_timing': '时机', '6_risk': '风险', '7_position': '仓位',
+    'trend': '趋势', 'volume_price': '量价', 'key_levels': '关键价位',
+    'pattern': '形态', 'timing': '时机', 'risk': '风险', 'position': '仓位',
+};
+
+function parseResultJson(text) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch(e) { return null; }
+}
+
 function renderAnalysisResult(r) {
     const section = document.getElementById('analysis-section');
     const content = document.getElementById('analysis-content');
-    if (!r) {
-        section.classList.add('hidden');
-        return;
-    }
+    if (!r) { section.classList.add('hidden'); return; }
     section.classList.remove('hidden');
     document.getElementById('analysis-date').textContent = r.analysis_date;
     content.textContent = '';
 
-    // Score row
-    const scoreRow = document.createElement('div');
-    scoreRow.className = 'flex items-center gap-3 flex-wrap';
+    const text = r.result_json || '';
+    const isError = text.startsWith('分析出错') || text.startsWith('分析超时') || text.startsWith('分析失败') || text.startsWith('Claude CLI');
 
-    if (r.overall_score !== null && r.overall_score !== undefined) {
-        const scoreEl = document.createElement('span');
-        let color = 'bg-gray-700 text-gray-300';
-        if (r.overall_score >= 9) color = 'bg-green-900 text-green-300';
-        else if (r.overall_score >= 7) color = 'bg-blue-900 text-blue-300';
-        else if (r.overall_score >= 5) color = 'bg-yellow-900 text-yellow-300';
-        else if (r.overall_score >= 3) color = 'bg-orange-900 text-orange-300';
-        else color = 'bg-red-900 text-red-300';
-        scoreEl.className = 'text-sm font-bold px-2 py-0.5 rounded ' + color;
-        scoreEl.textContent = r.overall_score.toFixed(1) + '/12';
-        scoreRow.appendChild(scoreEl);
+    // Error state
+    if (isError) {
+        const errDiv = document.createElement('div');
+        errDiv.className = 'flex items-center gap-2 text-sm text-red-400';
+        const icon = document.createElement('span');
+        icon.textContent = '!';
+        icon.className = 'flex-shrink-0 w-5 h-5 rounded-full bg-red-900 text-red-300 text-xs flex items-center justify-center font-bold';
+        errDiv.appendChild(icon);
+        const msg = document.createElement('span');
+        msg.textContent = text;
+        errDiv.appendChild(msg);
+        content.appendChild(errDiv);
+        return;
     }
 
-    if (r.rating) {
-        const ratingColors = {
-            '极强加仓': 'bg-green-900 text-green-300',
-            '强势持有': 'bg-blue-900 text-blue-300',
-            '观望': 'bg-yellow-900 text-yellow-300',
-            '减仓': 'bg-orange-900 text-orange-300',
-            '止损': 'bg-red-900 text-red-300',
-        };
-        const ratingEl = document.createElement('span');
-        ratingEl.className = 'text-xs px-1.5 py-0.5 rounded ' + (ratingColors[r.rating] || 'bg-gray-700 text-gray-300');
-        ratingEl.textContent = r.rating;
-        scoreRow.appendChild(ratingEl);
+    // Score header row
+    const hasScores = r.overall_score !== null && r.overall_score !== undefined;
+    if (hasScores || r.rating) {
+        const scoreRow = document.createElement('div');
+        scoreRow.className = 'flex items-center gap-2 flex-wrap';
+        if (hasScores) {
+            const scoreEl = document.createElement('span');
+            scoreEl.className = 'text-sm font-bold px-2 py-0.5 rounded ' + scoreColorClass(r.overall_score);
+            scoreEl.textContent = r.overall_score.toFixed(1) + '/12';
+            scoreRow.appendChild(scoreEl);
+        }
+        if (r.rating) {
+            const ratingEl = document.createElement('span');
+            ratingEl.className = 'text-xs px-1.5 py-0.5 rounded ' + (ratingColorMap[r.rating] || 'bg-gray-700 text-gray-300');
+            ratingEl.textContent = r.rating;
+            scoreRow.appendChild(ratingEl);
+        }
+        const meta = [];
+        if (r.obv_score !== null && r.obv_score !== undefined) meta.push('OBV: ' + r.obv_score.toFixed(1));
+        if (r.vcp_score !== null && r.vcp_score !== undefined) meta.push('VCP: ' + r.vcp_score.toFixed(1));
+        if (r.support) meta.push('支撑: ' + r.support.toFixed(2));
+        if (r.resistance) meta.push('阻力: ' + r.resistance.toFixed(2));
+        if (meta.length > 0) {
+            const metaSpan = document.createElement('span');
+            metaSpan.className = 'text-[10px] text-gray-500';
+            metaSpan.textContent = meta.join(' | ');
+            scoreRow.appendChild(metaSpan);
+        }
+        content.appendChild(scoreRow);
     }
 
-    const details = [];
-    if (r.obv_score !== null && r.obv_score !== undefined) details.push('OBV: ' + r.obv_score.toFixed(1));
-    if (r.vcp_score !== null && r.vcp_score !== undefined) details.push('VCP: ' + r.vcp_score.toFixed(1));
-    if (r.support) details.push('支撑: ' + r.support.toFixed(2));
-    if (r.resistance) details.push('阻力: ' + r.resistance.toFixed(2));
-    if (details.length > 0) {
-        const detailSpan = document.createElement('span');
-        detailSpan.className = 'text-[10px] text-gray-500';
-        detailSpan.textContent = details.join(' | ');
-        scoreRow.appendChild(detailSpan);
-    }
+    // Try structured JSON display
+    const parsed = parseResultJson(text);
+    const v12 = parsed && (parsed.v12_analysis || parsed.v12_framework);
+    if (v12) {
+        const grid = document.createElement('div');
+        grid.className = 'mt-2 grid grid-cols-1 gap-1';
+        Object.entries(v12).forEach(function(entry) {
+            const key = entry[0], val = entry[1];
+            const label = v12Labels[key] || key;
+            const row = document.createElement('div');
+            row.className = 'flex text-xs';
+            const labelEl = document.createElement('span');
+            labelEl.className = 'text-gray-500 w-14 flex-shrink-0';
+            labelEl.textContent = label;
+            const valEl = document.createElement('span');
+            valEl.className = 'text-gray-300';
+            valEl.textContent = val;
+            row.appendChild(labelEl);
+            row.appendChild(valEl);
+            grid.appendChild(row);
+        });
+        content.appendChild(grid);
 
-    content.appendChild(scoreRow);
-
-    // Result text
-    if (r.result_json) {
+        // Show indicators if present
+        if (parsed.indicators) {
+            const indRow = document.createElement('div');
+            indRow.className = 'mt-2 text-[10px] text-gray-500';
+            const parts = [];
+            const ind = parsed.indicators;
+            if (ind.rsi14) parts.push('RSI: ' + ind.rsi14.toFixed(1));
+            if (ind.macd_hist) parts.push('MACD: ' + ind.macd_hist.toFixed(3));
+            if (ind.bb_pctb) parts.push('BB%: ' + (ind.bb_pctb * 100).toFixed(0) + '%');
+            if (ind.vol_ratio) parts.push('量比: ' + ind.vol_ratio.toFixed(2));
+            if (ind.obv_trend) parts.push('OBV: ' + ind.obv_trend);
+            indRow.textContent = parts.join(' | ');
+            if (parts.length > 0) content.appendChild(indRow);
+        }
+    } else if (text && !isError) {
+        // Plain text fallback
         const textDiv = document.createElement('div');
         textDiv.className = 'mt-2 text-xs text-gray-400 whitespace-pre-wrap';
-        const isLong = r.result_json.length > 300;
-        textDiv.textContent = isLong ? r.result_json.substring(0, 300) + '...' : r.result_json;
+        const isLong = text.length > 300;
+        textDiv.textContent = isLong ? text.substring(0, 300) + '...' : text;
         content.appendChild(textDiv);
-
         if (isLong) {
             const expandBtn = document.createElement('button');
             expandBtn.className = 'mt-1 text-xs text-blue-400 hover:text-blue-300';
@@ -656,7 +722,7 @@ function renderAnalysisResult(r) {
             let expanded = false;
             expandBtn.onclick = function() {
                 expanded = !expanded;
-                textDiv.textContent = expanded ? r.result_json : r.result_json.substring(0, 300) + '...';
+                textDiv.textContent = expanded ? text : text.substring(0, 300) + '...';
                 expandBtn.textContent = expanded ? '收起' : '展开全文';
             };
             content.appendChild(expandBtn);
