@@ -50,7 +50,7 @@ class KlineSettings:
 
     default_days: int = 250
     cache_hours: int = 4
-    markets: tuple = ("HK", "US", "A")
+    markets: tuple = ("HK", "US", "A", "JP")
 
 
 @dataclass
@@ -96,14 +96,15 @@ class WebSettings:
     """Web server (FastAPI) configuration."""
 
     host: str = field(default_factory=lambda: os.getenv("WEB_HOST", "0.0.0.0"))
-    port: int = field(
-        default_factory=lambda: int(os.getenv("WEB_PORT", "8000"))
-    )
-    auth_token: str = field(
-        default_factory=lambda: os.getenv("WEB_AUTH_TOKEN", "")
-    )
+    port: int = field(default_factory=lambda: int(os.getenv("WEB_PORT", "8000")))
+    auth_token: str = field(default_factory=lambda: os.getenv("WEB_AUTH_TOKEN", ""))
+    username: str = field(default_factory=lambda: os.getenv("WEB_USERNAME", ""))
+    password: str = field(default_factory=lambda: os.getenv("WEB_PASSWORD", ""))
     default_user: str = field(
         default_factory=lambda: os.getenv("WEB_DEFAULT_USER", "dyson")
+    )
+    base_url: str = field(
+        default_factory=lambda: os.getenv("WEB_BASE_URL", "").rstrip("/")
     )
 
 

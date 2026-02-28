@@ -11,13 +11,55 @@ import logging
 from pathlib import Path
 
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import BaseHTTPMiddleware
 
 logger = logging.getLogger(__name__)
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+
+# Paths that don't require authentication
+PUBLIC_PATHS = {"/login", "/docs", "/openapi.json", "/favicon.ico"}
+# DingTalk webhook doesn't use cookie auth (uses its own verification)
+PUBLIC_PREFIXES = ("/api/dingtalk",)
+
+
+class AuthRedirectMiddleware(BaseHTTPMiddleware):
+    """Redirect unauthenticated requests to login page."""
+
+    async def dispatch(self, request: Request, call_next):
+        from config import settings
+
+        # Skip if no auth configured
+        if not settings.web.auth_token:
+            return await call_next(request)
+
+        path = request.url.path
+
+        # Allow public paths
+        if path in PUBLIC_PATHS or any(path.startswith(p) for p in PUBLIC_PREFIXES):
+            return await call_next(request)
+
+        # Check authentication
+        cookie_token = request.cookies.get("auth_token")
+        bearer = request.headers.get("authorization", "")
+        query_token = request.query_params.get("token", "")
+
+        authenticated = (
+            (cookie_token and cookie_token == settings.web.auth_token)
+            or (bearer.startswith("Bearer ") and bearer[7:] == settings.web.auth_token)
+            or (query_token and query_token == settings.web.auth_token)
+        )
+
+        if not authenticated:
+            # API requests get 401; page requests get redirected to login
+            if path.startswith("/api/"):
+                return JSONResponse({"detail": "Not authenticated"}, status_code=401)
+            return RedirectResponse(url="/login", status_code=302)
+
+        return await call_next(request)
 
 
 def create_app() -> FastAPI:
@@ -28,30 +70,43 @@ def create_app() -> FastAPI:
         version="0.2.0",
     )
 
+    # Auth middleware
+    app.add_middleware(AuthRedirectMiddleware)
+
     # Templates
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
     # Include API routes
     from api.routes.analysis import router as analysis_router
+    from api.routes.calendar import router as calendar_router
     from api.routes.charts import router as charts_router
     from api.routes.dashboard import router as dashboard_router
     from api.routes.dingtalk import router as dingtalk_router
+    from api.routes.manual_positions import router as manual_positions_router
     from api.routes.plans import router as plans_router
     from api.routes.portfolio import router as portfolio_router
     from api.routes.signals import router as signals_router
 
     app.include_router(dingtalk_router)
     app.include_router(portfolio_router)
+    app.include_router(manual_positions_router)
     app.include_router(signals_router)
     app.include_router(plans_router)
+    app.include_router(calendar_router)
     app.include_router(analysis_router)
     app.include_router(charts_router)
     app.include_router(dashboard_router)
 
-    # Login
+    # Login page
+    @app.get("/login", response_class=HTMLResponse)
+    async def login_page(request: Request):
+        """Render login page."""
+        return templates.TemplateResponse("login.html", {"request": request})
+
+    # Login action
     @app.post("/login")
     async def login(request: Request):
-        """Simple token login - set cookie."""
+        """Username/password login - set cookie and return JSON."""
         from config import settings
 
         try:
@@ -59,14 +114,25 @@ def create_app() -> FastAPI:
         except Exception:
             data = {}
 
-        token = data.get("token", "")
-        if not settings.web.auth_token or token == settings.web.auth_token:
-            response = RedirectResponse(url="/", status_code=303)
-            if settings.web.auth_token:
-                response.set_cookie("auth_token", token, httponly=True)
+        username = data.get("username", "")
+        password = data.get("password", "")
+
+        if (
+            settings.web.username
+            and username == settings.web.username
+            and password == settings.web.password
+        ):
+            response = JSONResponse({"success": True, "redirect": "/"})
+            response.set_cookie(
+                "auth_token", settings.web.auth_token, httponly=True, samesite="lax"
+            )
             return response
 
-        return HTMLResponse("认证失败", status_code=401)
+        # No auth configured — allow through
+        if not settings.web.username and not settings.web.auth_token:
+            return JSONResponse({"success": True, "redirect": "/"})
+
+        return JSONResponse({"success": False, "error": "用户名或密码错误"}, status_code=401)
 
     # Dashboard pages (HTML)
     @app.get("/", response_class=HTMLResponse)
@@ -84,5 +150,9 @@ def create_app() -> FastAPI:
     @app.get("/plans", response_class=HTMLResponse)
     async def plans_page(request: Request):
         return templates.TemplateResponse("plans.html", {"request": request})
+
+    @app.get("/calendar", response_class=HTMLResponse)
+    async def calendar_page(request: Request):
+        return templates.TemplateResponse("calendar.html", {"request": request})
 
     return app
