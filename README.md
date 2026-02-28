@@ -12,7 +12,7 @@
 
 - **多市场支持**: 港股 (HK) / 美股 (US) / A股 / 日股 (JP) 四市场
 - **数据采集**: 富途 OpenAPI 持仓/交易/K线 + akshare A股数据
-- **Web Dashboard**: FastAPI Web UI - 持仓总览、手动持仓管理、多币种汇率转换
+- **Web Dashboard**: FastAPI Web UI - 持仓总览、手动持仓管理、多币种汇率转换、价格提醒管理
 - **深度分析**: 技术面 + 基本面 + 行业 + 消息综合评分
 - **技术分析**: MA/MACD/RSI/布林带/OBV/VCP 指标计算
 - **形态识别**: VCP (波动收缩形态) 自动检测与评分
@@ -21,7 +21,8 @@
 - **AI 投资教练**: 基于 V12 分析框架 + V2 估值模型的 LLM 智能建议
 - **图表生成**: K线图 + 均线 + 成交量 (mplfinance)
 - **报告输出**: Markdown/JSON/HTML/Word/Excel 多格式报告
-- **钉钉推送**: 自动化消息通知 (支持 Webhook + 签名验证)
+- **价格提醒**: 止损/止盈/OCO 提醒 + 持仓行内 badge 显示
+- **钉钉推送**: 自动化消息通知 (支持 Webhook + 签名验证 + Dashboard 一键推送)
 - **MCP Server**: Claude Desktop 集成，支持 MCP 协议调用分析能力
 - **定时调度**: 盘前/盘后自动分析 + 钉钉推送工作流
 - **Skills 系统**: 分析师/风控/交易指导/市场观察/投资教练多角色
@@ -99,11 +100,14 @@ users:
 python main.py web
 
 # 功能:
-# - 持仓总览 (多币种自动转换为人民币)
+# - 持仓总览 (按市场排序, 多币种自动转换为人民币)
 # - 手动添加/编辑/删除持仓 (A股等非富途持仓)
+# - 价格提醒: 止损/止盈/OCO/突破/跌破 + 持仓行 badge 显示
+# - 操作计划 + 信号: 持仓行内显示当前计划和信号
+# - 交易日历: Futu + akshare + exchange_calendars 三级 fallback
 # - K线图表和技术分析
-# - 钉钉消息推送
-# - Token 认证保护
+# - 钉钉消息推送 (Dashboard 一键推送)
+# - 用户名/密码认证保护
 ```
 
 ### 日常分析 (推荐)
@@ -139,7 +143,7 @@ python main.py db-migrate
 | `/market-summary` | 三市场汇总报告 |
 | `/sync-all` | 同步所有数据 |
 | `/analyze-trades` | 交易分析 + AI 投资教练点评 |
-| `/investment-coach` | 投资教练 (基于 V10.10 框架) |
+| `/investment-coach` | 投资教练 (基于 V12 框架 + V2 估值模型) |
 
 ### CLI 命令
 
@@ -213,10 +217,13 @@ investment-analyzer/
 │   │   ├── dashboard.py    # 首页仪表盘
 │   │   ├── portfolio.py    # 持仓管理
 │   │   ├── manual_positions.py # 手动持仓 CRUD
-│   │   ├── analysis.py     # 分析接口
-│   │   ├── charts.py       # 图表接口
-│   │   ├── dingtalk.py     # 钉钉 Webhook
-│   │   └── signals.py      # 信号监控
+│   │   ├── alerts.py        # 价格提醒 CRUD API
+│   │   ├── calendar.py      # 交易日历
+│   │   ├── analysis.py      # 分析接口
+│   │   ├── charts.py        # 图表接口
+│   │   ├── dingtalk.py      # 钉钉 Webhook
+│   │   ├── plans.py         # 操作计划
+│   │   └── signals.py       # 信号监控
 │   └── templates/      # Jinja2 页面模板
 ├── analysis/           # 分析模块
 │   ├── indicators/     # 技术指标 (MA, RSI, MACD, BB, OBV, VCP)
@@ -238,6 +245,10 @@ investment-analyzer/
 │   ├── sync_service.py         # 数据同步
 │   ├── chart_service.py        # 图表服务
 │   ├── exchange_rate_service.py # 汇率转换 (BOC)
+│   ├── alert_service.py        # 价格提醒 (止损/止盈/OCO)
+│   ├── plan_service.py         # 操作计划管理
+│   ├── signal_service.py       # 信号管理
+│   ├── trading_calendar_service.py # 交易日历 (Futu/akshare/exchange_calendars)
 │   ├── dingtalk_service.py     # 钉钉消息推送
 │   └── ...
 ├── skills/             # Claude Code Skills
@@ -267,7 +278,7 @@ investment-analyzer/
 | 数据库 | PostgreSQL 17 |
 | ORM | SQLAlchemy 2.0 |
 | Web | FastAPI + Jinja2 + Tailwind CSS |
-| 数据采集 | futu-api, akshare |
+| 数据采集 | futu-api, akshare, exchange_calendars |
 | 图表 | mplfinance, matplotlib |
 | 报告 | Jinja2, python-docx, openpyxl |
 | 消息推送 | 钉钉 Webhook |
@@ -330,7 +341,7 @@ result = detect_vcp(df, config)
 - **统计指标**: 胜率、盈亏比、平均持仓、手续费统计
 - **市场分布**: 港股/美股/A股分别统计
 - **盈亏分布**: 按收益率区间统计
-- **AI 投资教练**: 基于 V10.10 框架的 LLM 智能建议
+- **AI 投资教练**: 基于 V12 框架 + V2 估值模型的 LLM 智能建议
 
 ```bash
 # 生成 2025 年交易分析报告

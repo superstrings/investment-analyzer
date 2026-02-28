@@ -77,6 +77,7 @@ def create_app() -> FastAPI:
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
     # Include API routes
+    from api.routes.alerts import router as alerts_router
     from api.routes.analysis import router as analysis_router
     from api.routes.calendar import router as calendar_router
     from api.routes.charts import router as charts_router
@@ -88,6 +89,7 @@ def create_app() -> FastAPI:
     from api.routes.signals import router as signals_router
 
     app.include_router(dingtalk_router)
+    app.include_router(alerts_router)
     app.include_router(portfolio_router)
     app.include_router(manual_positions_router)
     app.include_router(signals_router)

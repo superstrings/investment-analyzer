@@ -135,7 +135,7 @@ def get_positions(
                     "market_price": p.market_price,
                     "market_val": p.market_val,
                     "pl_val": p.pl_val,
-                    "pl_ratio": f"{float(p.pl_ratio or 0) * 100:.2f}%",
+                    "pl_ratio": f"{float(p.pl_ratio or 0):+.2f}%" if p.market in ("HK", "US", "JP") else f"{float(p.pl_ratio or 0) * 100:+.2f}%",
                     "side": p.position_side,
                 }
             )

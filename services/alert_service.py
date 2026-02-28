@@ -25,6 +25,9 @@ class AlertType(str, Enum):
     BELOW = "BELOW"  # Price goes below target
     CHANGE_UP = "CHANGE_UP"  # Price increases by percentage
     CHANGE_DOWN = "CHANGE_DOWN"  # Price decreases by percentage
+    STOP_LOSS = "STOP_LOSS"  # Stop loss (triggers when price <= target)
+    TAKE_PROFIT = "TAKE_PROFIT"  # Take profit (triggers when price >= target)
+    OCO = "OCO"  # One-Cancels-Other (stop_loss_price + take_profit_price)
 
 
 @dataclass
@@ -80,6 +83,8 @@ class AlertService:
         target_price: Optional[float] = None,
         target_change_pct: Optional[float] = None,
         base_price: Optional[float] = None,
+        stop_loss_price: Optional[float] = None,
+        take_profit_price: Optional[float] = None,
         stock_name: Optional[str] = None,
         notes: Optional[str] = None,
     ) -> PriceAlert:
@@ -90,10 +95,12 @@ class AlertService:
             user_id: User ID
             market: Market code (HK/US/A)
             code: Stock code
-            alert_type: Type of alert (ABOVE/BELOW/CHANGE_UP/CHANGE_DOWN)
+            alert_type: Type of alert
             target_price: Target price for ABOVE/BELOW alerts
             target_change_pct: Target change percentage for CHANGE alerts
             base_price: Base price for calculating change percentage
+            stop_loss_price: Stop loss price for STOP_LOSS/OCO alerts
+            take_profit_price: Take profit price for TAKE_PROFIT/OCO alerts
             stock_name: Optional stock name
             notes: Optional notes
 
@@ -107,7 +114,26 @@ class AlertService:
         if alert_type in (AlertType.ABOVE, AlertType.BELOW):
             if target_price is None:
                 raise ValueError(f"target_price is required for {alert_type} alerts")
-        else:  # CHANGE_UP/CHANGE_DOWN
+        elif alert_type == AlertType.STOP_LOSS:
+            if stop_loss_price is None and target_price is None:
+                raise ValueError(
+                    "stop_loss_price or target_price is required for STOP_LOSS alerts"
+                )
+            if stop_loss_price is None:
+                stop_loss_price = target_price
+        elif alert_type == AlertType.TAKE_PROFIT:
+            if take_profit_price is None and target_price is None:
+                raise ValueError(
+                    "take_profit_price or target_price is required for TAKE_PROFIT alerts"
+                )
+            if take_profit_price is None:
+                take_profit_price = target_price
+        elif alert_type == AlertType.OCO:
+            if stop_loss_price is None or take_profit_price is None:
+                raise ValueError(
+                    "Both stop_loss_price and take_profit_price are required for OCO alerts"
+                )
+        elif alert_type in (AlertType.CHANGE_UP, AlertType.CHANGE_DOWN):
             if target_change_pct is None:
                 raise ValueError(
                     f"target_change_pct is required for {alert_type} alerts"
@@ -126,6 +152,12 @@ class AlertService:
                 Decimal(str(target_change_pct)) if target_change_pct else None
             ),
             base_price=Decimal(str(base_price)) if base_price else None,
+            stop_loss_price=(
+                Decimal(str(stop_loss_price)) if stop_loss_price else None
+            ),
+            take_profit_price=(
+                Decimal(str(take_profit_price)) if take_profit_price else None
+            ),
             notes=notes,
             is_active=True,
             is_triggered=False,
@@ -290,6 +322,28 @@ class AlertService:
                     triggered = True
                     message = f"{alert.full_code} 跌幅达 {change_pct:.2%} (目标: -{abs(target_pct):.2%})"
 
+        elif alert_type == AlertType.STOP_LOSS:
+            sl = float(alert.stop_loss_price or alert.target_price or 0)
+            if sl > 0 and current_price <= sl:
+                triggered = True
+                message = f"{alert.full_code} 触发止损 {sl:.2f} (现价: {current_price:.2f})"
+
+        elif alert_type == AlertType.TAKE_PROFIT:
+            tp = float(alert.take_profit_price or alert.target_price or 0)
+            if tp > 0 and current_price >= tp:
+                triggered = True
+                message = f"{alert.full_code} 触发止盈 {tp:.2f} (现价: {current_price:.2f})"
+
+        elif alert_type == AlertType.OCO:
+            sl = float(alert.stop_loss_price or 0)
+            tp = float(alert.take_profit_price or 0)
+            if sl > 0 and current_price <= sl:
+                triggered = True
+                message = f"{alert.full_code} OCO止损触发 {sl:.2f} (现价: {current_price:.2f})"
+            elif tp > 0 and current_price >= tp:
+                triggered = True
+                message = f"{alert.full_code} OCO止盈触发 {tp:.2f} (现价: {current_price:.2f})"
+
         return AlertResult(
             alert_id=alert.id,
             triggered=triggered,
@@ -363,6 +417,39 @@ class AlertService:
                 summary.results.append(result)
 
         return summary
+
+    def get_alerts_by_codes(
+        self, user_id: int, codes: list[str]
+    ) -> dict[str, list[PriceAlert]]:
+        """
+        Get active alerts for multiple stock codes.
+
+        Args:
+            user_id: User ID
+            codes: List of full codes like ["HK.00700", "US.AAPL"]
+
+        Returns:
+            Dict mapping full_code to list of active alerts
+        """
+        session = self._get_session()
+        alerts = (
+            session.query(PriceAlert)
+            .filter(
+                PriceAlert.user_id == user_id,
+                PriceAlert.is_active == True,
+                PriceAlert.is_triggered == False,
+            )
+            .all()
+        )
+
+        code_set = set(codes)
+        result: dict[str, list[PriceAlert]] = {}
+        for alert in alerts:
+            fc = alert.full_code
+            if fc in code_set:
+                result.setdefault(fc, []).append(alert)
+
+        return result
 
     def reset_alert(self, alert_id: int) -> Optional[PriceAlert]:
         """

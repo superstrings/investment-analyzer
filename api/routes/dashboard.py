@@ -6,6 +6,7 @@ from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import func
 
 from api.auth import get_current_user
 
@@ -18,11 +19,10 @@ async def api_dashboard_summary(
 ):
     """Get dashboard summary data (positions + signals + plans)."""
     from db.database import get_session
-    from db.models import User
+    from db.models import Account, Position, User
     from services.exchange_rate_service import create_exchange_rate_service
     from services.plan_service import create_plan_service
     from services.signal_service import create_signal_service
-    from skills.shared.data_provider import DataProvider
 
     with get_session() as session:
         user = session.query(User).filter_by(username=username).first()
@@ -30,11 +30,35 @@ async def api_dashboard_summary(
             return {"error": "User not found"}
         user_id = user.id
 
-    dp = DataProvider(cache_ttl_seconds=60)
-    fx = create_exchange_rate_service()
+        # Get latest snapshot positions (same logic as portfolio API)
+        account_ids = [
+            acc.id
+            for acc in session.query(Account).filter_by(user_id=user_id).all()
+        ]
 
-    # Positions with CNY conversion
-    positions = dp.get_positions(user_id)
+        positions = []
+        if account_ids:
+            latest_dates = (
+                session.query(
+                    Position.account_id,
+                    func.max(Position.snapshot_date).label("max_date"),
+                )
+                .filter(Position.account_id.in_(account_ids))
+                .group_by(Position.account_id)
+                .subquery()
+            )
+            positions = (
+                session.query(Position)
+                .join(
+                    latest_dates,
+                    (Position.account_id == latest_dates.c.account_id)
+                    & (Position.snapshot_date == latest_dates.c.max_date),
+                )
+                .order_by(Position.market, Position.pl_ratio.desc())
+                .all()
+            )
+
+    fx = create_exchange_rate_service()
 
     total_val_cny = Decimal("0")
     total_pl_cny = Decimal("0")
@@ -43,8 +67,10 @@ async def api_dashboard_summary(
     for p in positions:
         currency = fx.get_market_currency(p.market)
         rate = fx.get_rate_to_cny(currency)
-        val_cny = p.market_val * rate
-        pl_cny = p.pl_val * rate
+        market_val = p.market_val or Decimal("0")
+        pl_val = p.pl_val or Decimal("0")
+        val_cny = market_val * rate
+        pl_cny = pl_val * rate
 
         total_val_cny += val_cny
         total_pl_cny += pl_cny
@@ -98,6 +124,35 @@ async def api_dashboard_summary(
         },
         "exchange_rates": {k: float(v) for k, v in rates.items()},
     }
+
+
+@router.post("/api/dashboard/push-dingtalk")
+async def api_push_dingtalk(username: str = Depends(get_current_user)):
+    """Push portfolio summary + plans to DingTalk."""
+    from api.routes.dingtalk import (
+        _format_plans_summary,
+        _format_positions_summary,
+        _format_signals_summary,
+        _get_default_user_id,
+    )
+    from services.dingtalk_service import create_dingtalk_service
+
+    user_id = _get_default_user_id()
+    if not user_id:
+        return {"success": False, "error": "User not found"}
+
+    dingtalk = create_dingtalk_service()
+    if not dingtalk.webhook_url:
+        return {"success": False, "error": "DingTalk not configured"}
+
+    positions_md = _format_positions_summary(user_id)
+    plans_md = _format_plans_summary(user_id)
+    signals_md = _format_signals_summary(user_id)
+
+    full_md = f"{positions_md}\n\n---\n\n{plans_md}\n\n---\n\n{signals_md}"
+    result = dingtalk.send_markdown("每日概览", full_md, user_id=user_id, message_type="portfolio_summary")
+
+    return {"success": result}
 
 
 @router.get("/api/exchange-rates")

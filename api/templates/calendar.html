@@ -253,14 +253,19 @@ async function doSync() {
         });
         var data = await resp.json();
         if (data.success) {
-            status.textContent = '\u540c\u6b65\u5b8c\u6210\uff0c\u5171 ' + data.count + ' \u4e2a\u4ea4\u6613\u65e5';
-            status.className = 'mt-3 text-sm text-green-400';
+            if (data.warning) {
+                status.textContent = '同步完成 ' + data.count + ' 个交易日，' + data.warning;
+                status.className = 'mt-3 text-sm text-yellow-400';
+            } else {
+                status.textContent = '同步完成，共 ' + data.count + ' 个交易日';
+                status.className = 'mt-3 text-sm text-green-400';
+            }
             setTimeout(function() {
                 closeSyncModal();
                 loadCalendar();
-            }, 1000);
+            }, 1500);
         } else {
-            status.textContent = '\u540c\u6b65\u5931\u8d25: ' + (data.error || '\u672a\u77e5\u9519\u8bef');
+            status.textContent = '同步失败: ' + (data.error || '未知错误');
             status.className = 'mt-3 text-sm text-red-400';
         }
     } catch (e) {

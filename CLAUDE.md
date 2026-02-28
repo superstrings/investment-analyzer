@@ -69,9 +69,12 @@ Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
 - **`services/`**: Business logic orchestration layer. Each service has a `create_*_service()` factory function:
   - `SyncService`: Coordinates fetcher → database storage with incremental sync (dedup by deal_id/date)
   - `ChartService`: Generates mplfinance candlestick charts (single/batch)
-  - `AlertService`: Price alert CRUD and triggering
+  - `AlertService`: Price alert CRUD and triggering (ABOVE/BELOW/STOP_LOSS/TAKE_PROFIT/OCO types)
+  - `PlanService`: Trading plan CRUD with execution tracking + batch query by codes
+  - `SignalService`: Signal management + accuracy tracking + batch query by codes
+  - `TradingCalendarService`: Trading day sync with 3-level fallback (Futu → akshare → exchange_calendars)
   - `ExportService`: Multi-format data export (CSV/XLSX/JSON)
-  - `ExchangeRateService`: Real-time BOC exchange rates with 1hr cache for multi-currency CNY conversion
+  - `ExchangeRateService`: Real-time BOC exchange rates with DB persistence for multi-currency CNY conversion
   - `DingtalkService`: DingTalk bot message push (Webhook + HMAC signature)
 
 - **`analysis/`**: Technical analysis with `BaseIndicator.calculate(df)` pattern returning `IndicatorResult`. Indicators: MA/EMA/WMA, MACD, RSI, Bollinger Bands, OBV. Pattern detection: VCP, Cup-and-Handle, Head-and-Shoulders, Double Top/Bottom, Triangles. Also includes portfolio analysis (`PortfolioAnalyzer`) and support/resistance detection.
@@ -94,7 +97,7 @@ Futu OpenD / akshare  →  Fetchers  →  SyncService  →  PostgreSQL
 
 - **`cli/`**: Rich-based CLI utilities (colored output, tables, progress bars). Used by `main.py` Click commands.
 
-- **`api/`**: FastAPI web application with Jinja2 templates (Tailwind CSS dark theme). Token-based auth via cookie/Bearer/query param. Routes: dashboard, portfolio, manual positions CRUD, analysis, charts, signals, DingTalk webhook, plans. Auth middleware redirects unauthenticated users to `/login`.
+- **`api/`**: FastAPI web application with Jinja2 templates (Tailwind CSS dark theme). Username/password auth via cookie/Bearer/query param. Routes: dashboard, portfolio (with alerts/plans/signals per position), manual positions CRUD, alerts CRUD, analysis, charts, signals, DingTalk webhook, plans, calendar. Auth middleware redirects unauthenticated users to `/login`.
 
 - **`mcp_server.py`**: MCP Server for Claude Desktop integration. Exposes analysis capabilities via MCP protocol.
 

@@ -5,10 +5,10 @@
 ## 项目概述
 
 **Investment Analyzer (投资分析自动化系统)** - 本地化投资分析工具
-- 数据源: 富途 OpenAPI (持仓/成交) + akshare (K线)
-- 功能: 自动数据采集、技术分析、K线图生成、报告输出
+- 数据源: 富途 OpenAPI (持仓/成交) + akshare (K线) + exchange_calendars (交易日历)
+- 功能: 自动数据采集、技术分析、K线图生成、报告输出、价格提醒、操作计划
 - 部署: Mac Mini M4 Pro 本地部署
-- 交互: CLI + Claude Code Skills (无 Web 界面)
+- 交互: CLI + Web Dashboard + Claude Code Skills + MCP Server + 钉钉
 
 ## 系统组件
 

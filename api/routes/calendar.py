@@ -64,7 +64,11 @@ async def api_calendar_sync(
     if market == "ALL":
         results = svc.sync_all_markets(year)
         total = sum(results.values())
-        return {"success": True, "count": total, "details": results}
+        failed = [m for m, c in results.items() if c == 0]
+        resp = {"success": True, "count": total, "details": results}
+        if failed:
+            resp["warning"] = f"以下市场同步失败: {', '.join(failed)}"
+        return resp
 
     if market not in SUPPORTED_MARKETS:
         return {"success": False, "error": f"Unsupported market: {market}"}
@@ -72,5 +76,12 @@ async def api_calendar_sync(
     start = date(year, 1, 1)
     end = date(year, 12, 31)
     count = svc.sync_market(market, start, end)
+
+    if count == 0:
+        return {
+            "success": False,
+            "count": 0,
+            "error": f"{market} 市场同步失败，请检查数据源连接",
+        }
 
     return {"success": True, "count": count}

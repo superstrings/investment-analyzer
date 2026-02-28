@@ -47,7 +47,10 @@ def _format_positions_summary(user_id: int) -> str:
 
     for p in positions:
         emoji = "📈" if p.pl_val >= 0 else "📉"
-        ratio_str = f"{float(p.pl_ratio or 0) * 100:+.2f}%"
+        raw_ratio = float(p.pl_ratio or 0)
+        # Futu (HK/US/JP) stores pl_ratio as percentage; A-share as decimal
+        pct = raw_ratio if p.market in ("HK", "US", "JP") else raw_ratio * 100
+        ratio_str = f"{pct:+.2f}%"
         lines.append(
             f"- {emoji} **{p.full_code}** {p.stock_name}: "
             f"¥{float(p.market_val):,.0f} ({ratio_str})"

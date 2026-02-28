@@ -26,6 +26,14 @@ FUTU_MARKET_MAP = {
     "JP": "JP_FUTURE",
 }
 
+# exchange_calendars exchange code mapping
+XCAL_MARKET_MAP = {
+    "HK": "XHKG",
+    "US": "XNYS",
+    "A": "XSHG",
+    "JP": "XTKS",
+}
+
 SUPPORTED_MARKETS = ("HK", "US", "A", "JP")
 
 
@@ -71,11 +79,15 @@ class TradingCalendarService:
             trading_days = self._fetch_from_futu(futu_market, start, end)
         except Exception as e:
             logger.warning(f"Futu API failed for {market}: {e}")
+            trading_days = []
+            # Fallback 1: akshare (A-share only)
             if market == "A":
                 logger.info("Falling back to akshare for A-share calendar")
                 trading_days = self._fetch_from_akshare(start, end)
-            else:
-                return 0
+            # Fallback 2: exchange_calendars (all markets)
+            if not trading_days:
+                logger.info(f"Falling back to exchange_calendars for {market}")
+                trading_days = self._fetch_from_exchange_calendars(market, start, end)
 
         if not trading_days:
             return 0
@@ -362,6 +374,40 @@ class TradingCalendarService:
 
         except Exception as e:
             logger.error(f"akshare fallback failed: {e}")
+            return []
+
+    def _fetch_from_exchange_calendars(
+        self, market: str, start: date, end: date
+    ) -> list[dict]:
+        """Fetch trading days from exchange_calendars package (offline fallback)."""
+        try:
+            import exchange_calendars as xcals
+
+            xcal_code = XCAL_MARKET_MAP.get(market)
+            if not xcal_code:
+                logger.warning(f"No exchange_calendars mapping for market: {market}")
+                return []
+
+            cal = xcals.get_calendar(xcal_code)
+            sessions = cal.sessions_in_range(
+                start.isoformat(), end.isoformat()
+            )
+
+            trading_days = []
+            for ts in sessions:
+                trading_days.append({
+                    "trade_date": ts.date(),
+                    "trade_date_type": "WHOLE",
+                    "source": "exchange_calendars",
+                })
+
+            logger.info(
+                f"Fetched {len(trading_days)} trading days from exchange_calendars ({xcal_code})"
+            )
+            return trading_days
+
+        except Exception as e:
+            logger.error(f"exchange_calendars fallback failed for {market}: {e}")
             return []
 
     def _upsert_trading_days(self, market: str, trading_days: list[dict]) -> int:

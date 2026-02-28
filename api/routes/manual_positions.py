@@ -4,17 +4,20 @@ Manual positions CRUD API.
 Allows adding/editing/deleting manually tracked positions.
 """
 
+import logging
 from datetime import date
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from sqlalchemy import and_
+from sqlalchemy import and_, func
 from sqlalchemy.orm import Session
 
 from api.auth import get_current_user
 from api.dependencies import get_db, resolve_user
 from db.models import Account, Position
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["manual_positions"])
 
@@ -214,3 +217,80 @@ async def delete_manual_position(
     db.commit()
 
     return {"success": True}
+
+
+@router.post("/api/positions/manual/refresh-prices")
+async def refresh_manual_prices(
+    username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Refresh market prices for all manual positions using kline data."""
+    from fetchers.kline_fetcher import KlineFetcher
+
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+
+    # Get all manual accounts
+    manual_acc = db.query(Account).filter_by(user_id=user.id, account_name="manual").first()
+    if not manual_acc:
+        return {"success": True, "updated": 0, "message": "无手动持仓"}
+
+    # Get latest manual positions
+    latest_date = (
+        db.query(func.max(Position.snapshot_date))
+        .filter(Position.account_id == manual_acc.id, Position.source == "manual")
+        .scalar()
+    )
+    if not latest_date:
+        return {"success": True, "updated": 0, "message": "无手动持仓"}
+
+    positions = (
+        db.query(Position)
+        .filter(
+            Position.account_id == manual_acc.id,
+            Position.snapshot_date == latest_date,
+            Position.source == "manual",
+        )
+        .all()
+    )
+
+    if not positions:
+        return {"success": True, "updated": 0, "message": "无手动持仓"}
+
+    fetcher = KlineFetcher()
+    updated = 0
+    errors = []
+
+    for p in positions:
+        full_code = f"{p.market}.{p.code}"
+        try:
+            result = fetcher.fetch(full_code, days=5)
+            if not result.success or not result.data:
+                errors.append(f"{full_code}: 无数据")
+                continue
+
+            # Use the latest close price
+            latest_kline = result.data[-1]
+            new_price = latest_kline.close
+
+            if new_price and new_price > 0:
+                p.market_price = new_price
+                p.market_val = p.qty * new_price
+                if p.cost_price and p.cost_price > 0:
+                    p.pl_val = (new_price - p.cost_price) * p.qty
+                    p.pl_ratio = (new_price - p.cost_price) / p.cost_price
+                updated += 1
+                logger.info(f"Updated {full_code} price to {new_price}")
+
+        except Exception as e:
+            logger.warning(f"Failed to fetch price for {full_code}: {e}")
+            errors.append(f"{full_code}: {str(e)[:50]}")
+
+    if updated > 0:
+        db.commit()
+
+    resp = {"success": True, "updated": updated, "total": len(positions)}
+    if errors:
+        resp["errors"] = errors
+    return resp

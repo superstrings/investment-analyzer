@@ -1,7 +1,7 @@
 """
 Exchange rate service for multi-currency portfolio valuation.
 
-Reads rates from DB (exchange_rates table). Supports manual refresh via BOC API.
+Reads rates from DB (exchange_rates table). Supports manual refresh via open.er-api.com.
 """
 
 import logging
@@ -85,15 +85,23 @@ class ExchangeRateService:
 
     def refresh_rates(self) -> dict:
         """
-        Fetch latest rates from BOC API and write to DB.
+        Fetch latest rates from open.er-api.com and write to DB.
 
         Returns dict with success status and rate data.
         """
+        rates = self._fetch_all_rates()
+        if rates is None:
+            return {
+                "success": False,
+                "rates": {},
+                "errors": ["USD", "HKD", "JPY"],
+                "message": "Failed to fetch rates from API",
+            }
+
         results = {}
         errors = []
-
         for currency in ["USD", "HKD", "JPY"]:
-            rate = self._fetch_rate(currency)
+            rate = rates.get(currency)
             if rate:
                 self._upsert_rate(currency, rate)
                 results[currency] = float(rate)
@@ -144,64 +152,43 @@ class ExchangeRateService:
                     )
                 )
 
-    def _fetch_rate(self, currency: str) -> Optional[Decimal]:
-        """Fetch exchange rate from akshare BOC API."""
+    def _fetch_all_rates(self) -> Optional[dict[str, Decimal]]:
+        """
+        Fetch all exchange rates from open.er-api.com in a single request.
+
+        Returns dict like {"USD": Decimal("7.25"), "HKD": Decimal("0.93"), "JPY": Decimal("0.048")}
+        or None on failure.
+        """
         try:
-            import akshare as ak
+            import requests
 
-            df = ak.currency_boc_safe()
-            if df is None or df.empty:
+            resp = requests.get(
+                "https://open.er-api.com/v6/latest/CNY", timeout=10
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            if data.get("result") != "success":
+                logger.warning(f"er-api returned non-success: {data}")
                 return None
 
-            currency_names = {
-                "USD": "美元",
-                "HKD": "港币",
-                "JPY": "日元",
-                "GBP": "英镑",
-                "EUR": "欧元",
-            }
+            api_rates = data.get("rates", {})
+            result = {}
+            for currency in ["USD", "HKD", "JPY"]:
+                foreign_per_cny = api_rates.get(currency)
+                if foreign_per_cny and float(foreign_per_cny) > 0:
+                    # API gives CNY→X rate; we need X→CNY = 1 / (CNY→X)
+                    result[currency] = Decimal("1") / Decimal(
+                        str(foreign_per_cny)
+                    )
+                else:
+                    logger.warning(f"No rate for {currency} in API response")
 
-            name = currency_names.get(currency)
-            if not name:
-                return None
-
-            name_col = None
-            for col in df.columns:
-                if "货币" in str(col) or "名称" in str(col):
-                    name_col = col
-                    break
-            if name_col is None:
-                name_col = df.columns[0]
-
-            row = df[df[name_col].astype(str).str.contains(name)]
-            if row.empty:
-                return None
-
-            rate_col = None
-            for col in df.columns:
-                if "折算" in str(col):
-                    rate_col = col
-                    break
-            if rate_col is None:
-                for col in df.columns:
-                    if "卖出" in str(col) and "现汇" in str(col):
-                        rate_col = col
-                        break
-            if rate_col is None:
-                rate_col = df.columns[-2]
-
-            rate_val = row.iloc[0][rate_col]
-            rate = Decimal(str(rate_val))
-
-            # BOC rates are per 100 units for JPY
-            if currency == "JPY":
-                rate = rate / Decimal("100")
-
-            logger.info(f"Fetched {currency}/CNY rate from BOC: {rate}")
-            return rate
+            logger.info(f"Fetched rates from er-api: {result}")
+            return result
 
         except Exception as e:
-            logger.warning(f"Failed to fetch rate for {currency}: {e}")
+            logger.warning(f"Failed to fetch rates from er-api: {e}")
             return None
 
     def convert_to_cny(self, amount: Decimal, currency: str) -> Decimal:

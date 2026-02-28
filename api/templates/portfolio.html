@@ -7,6 +7,9 @@
     <div class="flex justify-between items-center">
         <h1 class="text-lg font-bold">持仓详情</h1>
         <div class="flex items-center gap-2">
+            <button id="refresh-prices-btn" onclick="refreshManualPrices()" class="bg-green-700 hover:bg-green-600 text-white text-xs rounded px-3 py-1">
+                刷新行情
+            </button>
             <button onclick="showAddModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs rounded px-3 py-1">
                 + 手动添加
             </button>
@@ -37,6 +40,56 @@
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div id="p-list" class="divide-y divide-gray-800">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Alert Modal -->
+<div id="alert-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-md mx-4 p-5 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">管理提醒 - <span id="alert-code"></span></h3>
+            <button onclick="hideAlertModal()" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <!-- Existing alerts -->
+        <div id="alert-list" class="space-y-2 mb-4"></div>
+        <!-- Add new alert form -->
+        <div class="border-t border-gray-700 pt-3">
+            <div class="text-sm font-medium mb-2">添加提醒</div>
+            <div class="space-y-2">
+                <div>
+                    <select id="alert-type" onchange="onAlertTypeChange()"
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                        <option value="STOP_LOSS">止损</option>
+                        <option value="TAKE_PROFIT">止盈</option>
+                        <option value="OCO">OCO (止损+止盈)</option>
+                        <option value="ABOVE">价格突破</option>
+                        <option value="BELOW">价格跌破</option>
+                    </select>
+                </div>
+                <div id="alert-price-fields">
+                    <div id="alert-single-price" class="hidden">
+                        <label class="block text-xs text-gray-500 mb-1">目标价格</label>
+                        <input id="alert-target-price" type="number" step="0.01"
+                            class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                    </div>
+                    <div id="alert-sl-price" class="hidden">
+                        <label class="block text-xs text-gray-500 mb-1">止损价</label>
+                        <input id="alert-stop-loss" type="number" step="0.01"
+                            class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                    </div>
+                    <div id="alert-tp-price" class="hidden mt-2">
+                        <label class="block text-xs text-gray-500 mb-1">止盈价</label>
+                        <input id="alert-take-profit" type="number" step="0.01"
+                            class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                    </div>
+                </div>
+                <div id="alert-add-error" class="text-xs text-loss hidden"></div>
+                <button onclick="addAlert()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1.5">
+                    添加
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -134,6 +187,26 @@ document.getElementById('add-form').addEventListener('submit', async (e) => {
     }
 });
 
+async function refreshManualPrices() {
+    const btn = document.getElementById('refresh-prices-btn');
+    btn.disabled = true;
+    btn.textContent = '刷新中...';
+    try {
+        const resp = await fetch('/api/positions/manual/refresh-prices', {method: 'POST'});
+        const data = await resp.json();
+        if (data.success) {
+            btn.textContent = '✓ 更新' + data.updated + '只';
+            loadPortfolio();
+        } else {
+            btn.textContent = '✗ 失败';
+        }
+        setTimeout(() => { btn.textContent = '刷新行情'; btn.disabled = false; }, 2000);
+    } catch (e) {
+        btn.textContent = '✗ 失败';
+        setTimeout(() => { btn.textContent = '刷新行情'; btn.disabled = false; }, 2000);
+    }
+}
+
 async function deleteManualPosition(id) {
     if (!confirm('确定删除此手动持仓？')) return;
     await fetch('/api/positions/manual/' + id, {method: 'DELETE'});
@@ -165,6 +238,10 @@ function createDetailedPositionRow(p) {
     leftDiv.appendChild(codeLine);
     leftDiv.appendChild(nameLine);
 
+    // Alert badges
+    const alertBadges = createAlertBadgesPortfolio(p);
+    if (alertBadges) leftDiv.appendChild(alertBadges);
+
     const rightDiv = document.createElement('div');
     rightDiv.className = 'text-right flex items-center gap-2';
     const plDiv = document.createElement('div');
@@ -177,6 +254,14 @@ function createDetailedPositionRow(p) {
     plDiv.appendChild(plLine);
     plDiv.appendChild(ratioLine);
     rightDiv.appendChild(plDiv);
+
+    // Alert manage button
+    const alertBtn = document.createElement('button');
+    alertBtn.className = 'text-gray-500 hover:text-blue-400 text-xs';
+    alertBtn.textContent = '⏰';
+    alertBtn.title = '管理提醒';
+    alertBtn.onclick = () => showAlertModal(p);
+    rightDiv.appendChild(alertBtn);
 
     if (p.source === 'manual') {
         const delBtn = document.createElement('button');
@@ -206,6 +291,51 @@ function createDetailedPositionRow(p) {
 
     row.appendChild(topRow);
     row.appendChild(bottomRow);
+
+    // Plans section
+    const pendingPlans = (p.plans || []).filter(pl => pl.status === 'pending');
+    const historyPlans = (p.plans || []).filter(pl => pl.status !== 'pending');
+    if (pendingPlans.length > 0 || (p.signals || []).length > 0) {
+        const planRow = document.createElement('div');
+        planRow.className = 'mt-1.5 flex flex-wrap gap-1.5';
+        pendingPlans.forEach(pl => {
+            const tag = document.createElement('span');
+            const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
+            tag.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (prioColors[pl.priority] || 'bg-gray-700 text-gray-300');
+            tag.textContent = pl.action.toUpperCase() + (pl.entry_price ? ' @' + pl.entry_price : '');
+            tag.title = pl.reason || pl.action;
+            planRow.appendChild(tag);
+        });
+        (p.signals || []).forEach(sg => {
+            const tag = document.createElement('span');
+            const sigColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300', HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
+            tag.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (sigColors[sg.type] || 'bg-gray-700 text-gray-300');
+            tag.textContent = sg.type + (sg.score ? ' ' + sg.score.toFixed(0) + '分' : '');
+            tag.title = sg.reason || sg.type;
+            planRow.appendChild(tag);
+        });
+        row.appendChild(planRow);
+    }
+    if (historyPlans.length > 0) {
+        const histRow = document.createElement('div');
+        histRow.className = 'mt-1 flex flex-wrap gap-1';
+        historyPlans.slice(0, 3).forEach(pl => {
+            const tag = document.createElement('span');
+            const statusCls = pl.status === 'executed' ? 'text-green-600' : 'text-gray-600';
+            tag.className = 'text-[9px] px-1 rounded bg-gray-800/50 ' + statusCls;
+            tag.textContent = pl.action + '(' + pl.status + ') ' + pl.plan_date;
+            planRow = tag;
+            histRow.appendChild(tag);
+        });
+        if (historyPlans.length > 3) {
+            const more = document.createElement('span');
+            more.className = 'text-[9px] text-gray-600';
+            more.textContent = '+' + (historyPlans.length - 3) + '条';
+            histRow.appendChild(more);
+        }
+        row.appendChild(histRow);
+    }
+
     return row;
 }
 
@@ -234,6 +364,161 @@ async function loadPortfolio() {
     }
     data.positions.forEach(p => listEl.appendChild(createDetailedPositionRow(p)));
 }
+
+function createAlertBadgesPortfolio(p) {
+    const s = p.alert_summary;
+    if (!s) return null;
+    const badges = [];
+    if (s.stop_loss) badges.push({text:'止损', cls:'bg-red-900 text-red-300'});
+    if (s.take_profit) badges.push({text:'止盈', cls:'bg-green-900 text-green-300'});
+    if (s.oco) badges.push({text:'OCO', cls:'bg-purple-900 text-purple-300'});
+    if (s.price_alert) badges.push({text:'提醒', cls:'bg-yellow-900 text-yellow-300'});
+    if (badges.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'flex gap-1 mt-0.5';
+    badges.forEach(b => {
+        const span = document.createElement('span');
+        span.className = 'text-[9px] px-1 rounded ' + b.cls;
+        span.textContent = b.text;
+        wrap.appendChild(span);
+    });
+    return wrap;
+}
+
+let currentAlertPosition = null;
+
+function showAlertModal(p) {
+    currentAlertPosition = p;
+    document.getElementById('alert-code').textContent = p.code;
+    document.getElementById('alert-add-error').classList.add('hidden');
+    document.getElementById('alert-modal').classList.remove('hidden');
+    onAlertTypeChange();
+    renderAlertList(p);
+}
+
+function hideAlertModal() {
+    document.getElementById('alert-modal').classList.add('hidden');
+    currentAlertPosition = null;
+}
+
+function onAlertTypeChange() {
+    const type = document.getElementById('alert-type').value;
+    const singleEl = document.getElementById('alert-single-price');
+    const slEl = document.getElementById('alert-sl-price');
+    const tpEl = document.getElementById('alert-tp-price');
+
+    singleEl.classList.add('hidden');
+    slEl.classList.add('hidden');
+    tpEl.classList.add('hidden');
+
+    if (type === 'STOP_LOSS') {
+        slEl.classList.remove('hidden');
+    } else if (type === 'TAKE_PROFIT') {
+        tpEl.classList.remove('hidden');
+    } else if (type === 'OCO') {
+        slEl.classList.remove('hidden');
+        tpEl.classList.remove('hidden');
+    } else {
+        singleEl.classList.remove('hidden');
+    }
+}
+
+function renderAlertList(p) {
+    const listEl = document.getElementById('alert-list');
+    const alerts = p.alerts || [];
+    listEl.textContent = '';
+    if (alerts.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-xs text-gray-500';
+        empty.textContent = '暂无提醒';
+        listEl.appendChild(empty);
+        return;
+    }
+    alerts.forEach(a => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between items-center bg-gray-800 rounded px-3 py-2';
+        const info = document.createElement('div');
+        const typeBadge = document.createElement('span');
+        const typeColors = {
+            STOP_LOSS: 'bg-red-900 text-red-300',
+            TAKE_PROFIT: 'bg-green-900 text-green-300',
+            OCO: 'bg-purple-900 text-purple-300',
+            ABOVE: 'bg-yellow-900 text-yellow-300',
+            BELOW: 'bg-yellow-900 text-yellow-300',
+        };
+        typeBadge.className = 'text-[10px] px-1.5 py-0.5 rounded mr-2 ' + (typeColors[a.alert_type] || 'bg-gray-700 text-gray-300');
+        typeBadge.textContent = a.alert_type;
+        const desc = document.createElement('span');
+        desc.className = 'text-sm';
+        desc.textContent = a.description;
+        info.appendChild(typeBadge);
+        info.appendChild(desc);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'text-gray-500 hover:text-loss text-sm';
+        delBtn.textContent = '✕';
+        delBtn.onclick = () => deleteAlert(a.id);
+        row.appendChild(info);
+        row.appendChild(delBtn);
+        listEl.appendChild(row);
+    });
+}
+
+async function addAlert() {
+    const p = currentAlertPosition;
+    if (!p) return;
+
+    const errEl = document.getElementById('alert-add-error');
+    errEl.classList.add('hidden');
+
+    const type = document.getElementById('alert-type').value;
+    const parts = p.code.split('.');
+    const market = parts[0];
+    const code = parts.slice(1).join('.');
+
+    const body = {
+        market: market,
+        code: code,
+        alert_type: type,
+        stock_name: p.name,
+    };
+
+    if (type === 'STOP_LOSS') {
+        body.stop_loss_price = parseFloat(document.getElementById('alert-stop-loss').value);
+        if (!body.stop_loss_price) { errEl.textContent = '请输入止损价'; errEl.classList.remove('hidden'); return; }
+    } else if (type === 'TAKE_PROFIT') {
+        body.take_profit_price = parseFloat(document.getElementById('alert-take-profit').value);
+        if (!body.take_profit_price) { errEl.textContent = '请输入止盈价'; errEl.classList.remove('hidden'); return; }
+    } else if (type === 'OCO') {
+        body.stop_loss_price = parseFloat(document.getElementById('alert-stop-loss').value);
+        body.take_profit_price = parseFloat(document.getElementById('alert-take-profit').value);
+        if (!body.stop_loss_price || !body.take_profit_price) { errEl.textContent = '请输入止损价和止盈价'; errEl.classList.remove('hidden'); return; }
+    } else {
+        body.target_price = parseFloat(document.getElementById('alert-target-price').value);
+        if (!body.target_price) { errEl.textContent = '请输入目标价格'; errEl.classList.remove('hidden'); return; }
+    }
+
+    const resp = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.success) {
+        hideAlertModal();
+        loadPortfolio();
+    } else {
+        errEl.textContent = data.error || '添加失败';
+        errEl.classList.remove('hidden');
+    }
+}
+
+async function deleteAlert(id) {
+    await fetch('/api/alerts/' + id, {method: 'DELETE'});
+    // Refresh portfolio to get updated alerts
+    hideAlertModal();
+    loadPortfolio();
+}
+
 loadPortfolio();
 </script>
 {% endblock %}

@@ -10,6 +10,7 @@ Futu OpenD must be running locally for HK/A-share primary path.
 
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -92,6 +93,7 @@ class KlineFetcher:
         default_days: int = 250,
         futu_host: str = "127.0.0.1",
         futu_port: int = 11111,
+        futu_timeout: int = 30,
     ):
         """
         Initialize K-line fetcher.
@@ -100,10 +102,12 @@ class KlineFetcher:
             default_days: Default number of days to fetch
             futu_host: Futu OpenD host address
             futu_port: Futu OpenD port number
+            futu_timeout: Timeout in seconds for Futu API calls
         """
         self.default_days = default_days
         self.futu_host = futu_host
         self.futu_port = futu_port
+        self.futu_timeout = futu_timeout
         self._futu_ctx = None
 
     def fetch(
@@ -221,6 +225,27 @@ class KlineFetcher:
             return f"JP.{code}"
         return f"HK.{code}"
 
+    def _fetch_via_futu_with_timeout(
+        self,
+        futu_code: str,
+        start_date: date,
+        end_date: date,
+        market: Market,
+        pure_code: str,
+    ) -> KlineFetchResult:
+        """Fetch via Futu with a timeout to prevent hanging."""
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(
+                self._fetch_via_futu,
+                futu_code, start_date, end_date, market, pure_code,
+            )
+            try:
+                return future.result(timeout=self.futu_timeout)
+            except FuturesTimeoutError:
+                raise TimeoutError(
+                    f"Futu API timed out after {self.futu_timeout}s for {futu_code}"
+                )
+
     def _fetch_via_futu(
         self,
         futu_code: str,
@@ -313,7 +338,7 @@ class KlineFetcher:
         # 1. Try Futu API first
         try:
             futu_code = self._to_futu_code(Market.HK, code)
-            return self._fetch_via_futu(
+            return self._fetch_via_futu_with_timeout(
                 futu_code, start_date, end_date, Market.HK, code
             )
         except Exception as e:
@@ -345,7 +370,7 @@ class KlineFetcher:
         # 1. Try Futu API first
         try:
             futu_code = self._to_futu_code(Market.US, code)
-            return self._fetch_via_futu(
+            return self._fetch_via_futu_with_timeout(
                 futu_code, start_date, end_date, Market.US, code
             )
         except Exception as e:
@@ -377,7 +402,7 @@ class KlineFetcher:
         # 1. Try Futu API first
         try:
             futu_code = self._to_futu_code(Market.A, code)
-            return self._fetch_via_futu(futu_code, start_date, end_date, Market.A, code)
+            return self._fetch_via_futu_with_timeout(futu_code, start_date, end_date, Market.A, code)
         except Exception as e:
             logger.info(f"Futu fetch failed for A.{code}, falling back to akshare: {e}")
 
@@ -411,7 +436,7 @@ class KlineFetcher:
         """Fetch Japan stock K-line data. Futu API only (no akshare support)."""
         try:
             futu_code = self._to_futu_code(Market.JP, code)
-            return self._fetch_via_futu(
+            return self._fetch_via_futu_with_timeout(
                 futu_code, start_date, end_date, Market.JP, code
             )
         except Exception as e:

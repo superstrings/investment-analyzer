@@ -5,7 +5,7 @@ Handles CRUD operations for trading plans with execution tracking.
 """
 
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -131,6 +131,50 @@ class TradingPlanService:
             session.flush()
             session.expunge(plan)
             return plan
+
+    def get_plans_by_codes(
+        self,
+        user_id: int,
+        codes: list[str],
+        include_history: bool = False,
+    ) -> dict[str, list[TradingPlanRecord]]:
+        """
+        Get plans for multiple stock codes.
+
+        Args:
+            user_id: User ID
+            codes: List of full codes like ["HK.00700", "US.AAPL"]
+            include_history: If True, include executed/cancelled plans (last 30 days)
+
+        Returns:
+            Dict mapping full_code to list of plans
+        """
+        with get_session() as session:
+            query = session.query(TradingPlanRecord).filter(
+                TradingPlanRecord.user_id == user_id,
+            )
+            if not include_history:
+                query = query.filter(TradingPlanRecord.status == "pending")
+            else:
+                # Include recent history (last 30 days)
+                cutoff = date.today() - timedelta(days=30)
+                query = query.filter(TradingPlanRecord.plan_date >= cutoff)
+
+            query = query.order_by(
+                TradingPlanRecord.plan_date.desc(),
+                TradingPlanRecord.created_at.desc(),
+            )
+            plans = query.all()
+
+            code_set = set(codes)
+            result: dict[str, list[TradingPlanRecord]] = {}
+            for p in plans:
+                fc = p.full_code
+                if fc in code_set:
+                    session.expunge(p)
+                    result.setdefault(fc, []).append(p)
+
+            return result
 
     def expire_old_plans(self, user_id: int, before_date: date = None) -> int:
         """Expire old pending plans. Returns count of expired plans."""

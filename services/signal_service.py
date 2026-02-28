@@ -121,6 +121,42 @@ class SignalService:
                 session.expunge(s)
             return signals
 
+    def get_signals_by_codes(
+        self,
+        user_id: int,
+        codes: list[str],
+    ) -> dict[str, list[Signal]]:
+        """
+        Get active signals for multiple stock codes.
+
+        Args:
+            user_id: User ID
+            codes: List of full codes like ["HK.00700", "US.AAPL"]
+
+        Returns:
+            Dict mapping full_code to list of active signals
+        """
+        with get_session() as session:
+            signals = (
+                session.query(Signal)
+                .filter(
+                    Signal.user_id == user_id,
+                    Signal.is_active == True,
+                )
+                .order_by(Signal.created_at.desc())
+                .all()
+            )
+
+            code_set = set(codes)
+            result: dict[str, list[Signal]] = {}
+            for s in signals:
+                fc = f"{s.market}.{s.code}"
+                if fc in code_set:
+                    session.expunge(s)
+                    result.setdefault(fc, []).append(s)
+
+            return result
+
     def expire_old_signals(self, user_id: int) -> int:
         """Deactivate expired signals. Returns count of expired signals."""
         now = datetime.now()

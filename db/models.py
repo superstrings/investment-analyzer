@@ -381,6 +381,9 @@ class PriceAlert(Base):
     - BELOW: Price goes below target
     - CHANGE_UP: Price increases by percentage
     - CHANGE_DOWN: Price decreases by percentage
+    - STOP_LOSS: Stop loss (same as BELOW, semantic alias)
+    - TAKE_PROFIT: Take profit (same as ABOVE, semantic alias)
+    - OCO: One-Cancels-Other (stop_loss_price + take_profit_price)
     """
 
     __tablename__ = "price_alerts"
@@ -398,8 +401,10 @@ class PriceAlert(Base):
     stock_name: Mapped[Optional[str]] = mapped_column(String(100))
     alert_type: Mapped[str] = mapped_column(
         String(20), nullable=False
-    )  # ABOVE/BELOW/CHANGE_UP/CHANGE_DOWN
+    )  # ABOVE/BELOW/CHANGE_UP/CHANGE_DOWN/STOP_LOSS/TAKE_PROFIT/OCO
     target_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
+    stop_loss_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
+    take_profit_price: Mapped[Optional[Decimal]] = mapped_column(Numeric(18, 6))
     target_change_pct: Mapped[Optional[Decimal]] = mapped_column(
         Numeric(10, 4)
     )  # For percentage alerts
@@ -432,6 +437,12 @@ class PriceAlert(Base):
         """Get human-readable target description."""
         if self.alert_type in ("ABOVE", "BELOW"):
             return f"{self.alert_type.lower()} {self.target_price}"
+        elif self.alert_type == "STOP_LOSS":
+            return f"止损 {self.stop_loss_price or self.target_price}"
+        elif self.alert_type == "TAKE_PROFIT":
+            return f"止盈 {self.take_profit_price or self.target_price}"
+        elif self.alert_type == "OCO":
+            return f"止损 {self.stop_loss_price} / 止盈 {self.take_profit_price}"
         else:  # CHANGE_UP/CHANGE_DOWN
             sign = "+" if self.alert_type == "CHANGE_UP" else "-"
             return f"{sign}{abs(float(self.target_change_pct or 0)):.2%}"

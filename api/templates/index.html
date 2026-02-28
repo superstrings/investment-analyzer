@@ -41,7 +41,13 @@
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
             <h2 class="font-semibold">持仓</h2>
-            <a href="/portfolio" class="text-xs text-blue-400">详情</a>
+            <div class="flex items-center gap-2">
+                <button id="push-dingtalk-btn" onclick="pushToDingTalk()"
+                    class="text-xs bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded" title="推送到钉钉">
+                    📤 钉钉
+                </button>
+                <a href="/portfolio" class="text-xs text-blue-400">详情</a>
+            </div>
         </div>
         <div id="positions-list" class="divide-y divide-gray-800">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
@@ -88,6 +94,31 @@ function renderList(container, items, renderFn) {
     });
 }
 
+function currencySymbol(c) {
+    const map = {USD:'$', HKD:'HK$', JPY:'JP¥', CNY:'¥'};
+    return map[(c||'').toUpperCase()] || '¥';
+}
+
+function createAlertBadges(p) {
+    const s = p.alert_summary;
+    if (!s) return null;
+    const badges = [];
+    if (s.stop_loss) badges.push({text:'止损', cls:'bg-red-900 text-red-300'});
+    if (s.take_profit) badges.push({text:'止盈', cls:'bg-green-900 text-green-300'});
+    if (s.oco) badges.push({text:'OCO', cls:'bg-purple-900 text-purple-300'});
+    if (s.price_alert) badges.push({text:'提醒', cls:'bg-yellow-900 text-yellow-300'});
+    if (badges.length === 0) return null;
+    const wrap = document.createElement('div');
+    wrap.className = 'flex gap-1 mt-0.5';
+    badges.forEach(b => {
+        const span = document.createElement('span');
+        span.className = 'text-[9px] px-1 rounded ' + b.cls;
+        span.textContent = b.text;
+        wrap.appendChild(span);
+    });
+    return wrap;
+}
+
 function createPositionRow(p) {
     const row = document.createElement('div');
     row.className = 'px-4 py-2 flex justify-between items-center';
@@ -100,6 +131,22 @@ function createPositionRow(p) {
     name.textContent = p.name;
     left.appendChild(code);
     left.appendChild(name);
+    const alertBadges = createAlertBadges(p);
+    if (alertBadges) left.appendChild(alertBadges);
+    // Pending plan badges
+    const pendingPlans = (p.plans || []).filter(pl => pl.status === 'pending');
+    if (pendingPlans.length > 0) {
+        const planWrap = document.createElement('div');
+        planWrap.className = 'flex gap-1 mt-0.5';
+        pendingPlans.slice(0, 2).forEach(pl => {
+            const tag = document.createElement('span');
+            const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
+            tag.className = 'text-[9px] px-1 rounded ' + (prioColors[pl.priority] || 'bg-gray-700 text-gray-300');
+            tag.textContent = pl.action.toUpperCase();
+            planWrap.appendChild(tag);
+        });
+        left.appendChild(planWrap);
+    }
     const right = document.createElement('div');
     right.className = 'text-right';
     const ratio = document.createElement('div');
@@ -107,7 +154,7 @@ function createPositionRow(p) {
     ratio.textContent = formatPct(p.pl_ratio);
     const val = document.createElement('div');
     val.className = 'text-xs text-gray-500';
-    val.textContent = '¥' + formatNum(p.market_val);
+    val.textContent = currencySymbol(p.currency) + formatNum(p.market_val);
     right.appendChild(ratio);
     right.appendChild(val);
     row.appendChild(left);
@@ -201,6 +248,21 @@ async function refreshRates() {
         btn.disabled = false;
         btn.textContent = '刷新汇率';
         btn.classList.remove('opacity-50');
+    }
+}
+
+async function pushToDingTalk() {
+    const btn = document.getElementById('push-dingtalk-btn');
+    btn.disabled = true;
+    btn.textContent = '发送中...';
+    try {
+        const res = await fetch('/api/dashboard/push-dingtalk', {method: 'POST'});
+        const data = await res.json();
+        btn.textContent = data.success ? '✓ 已发送' : '✗ 失败';
+        setTimeout(() => { btn.textContent = '📤 钉钉'; btn.disabled = false; }, 2000);
+    } catch (e) {
+        btn.textContent = '✗ 失败';
+        setTimeout(() => { btn.textContent = '📤 钉钉'; btn.disabled = false; }, 2000);
     }
 }
 

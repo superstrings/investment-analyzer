@@ -14,8 +14,21 @@ from sqlalchemy.orm import Session
 from api.auth import get_current_user
 from api.dependencies import get_db, resolve_user
 from db.models import Account, AccountSnapshot, Position
+from services.alert_service import create_alert_service
 
 router = APIRouter(tags=["portfolio"])
+
+
+def _normalize_pl_ratio(market: str, pl_ratio) -> float:
+    """Normalize pl_ratio to decimal fraction (0.1768 = 17.68%).
+
+    Futu (HK/US/JP) stores as percentage (17.68 = 17.68%).
+    A-share manual positions store as decimal (0.2841 = 28.41%).
+    """
+    val = float(pl_ratio or 0)
+    if market in ("HK", "US", "JP") and abs(val) > 0:
+        return val / 100
+    return val
 
 
 @router.get("/api/portfolio")
@@ -24,8 +37,10 @@ async def api_portfolio(
     market: str = "",
     db: Session = Depends(get_db),
 ):
-    """Get portfolio positions."""
+    """Get portfolio positions with alerts, plans and signals."""
     from services.exchange_rate_service import create_exchange_rate_service
+    from services.plan_service import create_plan_service
+    from services.signal_service import create_signal_service
 
     user = resolve_user(db, username)
     if not user:
@@ -54,9 +69,22 @@ async def api_portfolio(
     if market:
         query = query.filter(Position.market == market)
 
-    positions = query.all()
+    positions = query.order_by(Position.market, Position.pl_ratio.desc()).all()
 
     fx = create_exchange_rate_service()
+
+    # Fetch alerts, plans, signals for all position codes
+    position_codes = [f"{p.market}.{p.code}" for p in positions]
+
+    alert_svc = create_alert_service(db)
+    alerts_by_code = alert_svc.get_alerts_by_codes(user.id, position_codes)
+
+    plan_svc = create_plan_service()
+    plans_by_code = plan_svc.get_plans_by_codes(user.id, position_codes, include_history=True)
+
+    signal_svc = create_signal_service()
+    signals_by_code = signal_svc.get_signals_by_codes(user.id, position_codes)
+
     result = []
     total_val_cny = Decimal("0")
     total_pl_cny = Decimal("0")
@@ -69,10 +97,17 @@ async def api_portfolio(
         val_cny = market_val * rate
         pl_cny = pl_val * rate
 
+        full_code = f"{p.market}.{p.code}"
+        code_alerts = alerts_by_code.get(full_code, [])
+        alert_types = {a.alert_type for a in code_alerts}
+
+        code_plans = plans_by_code.get(full_code, [])
+        code_signals = signals_by_code.get(full_code, [])
+
         result.append(
             {
                 "id": p.id,
-                "code": f"{p.market}.{p.code}",
+                "code": full_code,
                 "name": p.stock_name or "",
                 "qty": float(p.qty),
                 "cost_price": float(p.cost_price or 0),
@@ -81,10 +116,50 @@ async def api_portfolio(
                 "market_val_cny": float(val_cny),
                 "pl_val": float(pl_val),
                 "pl_val_cny": float(pl_cny),
-                "pl_ratio": float(p.pl_ratio or 0),
+                "pl_ratio": _normalize_pl_ratio(p.market, p.pl_ratio),
                 "currency": currency,
                 "side": p.position_side,
                 "source": getattr(p, "source", "futu"),
+                "alerts": [
+                    {
+                        "id": a.id,
+                        "alert_type": a.alert_type,
+                        "description": a.target_description,
+                    }
+                    for a in code_alerts
+                ],
+                "alert_summary": {
+                    "stop_loss": "STOP_LOSS" in alert_types,
+                    "take_profit": "TAKE_PROFIT" in alert_types,
+                    "oco": "OCO" in alert_types,
+                    "price_alert": bool(
+                        alert_types & {"ABOVE", "BELOW", "CHANGE_UP", "CHANGE_DOWN"}
+                    ),
+                },
+                "plans": [
+                    {
+                        "id": pl.id,
+                        "action": pl.action_type,
+                        "priority": pl.priority,
+                        "status": pl.status,
+                        "plan_date": pl.plan_date.isoformat(),
+                        "entry_price": float(pl.entry_price) if pl.entry_price else None,
+                        "stop_loss": float(pl.stop_loss_price) if pl.stop_loss_price else None,
+                        "target_1": float(pl.target_price_1) if pl.target_price_1 else None,
+                        "reason": pl.reason or "",
+                    }
+                    for pl in code_plans
+                ],
+                "signals": [
+                    {
+                        "id": sg.id,
+                        "type": sg.signal_type,
+                        "source": sg.signal_source,
+                        "score": float(sg.score) if sg.score else None,
+                        "reason": sg.reason or "",
+                    }
+                    for sg in code_signals
+                ],
             }
         )
         total_val_cny += val_cny

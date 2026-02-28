@@ -92,6 +92,42 @@ class DingtalkSettings:
 
 
 @dataclass
+class ProxySettings:
+    """HTTP proxy configuration."""
+
+    enabled: bool = field(
+        default_factory=lambda: os.getenv("USE_PROXY", "").lower() == "true"
+    )
+    http_proxy: str = field(
+        default_factory=lambda: os.getenv("HTTP_PROXY", "http://127.0.0.1:8118")
+    )
+    https_proxy: str = field(
+        default_factory=lambda: os.getenv("HTTPS_PROXY", "http://127.0.0.1:8118")
+    )
+
+    def apply(self) -> None:
+        """Apply proxy settings to environment (for requests/urllib)."""
+        proxy_keys = [
+            "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+            "http_proxy", "https_proxy", "all_proxy",
+        ]
+        if self.enabled:
+            for key in ("HTTP_PROXY", "http_proxy"):
+                os.environ[key] = self.http_proxy
+            for key in ("HTTPS_PROXY", "https_proxy"):
+                os.environ[key] = self.https_proxy
+        else:
+            for key in proxy_keys:
+                os.environ.pop(key, None)
+
+    def get_proxies(self) -> dict:
+        """Get proxies dict for requests library."""
+        if self.enabled:
+            return {"http": self.http_proxy, "https": self.https_proxy}
+        return {}
+
+
+@dataclass
 class WebSettings:
     """Web server (FastAPI) configuration."""
 
@@ -118,6 +154,7 @@ class Settings:
     chart: ChartSettings = field(default_factory=ChartSettings)
     report: ReportSettings = field(default_factory=ReportSettings)
     dingtalk: DingtalkSettings = field(default_factory=DingtalkSettings)
+    proxy: ProxySettings = field(default_factory=ProxySettings)
     web: WebSettings = field(default_factory=WebSettings)
 
     # Project paths
@@ -136,6 +173,7 @@ class Settings:
 
 # Global settings instance
 settings = Settings()
+settings.proxy.apply()
 
 
 def get_futu_password(username: str) -> Optional[str]:
@@ -156,12 +194,9 @@ def get_futu_password(username: str) -> Optional[str]:
 
 def get_proxy_settings() -> dict:
     """
-    Get proxy settings from environment variables.
+    Get proxy settings from configuration.
 
     Returns:
-        Dict with http and https proxy settings
+        Dict with http and https proxy settings (empty if disabled)
     """
-    return {
-        "http": os.getenv("HTTP_PROXY"),
-        "https": os.getenv("HTTPS_PROXY"),
-    }
+    return settings.proxy.get_proxies()
