@@ -117,7 +117,7 @@ def run_claude_prompt(prompt: str) -> str:
             ["claude", "-p", prompt, "--output-format", "text"],
             capture_output=True,
             text=True,
-            timeout=600,  # 10 min timeout for analysis
+            timeout=900,  # 15 min timeout for analysis (WebSearch + technical analysis)
             cwd=str(PROJECT_DIR),
             env=settings.proxy.get_subprocess_env(),
         )
@@ -283,13 +283,14 @@ def _analyze_single_stock(code: str, name: str, position_info: str) -> str:
 {V12_FRAMEWORK_PROMPT}
 
 请执行:
-1. 用 run_technical_analysis 对 {code} 做技术分析
-2. 按上述框架: 先估值筛选 → 通过后技术评分 → 信号判定
-3. 给出信号并用 save_signal 存储 (signal_source="post_market")
-4. 如有操作建议，用 create_plan 存储
-5. 如正股技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
+1. 用 WebSearch 搜索 "{name} forward PE PEG PB ROE 2025 2026" 获取最新估值数据 (Yahoo Finance / Google Finance / 东方财富)
+2. 用 run_technical_analysis 对 {code} 做技术分析
+3. 按上述框架: 先估值筛选 (用搜索到的估值数据) → 通过后技术评分 → 信号判定
+4. 给出信号并用 save_signal 存储 (signal_source="post_market")
+5. 如有操作建议，用 create_plan 存储
+6. 如正股技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
 
-直接输出简洁分析 (3-5行): 估值判断、技术评分X/12、信号、关键价位、操作建议。如有期权机会额外说明。"""
+直接输出简洁分析 (3-5行): 估值判断(含具体数据如Forward PE=xx)、技术评分X/12、信号、关键价位、操作建议。如有期权机会额外说明。"""
 
     return run_claude_prompt(prompt)
 
@@ -301,14 +302,15 @@ def _analyze_watchlist_stock(code: str, name: str, price_info: str) -> str:
 {V12_FRAMEWORK_PROMPT}
 
 请执行:
-1. 用 run_technical_analysis 对 {code} 做技术分析
-2. 按上述框架: 先估值筛选 → 通过后技术评分 → 信号判定
-3. 重点判断是否存在买入机会 (突破/回调到位/底部反转)
-4. 给出信号 (BUY/SELL/HOLD/WATCH) 并用 save_signal 存储 (signal_source="post_market")
-5. 如有明确交易机会，用 create_plan 创建操作计划 (含入场价、止损、目标价)
-6. 如技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
+1. 用 WebSearch 搜索 "{name} forward PE PEG PB ROE 2025 2026" 获取最新估值数据 (Yahoo Finance / Google Finance / 东方财富)
+2. 用 run_technical_analysis 对 {code} 做技术分析
+3. 按上述框架: 先估值筛选 (用搜索到的估值数据) → 通过后技术评分 → 信号判定
+4. 重点判断是否存在买入机会 (突破/回调到位/底部反转)
+5. 给出信号 (BUY/SELL/HOLD/WATCH) 并用 save_signal 存储 (signal_source="post_market")
+6. 如有明确交易机会，用 create_plan 创建操作计划 (含入场价、止损、目标价)
+7. 如技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
 
-直接输出简洁分析 (3-5行): 估值判断、技术评分X/12、信号、关键价位、是否值得建仓。如有期权机会额外说明。"""
+直接输出简洁分析 (3-5行): 估值判断(含具体数据如Forward PE=xx)、技术评分X/12、信号、关键价位、是否值得建仓。如有期权机会额外说明。"""
 
     return run_claude_prompt(prompt)
 
@@ -467,18 +469,19 @@ def run_pre_market(market: str):
 1. 用 get_signals 查看 {market} 市场活跃信号 (包括 signal_category=option 的期权信号)
 2. 用 get_plans 查看今日 {market} 市场操作计划
 3. 对关键持仓 (盈亏较大或有信号的) 用 get_klines 检查最新走势
-4. 按 V12 框架检查:
+4. 用 WebSearch 搜索持仓和关注个股的最新估值数据 (forward PE, PEG, PB, ROE)，可搜索 "股票名 forward PE 2025 2026" 或从 Yahoo Finance / 东方财富获取
+5. 按 V12 框架检查:
    - 止损触发: 股票亏损≥10% / 期权亏损≥30% → 列为 must_do
-   - 估值+技术面概要 (仅标注需要注意的)
+   - 估值+技术面概要 (用搜索到的数据，仅标注需要注意的)
    - 关注个股入场机会
    - 期权信号提示 (查看活跃期权信号)
-5. 生成盘前简报，包含:
+6. 生成盘前简报，包含:
    - 今日操作计划 (按优先级, 止损最优先)
    - 持仓风险提醒 (止损触发/破位/超涨)
    - 关键价位提示 (支撑/阻力)
    - 关注个股机会提示
    - 期权机会提示 (如有)
-6. 用 send_dingtalk_message 推送简报 (markdown 格式){url_hint}
+7. 用 send_dingtalk_message 推送简报 (markdown 格式){url_hint}
 
 直接输出盘前简报内容。"""
 
