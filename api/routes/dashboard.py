@@ -98,3 +98,22 @@ async def api_dashboard_summary(
         },
         "exchange_rates": {k: float(v) for k, v in rates.items()},
     }
+
+
+@router.get("/api/exchange-rates")
+async def api_exchange_rates(username: str = Depends(get_current_user)):
+    """Get current exchange rates with update timestamps."""
+    from services.exchange_rate_service import create_exchange_rate_service
+
+    fx = create_exchange_rate_service()
+    return {"rates": fx.get_all_rates_with_time()}
+
+
+@router.post("/api/exchange-rates/refresh")
+async def api_refresh_exchange_rates(username: str = Depends(get_current_user)):
+    """Trigger BOC API refresh and write updated rates to DB."""
+    from services.exchange_rate_service import create_exchange_rate_service
+
+    fx = create_exchange_rate_service()
+    result = fx.refresh_rates()
+    return result

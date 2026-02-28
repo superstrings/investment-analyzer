@@ -20,6 +20,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -753,6 +754,24 @@ class TradingCalendar(Base):
 
     def __repr__(self) -> str:
         return f"<TradingCalendar(market='{self.market}', date={self.trade_date}, type='{self.trade_date_type}')>"
+
+
+class ExchangeRate(Base):
+    """
+    汇率表 - 存储各币种对 CNY 的汇率
+
+    由 BOC API 刷新或手动设置，Dashboard 优先从 DB 读取避免外部 API 延迟。
+    """
+
+    __tablename__ = "exchange_rates"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    currency: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+    rate_to_cny: Mapped[Decimal] = mapped_column(Numeric(12, 6), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+    def __repr__(self) -> str:
+        return f"<ExchangeRate(currency='{self.currency}', rate={self.rate_to_cny})>"
 
 
 class NotificationLog(Base):

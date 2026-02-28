@@ -1,12 +1,11 @@
 """
 Exchange rate service for multi-currency portfolio valuation.
 
-Uses akshare to fetch real-time exchange rates from Bank of China.
-Converts foreign currency amounts to CNY.
+Reads rates from DB (exchange_rates table). Supports manual refresh via BOC API.
 """
 
 import logging
-import time
+from datetime import datetime
 from decimal import Decimal
 from typing import Optional
 
@@ -20,7 +19,7 @@ MARKET_CURRENCY_MAP = {
     "JP": "JPY",
 }
 
-# Fallback rates (approximate) if API fails
+# Fallback rates (used only when DB has no data)
 FALLBACK_RATES = {
     "USD": Decimal("7.25"),
     "HKD": Decimal("0.93"),
@@ -28,49 +27,125 @@ FALLBACK_RATES = {
     "CNY": Decimal("1"),
 }
 
-# Cache: {currency: (timestamp, rate)}
-_rate_cache: dict[str, tuple[float, Decimal]] = {}
-_CACHE_TTL = 3600  # 1 hour
-
 
 class ExchangeRateService:
-    """Service for currency exchange rate conversion."""
-
-    def __init__(self, cache_ttl: int = 3600):
-        self.cache_ttl = cache_ttl
+    """Service for currency exchange rate conversion. Reads from DB."""
 
     def get_rate_to_cny(self, currency: str) -> Decimal:
         """
         Get exchange rate from currency to CNY.
-
-        Args:
-            currency: Currency code (USD, HKD, JPY, CNY)
-
-        Returns:
-            Exchange rate (1 unit of currency = X CNY)
+        Reads from DB; falls back to hardcoded rate if DB has no record.
         """
         currency = currency.upper()
         if currency == "CNY":
             return Decimal("1")
 
-        # Check cache
-        cached = _rate_cache.get(currency)
-        if cached and (time.time() - cached[0]) < self.cache_ttl:
-            return cached[1]
+        from db.database import get_session
+        from db.models import ExchangeRate
 
-        # Fetch from akshare
-        rate = self._fetch_rate(currency)
-        if rate:
-            _rate_cache[currency] = (time.time(), rate)
-            return rate
+        with get_session() as session:
+            row = (
+                session.query(ExchangeRate)
+                .filter_by(currency=currency)
+                .first()
+            )
+            if row:
+                return row.rate_to_cny
 
-        # Fallback
         fallback = FALLBACK_RATES.get(currency, Decimal("1"))
-        logger.warning(f"Using fallback rate for {currency}: {fallback}")
+        logger.warning(f"No DB rate for {currency}, using fallback: {fallback}")
         return fallback
 
+    def get_all_rates(self) -> dict[str, Decimal]:
+        """Get all exchange rates to CNY."""
+        rates = {"CNY": Decimal("1")}
+        for currency in ["USD", "HKD", "JPY"]:
+            rates[currency] = self.get_rate_to_cny(currency)
+        return rates
+
+    def get_all_rates_with_time(self) -> list[dict]:
+        """
+        Return all rates with their updated_at timestamps.
+
+        Returns list of dicts: [{currency, rate_to_cny, updated_at}, ...]
+        """
+        from db.database import get_session
+        from db.models import ExchangeRate
+
+        with get_session() as session:
+            rows = session.query(ExchangeRate).all()
+            return [
+                {
+                    "currency": r.currency,
+                    "rate_to_cny": float(r.rate_to_cny),
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                }
+                for r in rows
+            ]
+
+    def refresh_rates(self) -> dict:
+        """
+        Fetch latest rates from BOC API and write to DB.
+
+        Returns dict with success status and rate data.
+        """
+        results = {}
+        errors = []
+
+        for currency in ["USD", "HKD", "JPY"]:
+            rate = self._fetch_rate(currency)
+            if rate:
+                self._upsert_rate(currency, rate)
+                results[currency] = float(rate)
+            else:
+                errors.append(currency)
+
+        if errors:
+            return {
+                "success": len(results) > 0,
+                "rates": results,
+                "errors": errors,
+                "message": f"Failed to refresh: {', '.join(errors)}",
+            }
+
+        return {
+            "success": True,
+            "rates": results,
+            "errors": [],
+            "message": "All rates refreshed successfully",
+        }
+
+    def set_rate(self, currency: str, rate: Decimal) -> None:
+        """Manually set a single exchange rate in DB."""
+        currency = currency.upper()
+        self._upsert_rate(currency, rate)
+        logger.info(f"Manually set {currency}/CNY = {rate}")
+
+    def _upsert_rate(self, currency: str, rate: Decimal) -> None:
+        """Insert or update a rate in DB."""
+        from db.database import get_session
+        from db.models import ExchangeRate
+
+        with get_session() as session:
+            row = (
+                session.query(ExchangeRate)
+                .filter_by(currency=currency)
+                .first()
+            )
+            if row:
+                row.rate_to_cny = rate
+                row.updated_at = datetime.now()
+            else:
+                session.add(
+                    ExchangeRate(
+                        currency=currency,
+                        rate_to_cny=rate,
+                        updated_at=datetime.now(),
+                    )
+                )
+
     def _fetch_rate(self, currency: str) -> Optional[Decimal]:
-        """Fetch exchange rate from akshare."""
+        """Fetch exchange rate from akshare BOC API."""
         try:
             import akshare as ak
 
@@ -78,8 +153,6 @@ class ExchangeRateService:
             if df is None or df.empty:
                 return None
 
-            # BOC safe rates have columns like: 货币名称, 现汇买入价, 现钞买入价, 现汇卖出价, 现钞卖出价, 中行折算价
-            # Map currency code to Chinese name
             currency_names = {
                 "USD": "美元",
                 "HKD": "港币",
@@ -92,13 +165,11 @@ class ExchangeRateService:
             if not name:
                 return None
 
-            # Find the row for our currency
             name_col = None
             for col in df.columns:
                 if "货币" in str(col) or "名称" in str(col):
                     name_col = col
                     break
-
             if name_col is None:
                 name_col = df.columns[0]
 
@@ -106,7 +177,6 @@ class ExchangeRateService:
             if row.empty:
                 return None
 
-            # Use 中行折算价 (BOC conversion rate) or 现汇卖出价
             rate_col = None
             for col in df.columns:
                 if "折算" in str(col):
@@ -127,7 +197,7 @@ class ExchangeRateService:
             if currency == "JPY":
                 rate = rate / Decimal("100")
 
-            logger.info(f"Fetched {currency}/CNY rate: {rate}")
+            logger.info(f"Fetched {currency}/CNY rate from BOC: {rate}")
             return rate
 
         except Exception as e:
@@ -142,13 +212,6 @@ class ExchangeRateService:
     def get_market_currency(self, market: str) -> str:
         """Get currency code for a market."""
         return MARKET_CURRENCY_MAP.get(market, "CNY")
-
-    def get_all_rates(self) -> dict[str, Decimal]:
-        """Get all exchange rates to CNY."""
-        rates = {"CNY": Decimal("1")}
-        for currency in ["USD", "HKD", "JPY"]:
-            rates[currency] = self.get_rate_to_cny(currency)
-        return rates
 
 
 def create_exchange_rate_service() -> ExchangeRateService:
