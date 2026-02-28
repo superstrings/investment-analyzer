@@ -53,6 +53,7 @@ from .dingtalk_service import DingtalkService, create_dingtalk_service
 from .plan_service import TradingPlanService, create_plan_service
 from .signal_service import SignalAccuracy, SignalService, create_signal_service
 from .sync_service import SyncResult, SyncService, create_sync_service
+from .watchlist_service import WatchlistService, create_watchlist_service
 
 __all__ = [
     # Sync service
@@ -94,4 +95,7 @@ __all__ = [
     # DingTalk service
     "DingtalkService",
     "create_dingtalk_service",
+    # Watchlist service
+    "WatchlistService",
+    "create_watchlist_service",
 ]

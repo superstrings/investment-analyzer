@@ -87,11 +87,13 @@ def create_app() -> FastAPI:
     from api.routes.plans import router as plans_router
     from api.routes.portfolio import router as portfolio_router
     from api.routes.signals import router as signals_router
+    from api.routes.watchlist import router as watchlist_router
 
     app.include_router(dingtalk_router)
     app.include_router(alerts_router)
     app.include_router(portfolio_router)
     app.include_router(manual_positions_router)
+    app.include_router(watchlist_router)
     app.include_router(signals_router)
     app.include_router(plans_router)
     app.include_router(calendar_router)
@@ -144,6 +146,10 @@ def create_app() -> FastAPI:
     @app.get("/portfolio", response_class=HTMLResponse)
     async def portfolio_page(request: Request):
         return templates.TemplateResponse("portfolio.html", {"request": request})
+
+    @app.get("/watchlist", response_class=HTMLResponse)
+    async def watchlist_page(request: Request):
+        return templates.TemplateResponse("watchlist.html", {"request": request})
 
     @app.get("/signals", response_class=HTMLResponse)
     async def signals_page(request: Request):

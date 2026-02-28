@@ -42,6 +42,19 @@
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
         </div>
     </div>
+
+    <!-- Historical Positions (collapsible) -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <button id="hist-toggle" onclick="toggleHistorical()" class="w-full px-4 py-3 flex justify-between items-center text-sm text-gray-400 hover:text-gray-200">
+            <span>历史持仓</span>
+            <span id="hist-arrow" class="transition-transform">&#9654;</span>
+        </button>
+        <div id="hist-section" class="hidden">
+            <div id="hist-list" class="divide-y divide-gray-800 opacity-70">
+                <div class="p-4 text-gray-500 text-sm">加载中...</div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Alert Modal -->
@@ -517,6 +530,83 @@ async function deleteAlert(id) {
     // Refresh portfolio to get updated alerts
     hideAlertModal();
     loadPortfolio();
+}
+
+let histLoaded = false;
+let histOpen = false;
+
+function toggleHistorical() {
+    histOpen = !histOpen;
+    const section = document.getElementById('hist-section');
+    const arrow = document.getElementById('hist-arrow');
+    if (histOpen) {
+        section.classList.remove('hidden');
+        arrow.style.transform = 'rotate(90deg)';
+        if (!histLoaded) {
+            loadHistorical();
+        }
+    } else {
+        section.classList.add('hidden');
+        arrow.style.transform = '';
+    }
+}
+
+async function loadHistorical() {
+    const market = document.getElementById('market-filter').value;
+    let url = '/api/portfolio/historical?limit=30';
+    if (market) url += '&market=' + market;
+
+    const data = await fetchData(url);
+    const listEl = document.getElementById('hist-list');
+    listEl.textContent = '';
+    histLoaded = true;
+
+    if (!data.snapshots || data.snapshots.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无历史持仓数据';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    data.snapshots.forEach(snap => {
+        // Date header
+        const header = document.createElement('div');
+        header.className = 'px-4 py-2 bg-gray-800/50 text-xs font-medium text-gray-400';
+        header.textContent = snap.date;
+        listEl.appendChild(header);
+
+        // Positions for this date
+        snap.positions.forEach(p => {
+            const row = document.createElement('div');
+            row.className = 'px-4 py-2 flex justify-between items-center text-sm';
+
+            const left = document.createElement('div');
+            const codeLine = document.createElement('div');
+            codeLine.className = 'font-medium text-gray-300';
+            codeLine.textContent = p.code;
+            const nameLine = document.createElement('div');
+            nameLine.className = 'text-xs text-gray-600';
+            nameLine.textContent = p.name;
+            left.appendChild(codeLine);
+            left.appendChild(nameLine);
+
+            const right = document.createElement('div');
+            right.className = 'text-right';
+            const valLine = document.createElement('div');
+            valLine.className = 'text-gray-400';
+            valLine.textContent = '数量: ' + formatNum(p.qty) + ' | 市值: ' + formatNum(p.market_val);
+            const plLine = document.createElement('div');
+            plLine.className = 'text-xs ' + plColor(p.pl_val);
+            plLine.textContent = '盈亏: ' + formatNum(p.pl_val) + ' (' + formatPct(p.pl_ratio) + ')';
+            right.appendChild(valLine);
+            right.appendChild(plLine);
+
+            row.appendChild(left);
+            row.appendChild(right);
+            listEl.appendChild(row);
+        });
+    });
 }
 
 loadPortfolio();

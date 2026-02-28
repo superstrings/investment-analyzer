@@ -1,0 +1,509 @@
+{% extends "base.html" %}
+{% block title %}关注 - Investment Analyzer{% endblock %}
+{% block nav_watchlist %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <h1 class="text-lg font-bold">关注列表</h1>
+        <div class="flex items-center gap-2">
+            <label class="flex items-center gap-1 text-xs text-gray-400 cursor-pointer">
+                <input type="checkbox" id="show-archived" onchange="loadWatchlist()" class="rounded bg-gray-800 border-gray-700">
+                显示已归档
+            </label>
+            <button onclick="showAddWatchlistModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs rounded px-3 py-1">
+                + 添加关注
+            </button>
+            <select id="market-filter" onchange="loadWatchlist()"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="">全部市场</option>
+                <option value="HK">港股</option>
+                <option value="US">美股</option>
+                <option value="A">A股</option>
+                <option value="JP">日股</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div id="w-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Watchlist Modal -->
+<div id="add-watchlist-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-sm mx-4 p-5">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">添加关注</h3>
+            <button onclick="hideAddWatchlistModal()" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <form id="add-watchlist-form" class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">市场</label>
+                    <select id="w-market" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                        <option value="HK">港股</option>
+                        <option value="US">美股</option>
+                        <option value="A">A股</option>
+                        <option value="JP">日股</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs text-gray-500 mb-1">代码</label>
+                    <input id="w-code" type="text" placeholder="00700" required
+                        class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">名称</label>
+                <input id="w-name" type="text" placeholder="腾讯控股"
+                    class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">分组</label>
+                <input id="w-group" type="text" placeholder="科技股"
+                    class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div>
+                <label class="block text-xs text-gray-500 mb-1">备注</label>
+                <input id="w-notes" type="text" placeholder="关注理由..."
+                    class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
+            </div>
+            <div id="add-watchlist-error" class="text-xs text-loss hidden"></div>
+            <div class="flex gap-2 pt-1">
+                <button type="button" onclick="hideAddWatchlistModal()"
+                    class="flex-1 bg-gray-700 hover:bg-gray-600 text-sm rounded px-3 py-1.5">取消</button>
+                <button type="submit"
+                    class="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-3 py-1.5">添加</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Signals Detail Modal -->
+<div id="signals-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-lg mx-4 p-5 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">信号详情 - <span id="sig-modal-code"></span></h3>
+            <button onclick="hideSignalsModal()" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <div id="sig-modal-list" class="space-y-2">
+            <div class="text-sm text-gray-500">加载中...</div>
+        </div>
+    </div>
+</div>
+
+<!-- Plans Detail Modal -->
+<div id="plans-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-lg mx-4 p-5 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold">计划详情 - <span id="plan-modal-code"></span></h3>
+            <button onclick="hidePlansModal()" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <div id="plan-modal-list" class="space-y-2">
+            <div class="text-sm text-gray-500">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showAddWatchlistModal() {
+    document.getElementById('add-watchlist-modal').classList.remove('hidden');
+    document.getElementById('add-watchlist-error').classList.add('hidden');
+}
+function hideAddWatchlistModal() {
+    document.getElementById('add-watchlist-modal').classList.add('hidden');
+    document.getElementById('add-watchlist-form').reset();
+}
+
+document.getElementById('add-watchlist-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const errEl = document.getElementById('add-watchlist-error');
+    errEl.classList.add('hidden');
+    const body = {
+        market: document.getElementById('w-market').value,
+        code: document.getElementById('w-code').value,
+        stock_name: document.getElementById('w-name').value || null,
+        group_name: document.getElementById('w-group').value || null,
+        notes: document.getElementById('w-notes').value || null,
+    };
+    const resp = await fetch('/api/watchlist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    const data = await resp.json();
+    if (data.success) {
+        hideAddWatchlistModal();
+        loadWatchlist();
+    } else {
+        errEl.textContent = data.error || '添加失败';
+        errEl.classList.remove('hidden');
+    }
+});
+
+function createWatchlistRow(item) {
+    const row = document.createElement('div');
+    row.className = 'px-4 py-3' + (item.is_active ? '' : ' opacity-50');
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex justify-between items-start';
+
+    // Left: code + name + group
+    const leftDiv = document.createElement('div');
+    const codeLine = document.createElement('div');
+    codeLine.className = 'font-medium flex items-center gap-1.5';
+    const codeText = document.createElement('span');
+    codeText.textContent = item.full_code;
+    codeLine.appendChild(codeText);
+    if (item.group_name) {
+        const groupBadge = document.createElement('span');
+        groupBadge.className = 'text-[10px] bg-gray-700 text-gray-300 px-1 rounded';
+        groupBadge.textContent = item.group_name;
+        codeLine.appendChild(groupBadge);
+    }
+    if (!item.is_active) {
+        const archBadge = document.createElement('span');
+        archBadge.className = 'text-[10px] bg-gray-800 text-gray-500 px-1 rounded';
+        archBadge.textContent = '已归档';
+        codeLine.appendChild(archBadge);
+    }
+    const nameLine = document.createElement('div');
+    nameLine.className = 'text-xs text-gray-500';
+    nameLine.textContent = item.stock_name;
+    leftDiv.appendChild(codeLine);
+    leftDiv.appendChild(nameLine);
+
+    // Right: price + change + actions
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'text-right flex items-center gap-2';
+
+    if (item.latest_price !== null && item.latest_price !== undefined) {
+        const priceDiv = document.createElement('div');
+        const priceLine = document.createElement('div');
+        priceLine.className = 'font-medium';
+        priceLine.textContent = item.latest_price.toFixed(2);
+        priceDiv.appendChild(priceLine);
+        if (item.change_pct !== null && item.change_pct !== undefined) {
+            const changeLine = document.createElement('div');
+            changeLine.className = 'text-sm ' + plColor(item.change_pct);
+            changeLine.textContent = formatPct(item.change_pct);
+            priceDiv.appendChild(changeLine);
+        }
+        rightDiv.appendChild(priceDiv);
+    } else {
+        const noPrice = document.createElement('div');
+        noPrice.className = 'text-xs text-gray-600';
+        noPrice.textContent = '无行情';
+        rightDiv.appendChild(noPrice);
+    }
+
+    // Toggle archive button
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'text-gray-500 hover:text-yellow-400 text-xs';
+    toggleBtn.textContent = item.is_active ? '归档' : '恢复';
+    toggleBtn.title = item.is_active ? '归档' : '恢复';
+    toggleBtn.onclick = () => toggleWatchlistItem(item.id);
+    rightDiv.appendChild(toggleBtn);
+
+    // Delete button
+    const delBtn = document.createElement('button');
+    delBtn.className = 'text-gray-600 hover:text-loss text-xs';
+    delBtn.textContent = '✕';
+    delBtn.onclick = () => deleteWatchlistItem(item.id);
+    rightDiv.appendChild(delBtn);
+
+    topRow.appendChild(leftDiv);
+    topRow.appendChild(rightDiv);
+    row.appendChild(topRow);
+
+    // Badges row: signals + plans
+    if (item.signals_count > 0 || item.plans_count > 0 || item.notes) {
+        const badgeRow = document.createElement('div');
+        badgeRow.className = 'mt-1.5 flex flex-wrap gap-1.5 items-center';
+
+        if (item.active_signals > 0 || item.signals_count > 0) {
+            const sigBadge = document.createElement('button');
+            sigBadge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-green-900 text-green-300 hover:bg-green-800 cursor-pointer';
+            const activeS = item.active_signals || 0;
+            const totalS = item.signals_count || 0;
+            sigBadge.textContent = '信号 ' + activeS + (totalS > activeS ? '/' + totalS : '');
+            sigBadge.onclick = () => showSignalsModal(item.market, item.code, item.full_code);
+            badgeRow.appendChild(sigBadge);
+        }
+
+        if (item.active_plans > 0 || item.plans_count > 0) {
+            const planBadge = document.createElement('button');
+            planBadge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-yellow-900 text-yellow-300 hover:bg-yellow-800 cursor-pointer';
+            const activeP = item.active_plans || 0;
+            const totalP = item.plans_count || 0;
+            planBadge.textContent = '计划 ' + activeP + (totalP > activeP ? '/' + totalP : '');
+            planBadge.onclick = () => showPlansModal(item.market, item.code, item.full_code);
+            badgeRow.appendChild(planBadge);
+        }
+
+        if (item.notes) {
+            const noteSpan = document.createElement('span');
+            noteSpan.className = 'text-[10px] text-gray-500';
+            noteSpan.textContent = item.notes;
+            badgeRow.appendChild(noteSpan);
+        }
+
+        row.appendChild(badgeRow);
+    }
+
+    return row;
+}
+
+async function loadWatchlist() {
+    const market = document.getElementById('market-filter').value;
+    const showArchived = document.getElementById('show-archived').checked;
+    let url = '/api/watchlist?active_only=' + (!showArchived);
+    if (market) url += '&market=' + market;
+
+    const data = await fetchData(url);
+    const listEl = document.getElementById('w-list');
+    listEl.textContent = '';
+
+    if (!data.items || data.items.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无关注';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    data.items.forEach(item => listEl.appendChild(createWatchlistRow(item)));
+}
+
+async function toggleWatchlistItem(id) {
+    await fetch('/api/watchlist/' + id + '/toggle', {method: 'POST'});
+    loadWatchlist();
+}
+
+async function deleteWatchlistItem(id) {
+    if (!confirm('确定删除此关注项？')) return;
+    await fetch('/api/watchlist/' + id, {method: 'DELETE'});
+    loadWatchlist();
+}
+
+// Signals modal
+function showSignalsModal(market, code, fullCode) {
+    document.getElementById('sig-modal-code').textContent = fullCode;
+    const listEl = document.getElementById('sig-modal-list');
+    listEl.textContent = '';
+    const loading = document.createElement('div');
+    loading.className = 'text-sm text-gray-500';
+    loading.textContent = '加载中...';
+    listEl.appendChild(loading);
+    document.getElementById('signals-modal').classList.remove('hidden');
+    loadStockSignals(market, code);
+}
+function hideSignalsModal() {
+    document.getElementById('signals-modal').classList.add('hidden');
+}
+
+async function loadStockSignals(market, code) {
+    const data = await fetchData('/api/watchlist/stock/' + market + '/' + code + '/signals');
+    const listEl = document.getElementById('sig-modal-list');
+    listEl.textContent = '';
+
+    if (!data.signals || data.signals.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-sm text-gray-500';
+        empty.textContent = '暂无信号记录';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    const sigColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300', HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
+
+    // Separate active and history
+    const active = data.signals.filter(s => s.is_active);
+    const history = data.signals.filter(s => !s.is_active);
+
+    if (active.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'text-xs font-medium text-gray-400 mb-1';
+        header.textContent = '当前信号';
+        listEl.appendChild(header);
+        active.forEach(s => listEl.appendChild(createSignalCard(s, sigColors, false)));
+    }
+
+    if (history.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'text-xs font-medium text-gray-400 mb-1 mt-3';
+        header.textContent = '历史信号';
+        listEl.appendChild(header);
+        history.forEach(s => listEl.appendChild(createSignalCard(s, sigColors, true)));
+    }
+}
+
+function createSignalCard(s, colors, isHistory) {
+    const card = document.createElement('div');
+    card.className = 'bg-gray-800 rounded px-3 py-2' + (isHistory ? ' opacity-60' : '');
+
+    const top = document.createElement('div');
+    top.className = 'flex justify-between items-center';
+
+    const leftSpan = document.createElement('div');
+    leftSpan.className = 'flex items-center gap-2';
+    const typeBadge = document.createElement('span');
+    typeBadge.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (colors[s.type] || 'bg-gray-700 text-gray-300');
+    typeBadge.textContent = s.type;
+    leftSpan.appendChild(typeBadge);
+    const srcSpan = document.createElement('span');
+    srcSpan.className = 'text-xs text-gray-400';
+    srcSpan.textContent = s.source;
+    leftSpan.appendChild(srcSpan);
+    if (s.score) {
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'text-xs text-gray-300';
+        scoreSpan.textContent = s.score.toFixed(0) + '分';
+        leftSpan.appendChild(scoreSpan);
+    }
+
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'text-[10px] text-gray-500';
+    dateSpan.textContent = s.created_at ? s.created_at.split('T')[0] : '';
+
+    top.appendChild(leftSpan);
+    top.appendChild(dateSpan);
+    card.appendChild(top);
+
+    if (s.reason) {
+        const reasonDiv = document.createElement('div');
+        reasonDiv.className = 'text-xs text-gray-400 mt-1';
+        reasonDiv.textContent = s.reason;
+        card.appendChild(reasonDiv);
+    }
+
+    const priceInfo = [];
+    if (s.trigger_price) priceInfo.push('触发: ' + s.trigger_price);
+    if (s.target_price) priceInfo.push('目标: ' + s.target_price);
+    if (s.stop_loss) priceInfo.push('止损: ' + s.stop_loss);
+    if (priceInfo.length > 0) {
+        const priceDiv = document.createElement('div');
+        priceDiv.className = 'text-[10px] text-gray-500 mt-1';
+        priceDiv.textContent = priceInfo.join(' | ');
+        card.appendChild(priceDiv);
+    }
+
+    return card;
+}
+
+// Plans modal
+function showPlansModal(market, code, fullCode) {
+    document.getElementById('plan-modal-code').textContent = fullCode;
+    const listEl = document.getElementById('plan-modal-list');
+    listEl.textContent = '';
+    const loading = document.createElement('div');
+    loading.className = 'text-sm text-gray-500';
+    loading.textContent = '加载中...';
+    listEl.appendChild(loading);
+    document.getElementById('plans-modal').classList.remove('hidden');
+    loadStockPlans(market, code);
+}
+function hidePlansModal() {
+    document.getElementById('plans-modal').classList.add('hidden');
+}
+
+async function loadStockPlans(market, code) {
+    const data = await fetchData('/api/watchlist/stock/' + market + '/' + code + '/plans');
+    const listEl = document.getElementById('plan-modal-list');
+    listEl.textContent = '';
+
+    if (!data.plans || data.plans.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'text-sm text-gray-500';
+        empty.textContent = '暂无计划记录';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    const pending = data.plans.filter(p => p.status === 'pending');
+    const history = data.plans.filter(p => p.status !== 'pending');
+
+    if (pending.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'text-xs font-medium text-gray-400 mb-1';
+        header.textContent = '待执行计划';
+        listEl.appendChild(header);
+        pending.forEach(p => listEl.appendChild(createPlanCard(p, false)));
+    }
+
+    if (history.length > 0) {
+        const header = document.createElement('div');
+        header.className = 'text-xs font-medium text-gray-400 mb-1 mt-3';
+        header.textContent = '历史计划';
+        listEl.appendChild(header);
+        history.forEach(p => listEl.appendChild(createPlanCard(p, true)));
+    }
+}
+
+function createPlanCard(p, isHistory) {
+    const card = document.createElement('div');
+    card.className = 'bg-gray-800 rounded px-3 py-2' + (isHistory ? ' opacity-60' : '');
+
+    const top = document.createElement('div');
+    top.className = 'flex justify-between items-center';
+
+    const leftSpan = document.createElement('div');
+    leftSpan.className = 'flex items-center gap-2';
+
+    const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
+    const actionBadge = document.createElement('span');
+    actionBadge.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (prioColors[p.priority] || 'bg-gray-700 text-gray-300');
+    actionBadge.textContent = p.action.toUpperCase();
+    leftSpan.appendChild(actionBadge);
+
+    const statusColors = {pending:'text-yellow-400', executed:'text-green-400', cancelled:'text-gray-500', expired:'text-gray-600'};
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'text-xs ' + (statusColors[p.status] || 'text-gray-400');
+    statusSpan.textContent = p.status;
+    leftSpan.appendChild(statusSpan);
+
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'text-[10px] text-gray-500';
+    dateSpan.textContent = p.plan_date;
+
+    top.appendChild(leftSpan);
+    top.appendChild(dateSpan);
+    card.appendChild(top);
+
+    const priceInfo = [];
+    if (p.entry_price) priceInfo.push('入场: ' + p.entry_price);
+    if (p.stop_loss) priceInfo.push('止损: ' + p.stop_loss);
+    if (p.target_1) priceInfo.push('目标1: ' + p.target_1);
+    if (p.target_2) priceInfo.push('目标2: ' + p.target_2);
+    if (priceInfo.length > 0) {
+        const priceDiv = document.createElement('div');
+        priceDiv.className = 'text-[10px] text-gray-500 mt-1';
+        priceDiv.textContent = priceInfo.join(' | ');
+        card.appendChild(priceDiv);
+    }
+
+    if (p.reason) {
+        const reasonDiv = document.createElement('div');
+        reasonDiv.className = 'text-xs text-gray-400 mt-1';
+        reasonDiv.textContent = p.reason;
+        card.appendChild(reasonDiv);
+    }
+
+    if (p.execution_price) {
+        const execDiv = document.createElement('div');
+        execDiv.className = 'text-[10px] text-green-500 mt-1';
+        execDiv.textContent = '成交: ' + p.execution_price + (p.executed_at ? ' @ ' + p.executed_at.split('T')[0] : '');
+        card.appendChild(execDiv);
+    }
+
+    return card;
+}
+
+loadWatchlist();
+</script>
+{% endblock %}

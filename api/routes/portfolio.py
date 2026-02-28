@@ -216,3 +216,96 @@ async def api_portfolio_history(
             ]
 
     return {"history": history}
+
+
+@router.get("/api/portfolio/historical")
+async def api_portfolio_historical(
+    username: str = Depends(get_current_user),
+    market: str = "",
+    limit: int = 30,
+    db: Session = Depends(get_db),
+):
+    """Get historical position snapshots (non-latest dates).
+
+    Returns positions grouped by snapshot_date, ordered by date descending.
+    """
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+
+    account_ids = [acc.id for acc in db.query(Account).filter_by(user_id=user.id).all()]
+    if not account_ids:
+        return {"snapshots": []}
+
+    # Find the latest snapshot date per account
+    latest_dates = (
+        db.query(
+            Position.account_id,
+            func.max(Position.snapshot_date).label("max_date"),
+        )
+        .filter(Position.account_id.in_(account_ids))
+        .group_by(Position.account_id)
+        .subquery()
+    )
+
+    # Get distinct historical dates (excluding latest)
+    hist_dates_q = (
+        db.query(Position.snapshot_date)
+        .filter(Position.account_id.in_(account_ids))
+        .outerjoin(
+            latest_dates,
+            (Position.account_id == latest_dates.c.account_id)
+            & (Position.snapshot_date == latest_dates.c.max_date),
+        )
+        .filter(latest_dates.c.max_date == None)  # noqa: E711
+    )
+    if market:
+        hist_dates_q = hist_dates_q.filter(Position.market == market)
+
+    hist_dates = (
+        hist_dates_q.distinct()
+        .order_by(Position.snapshot_date.desc())
+        .limit(limit)
+        .all()
+    )
+
+    if not hist_dates:
+        return {"snapshots": []}
+
+    date_list = [d[0] for d in hist_dates]
+
+    # Fetch positions for those dates
+    pos_query = db.query(Position).filter(
+        Position.account_id.in_(account_ids),
+        Position.snapshot_date.in_(date_list),
+    )
+    if market:
+        pos_query = pos_query.filter(Position.market == market)
+
+    positions = pos_query.order_by(
+        Position.snapshot_date.desc(), Position.market, Position.code
+    ).all()
+
+    # Group by date
+    from collections import defaultdict
+
+    by_date = defaultdict(list)
+    for p in positions:
+        by_date[p.snapshot_date].append(
+            {
+                "code": f"{p.market}.{p.code}",
+                "name": p.stock_name or "",
+                "qty": float(p.qty),
+                "cost_price": float(p.cost_price or 0),
+                "market_price": float(p.market_price or 0),
+                "market_val": float(p.market_val or 0),
+                "pl_val": float(p.pl_val or 0),
+                "pl_ratio": _normalize_pl_ratio(p.market, p.pl_ratio),
+            }
+        )
+
+    snapshots = [
+        {"date": d.isoformat(), "positions": by_date[d]} for d in sorted(by_date.keys(), reverse=True)
+    ]
+
+    return {"snapshots": snapshots}
