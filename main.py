@@ -3289,5 +3289,41 @@ def contract_info(code: str):
     service.close()
 
 
+# =============================================================================
+# Web Server Command
+# =============================================================================
+
+
+@cli.command()
+@click.option("--host", default=None, help="Server host (default from config)")
+@click.option("--port", default=None, type=int, help="Server port (default from config)")
+@click.option("--reload", is_flag=True, help="Enable auto-reload for development")
+def serve(host, port, reload):
+    """启动 Web 服务 (Dashboard + 钉钉网关)"""
+    try:
+        import uvicorn
+    except ImportError:
+        print_error("请先安装 web 依赖: pip install 'investment-analyzer[web]'")
+        print_info("或: pip install fastapi uvicorn[standard] httpx python-multipart")
+        sys.exit(1)
+
+    from api.app import create_app
+
+    host = host or settings.web.host
+    port = port or settings.web.port
+
+    print_info(f"启动 Web 服务: http://{host}:{port}")
+    print_info("Dashboard: /")
+    print_info("钉钉回调: /dingtalk/webhook")
+    print_info("API 文档: /docs")
+
+    uvicorn.run(
+        create_app(),
+        host=host,
+        port=port,
+        reload=reload,
+    )
+
+
 if __name__ == "__main__":
     cli()

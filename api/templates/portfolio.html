@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}持仓 - Investment Analyzer{% endblock %}
+{% block nav_portfolio %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <h1 class="text-lg font-bold">持仓详情</h1>
+        <select id="market-filter" onchange="loadPortfolio()"
+            class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+            <option value="">全部市场</option>
+            <option value="HK">港股</option>
+            <option value="US">美股</option>
+            <option value="A">A股</option>
+        </select>
+    </div>
+    <div class="grid grid-cols-3 gap-3">
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">总市值</div>
+            <div id="p-total-val" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">总盈亏</div>
+            <div id="p-total-pl" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">盈亏比</div>
+            <div id="p-pl-ratio" class="text-lg font-bold">--</div>
+        </div>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div id="p-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function createDetailedPositionRow(p) {
+    const row = document.createElement('div');
+    row.className = 'px-4 py-3';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex justify-between items-start';
+
+    const leftDiv = document.createElement('div');
+    const codeLine = document.createElement('div');
+    codeLine.className = 'font-medium';
+    codeLine.textContent = p.code;
+    const nameLine = document.createElement('div');
+    nameLine.className = 'text-xs text-gray-500';
+    nameLine.textContent = p.name;
+    leftDiv.appendChild(codeLine);
+    leftDiv.appendChild(nameLine);
+
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'text-right';
+    const plLine = document.createElement('div');
+    plLine.className = 'font-medium ' + plColor(p.pl_val);
+    plLine.textContent = '¥' + formatNum(p.pl_val);
+    const ratioLine = document.createElement('div');
+    ratioLine.className = 'text-sm ' + plColor(p.pl_ratio);
+    ratioLine.textContent = formatPct(p.pl_ratio);
+    rightDiv.appendChild(plLine);
+    rightDiv.appendChild(ratioLine);
+
+    topRow.appendChild(leftDiv);
+    topRow.appendChild(rightDiv);
+
+    const bottomRow = document.createElement('div');
+    bottomRow.className = 'mt-2 flex justify-between text-xs text-gray-500';
+    const fields = [
+        '数量: ' + formatNum(p.qty),
+        '成本: ' + formatNum(p.cost_price, 2),
+        '现价: ' + formatNum(p.market_price, 2),
+        '市值: ¥' + formatNum(p.market_val),
+    ];
+    fields.forEach(f => {
+        const span = document.createElement('span');
+        span.textContent = f;
+        bottomRow.appendChild(span);
+    });
+
+    row.appendChild(topRow);
+    row.appendChild(bottomRow);
+    return row;
+}
+
+async function loadPortfolio() {
+    const market = document.getElementById('market-filter').value;
+    const url = market ? '/api/portfolio?market=' + market : '/api/portfolio';
+    const data = await fetchData(url);
+    const s = data.summary;
+
+    document.getElementById('p-total-val').textContent = '¥' + formatNum(s.total_market_val);
+    const plEl = document.getElementById('p-total-pl');
+    plEl.textContent = '¥' + formatNum(s.total_pl);
+    plEl.className = 'text-lg font-bold ' + plColor(s.total_pl);
+    const ratioEl = document.getElementById('p-pl-ratio');
+    ratioEl.textContent = (s.total_pl_ratio >= 0 ? '+' : '') + s.total_pl_ratio.toFixed(2) + '%';
+    ratioEl.className = 'text-lg font-bold ' + plColor(s.total_pl_ratio);
+
+    const listEl = document.getElementById('p-list');
+    listEl.textContent = '';
+    if (data.positions.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无持仓';
+        listEl.appendChild(empty);
+        return;
+    }
+    data.positions.forEach(p => listEl.appendChild(createDetailedPositionRow(p)));
+}
+loadPortfolio();
+</script>
+{% endblock %}

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "investment-analyzer": {
+      "command": "/Users/dyson/Work/dyson/src/investment-analyzer/.venv/bin/python",
+      "args": ["mcp_server.py"],
+      "cwd": "/Users/dyson/Work/dyson/src/investment-analyzer"
+    }
+  }
+}

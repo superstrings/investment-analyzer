@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}信号 - Investment Analyzer{% endblock %}
+{% block nav_signals %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <h1 class="text-lg font-bold">交易信号</h1>
+    <div class="grid grid-cols-4 gap-3">
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">总信号</div>
+            <div id="s-total" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">胜率</div>
+            <div id="s-winrate" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">盈利</div>
+            <div id="s-profit" class="text-lg font-bold text-profit">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">亏损</div>
+            <div id="s-loss" class="text-lg font-bold text-loss">--</div>
+        </div>
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div id="s-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function createSignalDetailRow(s) {
+    const typeColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300',
+                        HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
+    const row = document.createElement('div');
+    row.className = 'px-4 py-3';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex justify-between items-start';
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'flex items-center space-x-2';
+    const badge = document.createElement('span');
+    badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (typeColors[s.type] || 'bg-gray-800');
+    badge.textContent = s.type;
+    const codeDiv = document.createElement('div');
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'font-medium';
+    codeSpan.textContent = s.code;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-xs text-gray-500 ml-1';
+    nameSpan.textContent = s.name;
+    codeDiv.appendChild(codeSpan);
+    codeDiv.appendChild(nameSpan);
+    leftDiv.appendChild(badge);
+    leftDiv.appendChild(codeDiv);
+
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'text-right';
+    if (s.score) {
+        const scoreEl = document.createElement('div');
+        scoreEl.className = 'text-sm font-medium';
+        scoreEl.textContent = s.score.toFixed(0) + '分';
+        rightDiv.appendChild(scoreEl);
+    }
+    if (s.strength) {
+        const strengthEl = document.createElement('div');
+        strengthEl.className = 'text-xs text-gray-500';
+        strengthEl.textContent = s.strength;
+        rightDiv.appendChild(strengthEl);
+    }
+    topRow.appendChild(leftDiv);
+    topRow.appendChild(rightDiv);
+    row.appendChild(topRow);
+
+    if (s.reason) {
+        const reasonEl = document.createElement('div');
+        reasonEl.className = 'mt-1 text-xs text-gray-400';
+        reasonEl.textContent = s.reason.substring(0, 120);
+        row.appendChild(reasonEl);
+    }
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'mt-1 flex space-x-3 text-xs text-gray-500';
+    const priceFields = [];
+    if (s.trigger_price) priceFields.push('触发: ' + s.trigger_price.toFixed(2));
+    if (s.target_price) priceFields.push('目标: ' + s.target_price.toFixed(2));
+    if (s.stop_loss) priceFields.push('止损: ' + s.stop_loss.toFixed(2));
+    priceFields.push(s.source);
+    priceFields.forEach(f => {
+        const span = document.createElement('span');
+        span.textContent = f;
+        metaRow.appendChild(span);
+    });
+    row.appendChild(metaRow);
+
+    return row;
+}
+
+async function loadSignals() {
+    const data = await fetchData('/api/signals');
+    document.getElementById('s-total').textContent = data.accuracy.total;
+    document.getElementById('s-winrate').textContent =
+        data.accuracy.win_rate > 0 ? data.accuracy.win_rate.toFixed(1) + '%' : '--';
+    document.getElementById('s-profit').textContent = data.accuracy.profitable;
+    document.getElementById('s-loss').textContent = data.accuracy.loss;
+
+    const listEl = document.getElementById('s-list');
+    listEl.textContent = '';
+    if (data.signals.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无活跃信号';
+        listEl.appendChild(empty);
+        return;
+    }
+    data.signals.forEach(s => listEl.appendChild(createSignalDetailRow(s)));
+}
+loadSignals();
+</script>
+{% endblock %}

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.dyson.investment-analyzer</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/dyson/Work/dyson/src/investment-analyzer/.venv/bin/python</string>
+        <string>main.py</string>
+        <string>serve</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/dyson/Work/dyson/src/investment-analyzer</string>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/Users/dyson/Work/dyson/src/investment-analyzer/logs/server.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/dyson/Work/dyson/src/investment-analyzer/logs/server.error.log</string>
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/Users/dyson/.asdf/shims:/usr/local/bin:/usr/bin:/bin</string>
+    </dict>
+</dict>
+</plist>

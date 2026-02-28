@@ -1,0 +1,155 @@
+"""
+Trading plan management service.
+
+Handles CRUD operations for trading plans with execution tracking.
+"""
+
+import logging
+from datetime import date, datetime
+from decimal import Decimal
+from typing import Optional
+
+from db.database import get_session
+from db.models import TradingPlanRecord
+
+logger = logging.getLogger(__name__)
+
+
+class TradingPlanService:
+    """Service for managing trading plans."""
+
+    def create_plan(
+        self,
+        user_id: int,
+        market: str,
+        code: str,
+        action_type: str,
+        plan_date: date = None,
+        stock_name: str = None,
+        priority: str = "consider",
+        entry_price: Decimal = None,
+        stop_loss_price: Decimal = None,
+        target_price_1: Decimal = None,
+        target_price_2: Decimal = None,
+        position_size: str = None,
+        reason: str = None,
+        signal_id: int = None,
+    ) -> TradingPlanRecord:
+        """Create a new trading plan."""
+        if plan_date is None:
+            plan_date = date.today()
+
+        with get_session() as session:
+            plan = TradingPlanRecord(
+                user_id=user_id,
+                market=market,
+                code=code,
+                stock_name=stock_name,
+                plan_date=plan_date,
+                action_type=action_type,
+                priority=priority,
+                entry_price=entry_price,
+                stop_loss_price=stop_loss_price,
+                target_price_1=target_price_1,
+                target_price_2=target_price_2,
+                position_size=position_size,
+                reason=reason,
+                signal_id=signal_id,
+            )
+            session.add(plan)
+            session.flush()
+            session.expunge(plan)
+            return plan
+
+    def get_active_plans(
+        self, user_id: int, target_date: date = None
+    ) -> list[TradingPlanRecord]:
+        """Get active (pending) plans, optionally filtered by date."""
+        with get_session() as session:
+            query = session.query(TradingPlanRecord).filter_by(
+                user_id=user_id, status="pending"
+            )
+            if target_date:
+                query = query.filter_by(plan_date=target_date)
+            query = query.order_by(
+                TradingPlanRecord.plan_date.desc(),
+                TradingPlanRecord.created_at.desc(),
+            )
+            plans = query.all()
+            for p in plans:
+                session.expunge(p)
+            return plans
+
+    def get_plans_by_date(
+        self, user_id: int, target_date: date = None
+    ) -> list[TradingPlanRecord]:
+        """Get all plans for a specific date (any status)."""
+        if target_date is None:
+            target_date = date.today()
+
+        with get_session() as session:
+            plans = (
+                session.query(TradingPlanRecord)
+                .filter_by(user_id=user_id, plan_date=target_date)
+                .order_by(TradingPlanRecord.created_at.desc())
+                .all()
+            )
+            for p in plans:
+                session.expunge(p)
+            return plans
+
+    def mark_executed(
+        self,
+        plan_id: int,
+        price: Decimal = None,
+        notes: str = None,
+    ) -> Optional[TradingPlanRecord]:
+        """Mark a plan as executed."""
+        with get_session() as session:
+            plan = session.query(TradingPlanRecord).filter_by(id=plan_id).first()
+            if not plan:
+                return None
+            plan.status = "executed"
+            plan.executed_at = datetime.now()
+            plan.execution_price = price
+            plan.execution_notes = notes
+            session.flush()
+            session.expunge(plan)
+            return plan
+
+    def cancel_plan(
+        self, plan_id: int, reason: str = None
+    ) -> Optional[TradingPlanRecord]:
+        """Cancel a plan."""
+        with get_session() as session:
+            plan = session.query(TradingPlanRecord).filter_by(id=plan_id).first()
+            if not plan:
+                return None
+            plan.status = "cancelled"
+            if reason:
+                plan.execution_notes = reason
+            session.flush()
+            session.expunge(plan)
+            return plan
+
+    def expire_old_plans(self, user_id: int, before_date: date = None) -> int:
+        """Expire old pending plans. Returns count of expired plans."""
+        if before_date is None:
+            before_date = date.today()
+
+        with get_session() as session:
+            result = (
+                session.query(TradingPlanRecord)
+                .filter(
+                    TradingPlanRecord.user_id == user_id,
+                    TradingPlanRecord.status == "pending",
+                    TradingPlanRecord.plan_date < before_date,
+                )
+                .update({"status": "expired"}, synchronize_session="fetch")
+            )
+            return result
+
+
+def create_plan_service() -> TradingPlanService:
+    """Factory function for TradingPlanService."""
+    return TradingPlanService()

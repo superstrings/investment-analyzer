@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Investment Analyzer{% endblock %}
+{% block nav_home %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div id="dashboard" class="space-y-4">
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div class="text-xs text-gray-500 uppercase">总市值</div>
+            <div id="total-val" class="text-xl font-bold mt-1">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div class="text-xs text-gray-500 uppercase">总盈亏</div>
+            <div id="total-pl" class="text-xl font-bold mt-1">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div class="text-xs text-gray-500 uppercase">活跃信号</div>
+            <div id="signal-count" class="text-xl font-bold mt-1">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div class="text-xs text-gray-500 uppercase">胜率</div>
+            <div id="win-rate" class="text-xl font-bold mt-1">--</div>
+        </div>
+    </div>
+
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+            <h2 class="font-semibold">持仓</h2>
+            <a href="/portfolio" class="text-xs text-blue-400">详情</a>
+        </div>
+        <div id="positions-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-4">
+        <div class="bg-gray-900 rounded-lg border border-gray-800">
+            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="font-semibold">信号</h2>
+                <a href="/signals" class="text-xs text-blue-400">详情</a>
+            </div>
+            <div id="signals-list" class="divide-y divide-gray-800">
+                <div class="p-4 text-gray-500 text-sm">加载中...</div>
+            </div>
+        </div>
+        <div class="bg-gray-900 rounded-lg border border-gray-800">
+            <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+                <h2 class="font-semibold">操作计划</h2>
+                <a href="/plans" class="text-xs text-blue-400">详情</a>
+            </div>
+            <div id="plans-list" class="divide-y divide-gray-800">
+                <div class="p-4 text-gray-500 text-sm">加载中...</div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function renderList(container, items, renderFn) {
+    container.textContent = '';
+    if (items.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无数据';
+        container.appendChild(empty);
+        return;
+    }
+    items.forEach(item => {
+        const el = renderFn(item);
+        container.appendChild(el);
+    });
+}
+
+function createPositionRow(p) {
+    const row = document.createElement('div');
+    row.className = 'px-4 py-2 flex justify-between items-center';
+    const left = document.createElement('div');
+    const code = document.createElement('div');
+    code.className = 'font-medium text-sm';
+    code.textContent = p.code;
+    const name = document.createElement('div');
+    name.className = 'text-xs text-gray-500';
+    name.textContent = p.name;
+    left.appendChild(code);
+    left.appendChild(name);
+    const right = document.createElement('div');
+    right.className = 'text-right';
+    const ratio = document.createElement('div');
+    ratio.className = 'text-sm ' + plColor(p.pl_val);
+    ratio.textContent = formatPct(p.pl_ratio);
+    const val = document.createElement('div');
+    val.className = 'text-xs text-gray-500';
+    val.textContent = '¥' + formatNum(p.market_val);
+    right.appendChild(ratio);
+    right.appendChild(val);
+    row.appendChild(left);
+    row.appendChild(right);
+    return row;
+}
+
+function createSignalRow(s) {
+    const typeColors = {BUY:'text-profit', SELL:'text-loss', HOLD:'text-yellow-400', WATCH:'text-blue-400'};
+    const row = document.createElement('div');
+    row.className = 'px-4 py-2 flex justify-between items-center';
+    const left = document.createElement('div');
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'text-xs font-bold ' + (typeColors[s.type] || '');
+    typeSpan.textContent = s.type;
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'text-sm ml-1';
+    codeSpan.textContent = s.code;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-xs text-gray-500 ml-1';
+    nameSpan.textContent = s.name;
+    left.appendChild(typeSpan);
+    left.appendChild(codeSpan);
+    left.appendChild(nameSpan);
+    const right = document.createElement('div');
+    right.className = 'text-xs text-gray-400';
+    right.textContent = s.score ? s.score.toFixed(0) + '分' : '';
+    row.appendChild(left);
+    row.appendChild(right);
+    return row;
+}
+
+function createPlanRow(p) {
+    const prioColors = {must_do:'text-loss', should_do:'text-yellow-400', consider:'text-gray-400'};
+    const row = document.createElement('div');
+    row.className = 'px-4 py-2 flex justify-between items-center';
+    const left = document.createElement('div');
+    const actionSpan = document.createElement('span');
+    actionSpan.className = 'text-xs font-bold ' + (prioColors[p.priority] || '');
+    actionSpan.textContent = p.action.toUpperCase();
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'text-sm ml-1';
+    codeSpan.textContent = p.code;
+    left.appendChild(actionSpan);
+    left.appendChild(codeSpan);
+    const right = document.createElement('div');
+    right.className = 'text-xs text-gray-400';
+    right.textContent = p.status;
+    row.appendChild(left);
+    row.appendChild(right);
+    return row;
+}
+
+async function loadDashboard() {
+    const data = await fetchData('/api/dashboard/summary');
+    const p = data.portfolio;
+    document.getElementById('total-val').textContent = '¥' + formatNum(p.total_market_val);
+    const plEl = document.getElementById('total-pl');
+    plEl.textContent = '¥' + formatNum(p.total_pl);
+    plEl.className = 'text-xl font-bold mt-1 ' + plColor(p.total_pl);
+    document.getElementById('signal-count').textContent = data.signals.active_count;
+    document.getElementById('win-rate').textContent =
+        data.accuracy.win_rate > 0 ? data.accuracy.win_rate.toFixed(1) + '%' : '--';
+
+    const pData = await fetchData('/api/portfolio');
+    renderList(document.getElementById('positions-list'), pData.positions, createPositionRow);
+
+    const sData = await fetchData('/api/signals');
+    renderList(document.getElementById('signals-list'), sData.signals.slice(0, 5), createSignalRow);
+
+    const plData = await fetchData('/api/plans');
+    renderList(document.getElementById('plans-list'), plData.plans, createPlanRow);
+}
+loadDashboard();
+</script>
+{% endblock %}

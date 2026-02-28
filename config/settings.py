@@ -79,6 +79,35 @@ class ReportSettings:
 
 
 @dataclass
+class DingtalkSettings:
+    """DingTalk bot configuration."""
+
+    webhook_url: str = field(
+        default_factory=lambda: os.getenv("DINGTALK_WEBHOOK_URL", "")
+    )
+    secret: str = field(default_factory=lambda: os.getenv("DINGTALK_SECRET", ""))
+    enabled: bool = field(
+        default_factory=lambda: os.getenv("DINGTALK_ENABLED", "").lower() == "true"
+    )
+
+
+@dataclass
+class WebSettings:
+    """Web server (FastAPI) configuration."""
+
+    host: str = field(default_factory=lambda: os.getenv("WEB_HOST", "0.0.0.0"))
+    port: int = field(
+        default_factory=lambda: int(os.getenv("WEB_PORT", "8000"))
+    )
+    auth_token: str = field(
+        default_factory=lambda: os.getenv("WEB_AUTH_TOKEN", "")
+    )
+    default_user: str = field(
+        default_factory=lambda: os.getenv("WEB_DEFAULT_USER", "dyson")
+    )
+
+
+@dataclass
 class Settings:
     """Main settings container."""
 
@@ -87,6 +116,8 @@ class Settings:
     kline: KlineSettings = field(default_factory=KlineSettings)
     chart: ChartSettings = field(default_factory=ChartSettings)
     report: ReportSettings = field(default_factory=ReportSettings)
+    dingtalk: DingtalkSettings = field(default_factory=DingtalkSettings)
+    web: WebSettings = field(default_factory=WebSettings)
 
     # Project paths
     project_root: Path = PROJECT_ROOT

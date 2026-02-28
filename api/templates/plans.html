@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}操作计划 - Investment Analyzer{% endblock %}
+{% block nav_plans %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <h1 class="text-lg font-bold">操作计划</h1>
+        <input type="date" id="plan-date" onchange="loadPlans()"
+            class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+    </div>
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div id="pl-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('plan-date').valueAsDate = new Date();
+
+function createPlanDetailRow(p) {
+    const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300',
+                        consider:'bg-gray-800 text-gray-300'};
+    const statusColors = {pending:'text-blue-400', executed:'text-green-400',
+                         cancelled:'text-gray-500', expired:'text-gray-600'};
+
+    const row = document.createElement('div');
+    row.className = 'px-4 py-3';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex justify-between items-start';
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'flex items-center space-x-2';
+    const badge = document.createElement('span');
+    badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (prioColors[p.priority] || '');
+    badge.textContent = p.action.toUpperCase();
+    const codeSpan = document.createElement('span');
+    codeSpan.className = 'font-medium';
+    codeSpan.textContent = p.code;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-xs text-gray-500 ml-1';
+    nameSpan.textContent = p.name;
+    leftDiv.appendChild(badge);
+    leftDiv.appendChild(codeSpan);
+    leftDiv.appendChild(nameSpan);
+
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'flex items-center space-x-2';
+    const statusSpan = document.createElement('span');
+    statusSpan.className = 'text-xs ' + (statusColors[p.status] || '');
+    statusSpan.textContent = p.status;
+    rightDiv.appendChild(statusSpan);
+
+    if (p.status === 'pending') {
+        const execBtn = document.createElement('button');
+        execBtn.className = 'text-xs bg-green-800 hover:bg-green-700 px-2 py-0.5 rounded';
+        execBtn.textContent = '执行';
+        execBtn.onclick = () => executePlan(p.id);
+        const cancelBtn = document.createElement('button');
+        cancelBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded';
+        cancelBtn.textContent = '取消';
+        cancelBtn.onclick = () => cancelPlan(p.id);
+        rightDiv.appendChild(execBtn);
+        rightDiv.appendChild(cancelBtn);
+    }
+
+    topRow.appendChild(leftDiv);
+    topRow.appendChild(rightDiv);
+    row.appendChild(topRow);
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'mt-1 flex space-x-3 text-xs text-gray-500';
+    const fields = [];
+    if (p.entry_price) fields.push('入场: ' + p.entry_price.toFixed(2));
+    if (p.stop_loss) fields.push('止损: ' + p.stop_loss.toFixed(2));
+    if (p.target_1) fields.push('目标: ' + p.target_1.toFixed(2));
+    if (p.position_size) fields.push('仓位: ' + p.position_size);
+    fields.forEach(f => {
+        const span = document.createElement('span');
+        span.textContent = f;
+        metaRow.appendChild(span);
+    });
+    row.appendChild(metaRow);
+
+    if (p.reason) {
+        const reasonEl = document.createElement('div');
+        reasonEl.className = 'mt-1 text-xs text-gray-400';
+        reasonEl.textContent = p.reason.substring(0, 120);
+        row.appendChild(reasonEl);
+    }
+
+    return row;
+}
+
+async function loadPlans() {
+    const dateVal = document.getElementById('plan-date').value;
+    const url = dateVal ? '/api/plans?date_str=' + dateVal : '/api/plans';
+    const data = await fetchData(url);
+    const listEl = document.getElementById('pl-list');
+    listEl.textContent = '';
+    if (data.plans.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无计划';
+        listEl.appendChild(empty);
+        return;
+    }
+    data.plans.forEach(p => listEl.appendChild(createPlanDetailRow(p)));
+}
+
+async function executePlan(id) {
+    const price = prompt('执行价格 (可选):');
+    const body = {};
+    if (price) body.price = parseFloat(price);
+    await fetch('/api/plans/' + id + '/execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    loadPlans();
+}
+
+async function cancelPlan(id) {
+    const reason = prompt('取消原因 (可选):');
+    await fetch('/api/plans/' + id + '/cancel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reason: reason || ''}),
+    });
+    loadPlans();
+}
+
+loadPlans();
+</script>
+{% endblock %}

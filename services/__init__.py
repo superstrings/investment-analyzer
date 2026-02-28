@@ -48,6 +48,10 @@ from .export_service import (
     export_positions_to_csv,
     export_trades_to_csv,
 )
+from .analysis_service import AnalysisResultService, create_analysis_service
+from .dingtalk_service import DingtalkService, create_dingtalk_service
+from .plan_service import TradingPlanService, create_plan_service
+from .signal_service import SignalAccuracy, SignalService, create_signal_service
 from .sync_service import SyncResult, SyncService, create_sync_service
 
 __all__ = [
@@ -77,4 +81,17 @@ __all__ = [
     "export_trades_to_csv",
     "export_klines_to_csv",
     "export_all_to_excel",
+    # Signal service
+    "SignalService",
+    "SignalAccuracy",
+    "create_signal_service",
+    # Analysis service
+    "AnalysisResultService",
+    "create_analysis_service",
+    # Plan service
+    "TradingPlanService",
+    "create_plan_service",
+    # DingTalk service
+    "DingtalkService",
+    "create_dingtalk_service",
 ]

@@ -12,7 +12,19 @@ from typing import Optional
 
 import pandas as pd
 
-from db import Account, Kline, Position, Trade, User, WatchlistItem, get_session
+from db import (
+    Account,
+    AccountSnapshot,
+    AnalysisResult,
+    Kline,
+    Position,
+    Signal,
+    Trade,
+    TradingPlanRecord,
+    User,
+    WatchlistItem,
+    get_session,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -448,6 +460,172 @@ class DataProvider:
                 trades.append(t)
 
         return trades
+
+    # =========================================================================
+    # Aggregate Methods
+    # =========================================================================
+
+    # =========================================================================
+    # Signal Data
+    # =========================================================================
+
+    def get_signals(
+        self,
+        user_id: int,
+        market: str = None,
+        active_only: bool = True,
+    ) -> list[Signal]:
+        """Get signals for a user."""
+        cache_key = f"signals:{user_id}:{market}:{active_only}"
+        cached = self._get_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        with get_session() as session:
+            query = session.query(Signal).filter_by(user_id=user_id)
+            if active_only:
+                query = query.filter_by(is_active=True)
+            if market:
+                query = query.filter_by(market=market)
+            query = query.order_by(Signal.created_at.desc())
+            signals = query.all()
+            for s in signals:
+                session.expunge(s)
+
+        self._set_cache(cache_key, signals)
+        return signals
+
+    # =========================================================================
+    # Trading Plan Data
+    # =========================================================================
+
+    def get_plans(
+        self,
+        user_id: int,
+        target_date: date = None,
+        status: str = None,
+    ) -> list[TradingPlanRecord]:
+        """Get trading plans for a user."""
+        cache_key = f"plans:{user_id}:{target_date}:{status}"
+        cached = self._get_cache(cache_key)
+        if cached is not None:
+            return cached
+
+        with get_session() as session:
+            query = session.query(TradingPlanRecord).filter_by(user_id=user_id)
+            if target_date:
+                query = query.filter_by(plan_date=target_date)
+            if status:
+                query = query.filter_by(status=status)
+            query = query.order_by(TradingPlanRecord.plan_date.desc())
+            plans = query.all()
+            for p in plans:
+                session.expunge(p)
+
+        self._set_cache(cache_key, plans)
+        return plans
+
+    # =========================================================================
+    # Position History
+    # =========================================================================
+
+    def get_position_history(
+        self,
+        user_id: int,
+        market: str,
+        code: str,
+        days: int = 60,
+    ) -> list[Position]:
+        """Get position snapshots over time for a specific stock."""
+        from datetime import timedelta
+
+        start_date = date.today() - timedelta(days=days)
+        with get_session() as session:
+            account_ids = [
+                acc.id
+                for acc in session.query(Account).filter_by(user_id=user_id).all()
+            ]
+            if not account_ids:
+                return []
+
+            positions = (
+                session.query(Position)
+                .filter(
+                    Position.account_id.in_(account_ids),
+                    Position.market == market,
+                    Position.code == code,
+                    Position.snapshot_date >= start_date,
+                )
+                .order_by(Position.snapshot_date.asc())
+                .all()
+            )
+            for p in positions:
+                session.expunge(p)
+            return positions
+
+    # =========================================================================
+    # Account Value History
+    # =========================================================================
+
+    def get_account_value_history(
+        self,
+        user_id: int,
+        days: int = 90,
+    ) -> list[AccountSnapshot]:
+        """Get account value snapshots over time."""
+        from datetime import timedelta
+
+        start_date = date.today() - timedelta(days=days)
+        with get_session() as session:
+            account_ids = [
+                acc.id
+                for acc in session.query(Account).filter_by(user_id=user_id).all()
+            ]
+            if not account_ids:
+                return []
+
+            snapshots = (
+                session.query(AccountSnapshot)
+                .filter(
+                    AccountSnapshot.account_id.in_(account_ids),
+                    AccountSnapshot.snapshot_date >= start_date,
+                )
+                .order_by(AccountSnapshot.snapshot_date.asc())
+                .all()
+            )
+            for s in snapshots:
+                session.expunge(s)
+            return snapshots
+
+    # =========================================================================
+    # Analysis History
+    # =========================================================================
+
+    def get_analysis_history(
+        self,
+        user_id: int,
+        market: str = None,
+        code: str = None,
+        days: int = 30,
+    ) -> list[AnalysisResult]:
+        """Get analysis results history."""
+        from datetime import timedelta
+
+        cutoff = date.today() - timedelta(days=days)
+        with get_session() as session:
+            query = session.query(AnalysisResult).filter(
+                AnalysisResult.user_id == user_id,
+                AnalysisResult.analysis_date >= cutoff,
+            )
+            if market:
+                query = query.filter_by(market=market)
+            if code:
+                query = query.filter_by(code=code)
+            query = query.order_by(AnalysisResult.analysis_date.desc())
+            results = query.all()
+            for r in results:
+                session.expunge(r)
+            return results
 
     # =========================================================================
     # Aggregate Methods

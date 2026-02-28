@@ -33,13 +33,18 @@ from .database import (
 from .models import (
     Account,
     AccountSnapshot,
+    AnalysisResult,
     Base,
     DerivativeContract,
     Kline,
+    NotificationLog,
     Position,
     PriceAlert,
+    Signal,
+    SignalFeedback,
     SyncLog,
     Trade,
+    TradingPlanRecord,
     User,
     WatchlistItem,
 )
@@ -66,4 +71,9 @@ __all__ = [
     "SyncLog",
     "PriceAlert",
     "DerivativeContract",
+    "Signal",
+    "AnalysisResult",
+    "TradingPlanRecord",
+    "SignalFeedback",
+    "NotificationLog",
 ]
