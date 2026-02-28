@@ -126,6 +126,17 @@ class ProxySettings:
             return {"http": self.http_proxy, "https": self.https_proxy}
         return {}
 
+    def get_subprocess_env(self) -> dict:
+        """Get env dict with proxy for subprocess (e.g. Claude CLI)."""
+        env = os.environ.copy()
+        proxy = self.http_proxy
+        for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
+                     "http_proxy", "https_proxy", "all_proxy"):
+            env[key] = proxy
+        env["NO_PROXY"] = "localhost,127.0.0.1"
+        env["no_proxy"] = "localhost,127.0.0.1"
+        return env
+
 
 @dataclass
 class WebSettings:

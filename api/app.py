@@ -23,7 +23,7 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 # Paths that don't require authentication
 PUBLIC_PATHS = {"/login", "/docs", "/openapi.json", "/favicon.ico"}
 # DingTalk webhook doesn't use cookie auth (uses its own verification)
-PUBLIC_PREFIXES = ("/api/dingtalk",)
+PUBLIC_PREFIXES = ("/api/dingtalk", "/dingtalk/")
 
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):

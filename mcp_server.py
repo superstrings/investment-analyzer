@@ -834,6 +834,7 @@ def save_signal(
     signal_source: str,
     username: str = "dyson",
     stock_name: str = "",
+    signal_category: str = "stock",
     score: float = None,
     confidence: float = None,
     strength: str = "",
@@ -851,6 +852,7 @@ def save_signal(
         signal_source: 信号来源 (post_market/pre_market/llm)
         username: 用户名
         stock_name: 股票名称
+        signal_category: 信号分类 (stock/option/position)
         score: 综合评分 (0-100)
         confidence: 置信度 (0-100)
         strength: 信号强度 (strong/moderate/weak)
@@ -881,6 +883,7 @@ def save_signal(
         signal_type=signal_type,
         signal_source=signal_source,
         stock_name=stock_name or None,
+        signal_category=signal_category or "stock",
         score=Decimal(str(score)) if score is not None else None,
         confidence=Decimal(str(confidence)) if confidence is not None else None,
         strength=strength or None,

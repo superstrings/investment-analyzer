@@ -14,6 +14,7 @@ from fastapi import APIRouter, Request
 
 from api.claude_runner import run_claude
 from config import settings
+from config.prompts import V12_FRAMEWORK_PROMPT
 from db.database import get_session
 from db.models import User
 from services.dingtalk_service import create_dingtalk_service
@@ -143,6 +144,19 @@ async def dingtalk_webhook(request: Request):
 
     # === Simple commands (direct DB query, fast response) ===
 
+    if content in ("帮助", "help", "-h", "?"):
+        help_text = """## 机器人命令
+- **持仓** / 查持仓 / 仓位 — 查看持仓概览
+- **信号** / 今日信号 — 查看活跃信号
+- **计划** / 今日计划 — 查看操作计划
+- **同步** — 触发数据同步
+- **分析 HK.00700** — 深度分析 (V12+估值)
+- **帮助** / help — 显示本帮助
+
+其他任意文本发送给 AI 处理。"""
+        dingtalk.send_markdown("帮助", help_text, user_id=user_id)
+        return {"msgtype": "text", "text": {"content": "已发送帮助信息"}}
+
     if content in ("持仓", "查持仓", "仓位"):
         result = _format_positions_summary(user_id)
         dingtalk.send_markdown("持仓概览", result, user_id=user_id)
@@ -216,11 +230,14 @@ async def _run_sync_and_notify(user_id: int, dingtalk):
 async def _run_analysis_and_notify(code: str, user_id: int, dingtalk):
     """Run stock analysis via Claude CLI and notify."""
     prompt = (
-        f"请用 run_technical_analysis 分析 {code}，"
-        f"然后基于 V12 框架给出操作建议。"
-        f"用 save_analysis_result 存储分析结果。"
-        f"如果有明确信号，用 save_signal 存储。"
-        f"最后简洁总结分析结果。"
+        f"分析 {code}:\n\n"
+        f"{V12_FRAMEWORK_PROMPT}\n\n"
+        f"请执行:\n"
+        f"1. 用 run_technical_analysis 做技术分析\n"
+        f"2. 按框架: 估值筛选 → 技术评分 → 信号判定\n"
+        f"3. 用 save_signal 存储信号\n"
+        f"4. 如技术≥7且估值通过, 评估期权机会, 有则 save_signal(signal_category=\"option\")\n"
+        f"5. 简洁总结: 估值、评分X/12、信号、操作建议"
     )
 
     async def notify(result: str):

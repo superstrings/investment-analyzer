@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Callable, Optional
 
+from config import settings
+
 logger = logging.getLogger(__name__)
 
 PROJECT_DIR = str(Path(__file__).parent.parent)
@@ -45,6 +47,7 @@ async def run_claude(
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
             cwd=PROJECT_DIR,
+            env=settings.proxy.get_subprocess_env(),
         )
 
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout)
@@ -92,6 +95,7 @@ def run_claude_sync(prompt: str, timeout: int = 300) -> str:
             text=True,
             timeout=timeout,
             cwd=PROJECT_DIR,
+            env=settings.proxy.get_subprocess_env(),
         )
         if result.returncode != 0:
             logger.error("Claude CLI error: %s", result.stderr)

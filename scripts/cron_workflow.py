@@ -45,6 +45,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 from config import settings  # noqa: E402
+from config.prompts import V12_FRAMEWORK_PROMPT  # noqa: E402
 
 # Default user
 DEFAULT_USERNAME = "dyson"
@@ -277,17 +278,18 @@ def _get_market_watchlist(user_id: int, market: str) -> list:
 
 def _analyze_single_stock(code: str, name: str, position_info: str) -> str:
     """Analyze a single stock via Claude CLI. Returns analysis text."""
-    prompt = f"""分析 {code} ({name})，当前持仓信息: {position_info}
+    prompt = f"""分析持仓 {code} ({name})，{position_info}
+
+{V12_FRAMEWORK_PROMPT}
 
 请执行:
 1. 用 run_technical_analysis 对 {code} 做技术分析
-2. 基于 V12 七层决策框架判断:
-   - 趋势/量价/关键位/形态/时机/风险/仓位
-3. 给出明确信号 (BUY/SELL/HOLD) 并用 save_signal 存储
-4. 如有操作建议 (加仓/减仓/止损/止盈)，用 create_plan 存储
-5. 用 save_analysis_result 存储分析结果
+2. 按上述框架: 先估值筛选 → 通过后技术评分 → 信号判定
+3. 给出信号并用 save_signal 存储 (signal_source="post_market")
+4. 如有操作建议，用 create_plan 存储
+5. 如正股技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
 
-直接输出简洁的分析结论 (3-5 行)，包含: 信号方向、关键价位、操作建议。"""
+直接输出简洁分析 (3-5行): 估值判断、技术评分X/12、信号、关键价位、操作建议。如有期权机会额外说明。"""
 
     return run_claude_prompt(prompt)
 
@@ -296,15 +298,17 @@ def _analyze_watchlist_stock(code: str, name: str, price_info: str) -> str:
     """Analyze a watchlist stock via Claude CLI — focus on opportunity discovery."""
     prompt = f"""分析关注个股 {code} ({name})，{price_info}
 
+{V12_FRAMEWORK_PROMPT}
+
 请执行:
 1. 用 run_technical_analysis 对 {code} 做技术分析
-2. 基于技术分析结果判断:
-   - 当前趋势、量价关系、关键支撑/阻力位
-   - 是否存在买入机会 (突破/回调到位/底部反转)
-3. 给出明确信号 (BUY/SELL/HOLD/WATCH) 并用 save_signal 存储
-4. 如有明确的交易机会，用 create_plan 创建操作计划 (含入场价、止损、目标价)
+2. 按上述框架: 先估值筛选 → 通过后技术评分 → 信号判定
+3. 重点判断是否存在买入机会 (突破/回调到位/底部反转)
+4. 给出信号 (BUY/SELL/HOLD/WATCH) 并用 save_signal 存储 (signal_source="post_market")
+5. 如有明确交易机会，用 create_plan 创建操作计划 (含入场价、止损、目标价)
+6. 如技术评分≥7且估值通过，评估期权机会，有则 save_signal(signal_category="option")
 
-直接输出简洁的分析结论 (3-5 行)，包含: 技术形态、信号方向、关键价位、是否值得建仓。"""
+直接输出简洁分析 (3-5行): 估值判断、技术评分X/12、信号、关键价位、是否值得建仓。如有期权机会额外说明。"""
 
     return run_claude_prompt(prompt)
 
@@ -457,16 +461,23 @@ def run_pre_market(market: str):
 关注个股:
 {watch_text}
 
+{V12_FRAMEWORK_PROMPT}
+
 请执行:
-1. 用 get_signals 查看 {market} 市场活跃信号
+1. 用 get_signals 查看 {market} 市场活跃信号 (包括 signal_category=option 的期权信号)
 2. 用 get_plans 查看今日 {market} 市场操作计划
 3. 对关键持仓 (盈亏较大或有信号的) 用 get_klines 检查最新走势
-4. 对关注个股检查是否到达关键价位、是否有入场机会
+4. 按 V12 框架检查:
+   - 止损触发: 股票亏损≥10% / 期权亏损≥30% → 列为 must_do
+   - 估值+技术面概要 (仅标注需要注意的)
+   - 关注个股入场机会
+   - 期权信号提示 (查看活跃期权信号)
 5. 生成盘前简报，包含:
-   - 今日操作计划 (按优先级)
-   - 持仓风险提醒 (破位/超涨)
+   - 今日操作计划 (按优先级, 止损最优先)
+   - 持仓风险提醒 (止损触发/破位/超涨)
    - 关键价位提示 (支撑/阻力)
    - 关注个股机会提示
+   - 期权机会提示 (如有)
 6. 用 send_dingtalk_message 推送简报 (markdown 格式){url_hint}
 
 直接输出盘前简报内容。"""
