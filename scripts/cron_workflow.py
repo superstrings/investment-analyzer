@@ -10,6 +10,8 @@ Usage:
     python scripts/cron_workflow.py post_market US
     python scripts/cron_workflow.py pre_market A
     python scripts/cron_workflow.py post_market A
+    python scripts/cron_workflow.py pre_market JP
+    python scripts/cron_workflow.py post_market JP
 
 Crontab example (UTC+8):
     0 8 * * 1-5   cd $PROJECT && .venv/bin/python scripts/cron_workflow.py sync
@@ -22,6 +24,7 @@ Crontab example (UTC+8):
 """
 
 import logging
+import os
 import subprocess
 import sys
 from datetime import date
@@ -41,10 +44,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from config import settings  # noqa: E402
+
 # Default user
 DEFAULT_USERNAME = "dyson"
 
-MARKET_NAMES = {"HK": "港股", "US": "美股", "A": "A股"}
+MARKET_NAMES = {"HK": "港股", "US": "美股", "A": "A股", "JP": "日股"}
 
 
 def get_user_id(username: str = DEFAULT_USERNAME) -> int:
@@ -113,11 +118,14 @@ def run_claude_prompt(prompt: str) -> str:
             text=True,
             timeout=600,  # 10 min timeout for analysis
             cwd=str(PROJECT_DIR),
+            env=settings.proxy.get_subprocess_env(),
         )
 
         if result.returncode != 0:
-            logger.error(f"Claude CLI error: {result.stderr}")
-            return f"分析出错: {result.stderr}"
+            logger.error(f"Claude CLI error (rc={result.returncode})")
+            logger.error(f"  stderr: {result.stderr[:500] if result.stderr else '(empty)'}")
+            logger.error(f"  stdout: {result.stdout[:500] if result.stdout else '(empty)'}")
+            return f"分析出错: {result.stderr or result.stdout or 'unknown error'}"
 
         output = result.stdout.strip()
         logger.info(f"Claude analysis completed ({len(output)} chars)")
@@ -134,73 +142,339 @@ def run_claude_prompt(prompt: str) -> str:
         return f"分析失败: {e}"
 
 
-def run_post_market(market: str):
-    """Post-market analysis via Claude CLI + MCP tools."""
-    market_name = MARKET_NAMES.get(market, market)
-    logger.info(f"Starting post-market analysis for {market_name}...")
+def _is_option_code(market: str, code: str) -> bool:
+    """Check if a code is an option/derivative (skip analysis).
 
-    from config import settings
+    HK options: codes containing letters (e.g., TCH260330C650000)
+    US options: SYMBOL + YYMMDD + C/P + STRIKE (e.g., NVDA260116C186000)
+    """
+    import re
+
+    if market == "HK":
+        return any(c.isalpha() for c in code)
+    if market == "US":
+        return bool(re.match(r"^[A-Z]+\d{6}[CP]\d+$", code))
+    return False  # JP, A 无期权
+
+
+def _get_market_positions(user_id: int, market: str) -> list:
+    """Get positions for a specific market (pure Python, no LLM)."""
+    from db.database import get_session
+    from db.models import Account, Position
+    from sqlalchemy import func
+
+    with get_session() as session:
+        account_ids = [
+            a.id for a in session.query(Account).filter_by(user_id=user_id).all()
+        ]
+        if not account_ids:
+            return []
+
+        latest_dates = (
+            session.query(
+                Position.account_id,
+                func.max(Position.snapshot_date).label("max_date"),
+            )
+            .filter(Position.account_id.in_(account_ids))
+            .group_by(Position.account_id)
+            .subquery()
+        )
+
+        positions = (
+            session.query(Position)
+            .join(
+                latest_dates,
+                (Position.account_id == latest_dates.c.account_id)
+                & (Position.snapshot_date == latest_dates.c.max_date),
+            )
+            .filter(Position.market == market)
+            .order_by(Position.pl_ratio.desc())
+            .all()
+        )
+
+        # Detach from session, dedup by code (keep first = latest snapshot)
+        seen = set()
+        result = []
+        for p in positions:
+            full_code = f"{p.market}.{p.code}"
+            if full_code in seen:
+                continue
+            seen.add(full_code)
+
+            # Normalize pl_ratio: Futu HK/US/JP stores as percentage
+            raw_ratio = float(p.pl_ratio or 0)
+            if p.market in ("HK", "US", "JP") and abs(raw_ratio) > 0:
+                raw_ratio = raw_ratio / 100
+
+            result.append({
+                "code": full_code,
+                "name": p.stock_name or "",
+                "qty": float(p.qty),
+                "cost_price": float(p.cost_price or 0),
+                "market_price": float(p.market_price or 0),
+                "market_val": float(p.market_val or 0),
+                "pl_val": float(p.pl_val or 0),
+                "pl_ratio": raw_ratio,
+            })
+        return result
+
+
+def _get_market_watchlist(user_id: int, market: str) -> list:
+    """Get active watchlist items for a market with latest prices from Kline."""
+    from db.database import get_session
+    from db.models import Kline, WatchlistItem
+    from sqlalchemy import and_, func
+
+    with get_session() as session:
+        items = (
+            session.query(WatchlistItem)
+            .filter(
+                WatchlistItem.user_id == user_id,
+                WatchlistItem.market == market,
+                WatchlistItem.is_active == True,
+            )
+            .all()
+        )
+        if not items:
+            return []
+
+        # Batch fetch latest prices from Kline
+        codes = [f"{it.market}.{it.code}" for it in items]
+        latest_dates = (
+            session.query(
+                Kline.code,
+                func.max(Kline.trade_date).label("max_date"),
+            )
+            .filter(Kline.code.in_(codes))
+            .group_by(Kline.code)
+            .subquery()
+        )
+        latest_klines = (
+            session.query(Kline.code, Kline.close, Kline.change_pct)
+            .join(
+                latest_dates,
+                and_(
+                    Kline.code == latest_dates.c.code,
+                    Kline.trade_date == latest_dates.c.max_date,
+                ),
+            )
+            .all()
+        )
+        price_map = {k.code: (float(k.close), float(k.change_pct or 0)) for k in latest_klines}
+
+        result = []
+        for it in items:
+            full_code = f"{it.market}.{it.code}"
+            close, change_pct = price_map.get(full_code, (0.0, 0.0))
+            result.append({
+                "code": full_code,
+                "name": it.stock_name or "",
+                "latest_price": close,
+                "change_pct": change_pct,
+            })
+        return result
+
+
+def _analyze_single_stock(code: str, name: str, position_info: str) -> str:
+    """Analyze a single stock via Claude CLI. Returns analysis text."""
+    prompt = f"""分析 {code} ({name})，当前持仓信息: {position_info}
+
+请执行:
+1. 用 run_technical_analysis 对 {code} 做技术分析
+2. 基于 V12 七层决策框架判断:
+   - 趋势/量价/关键位/形态/时机/风险/仓位
+3. 给出明确信号 (BUY/SELL/HOLD) 并用 save_signal 存储
+4. 如有操作建议 (加仓/减仓/止损/止盈)，用 create_plan 存储
+5. 用 save_analysis_result 存储分析结果
+
+直接输出简洁的分析结论 (3-5 行)，包含: 信号方向、关键价位、操作建议。"""
+
+    return run_claude_prompt(prompt)
+
+
+def _analyze_watchlist_stock(code: str, name: str, price_info: str) -> str:
+    """Analyze a watchlist stock via Claude CLI — focus on opportunity discovery."""
+    prompt = f"""分析关注个股 {code} ({name})，{price_info}
+
+请执行:
+1. 用 run_technical_analysis 对 {code} 做技术分析
+2. 基于技术分析结果判断:
+   - 当前趋势、量价关系、关键支撑/阻力位
+   - 是否存在买入机会 (突破/回调到位/底部反转)
+3. 给出明确信号 (BUY/SELL/HOLD/WATCH) 并用 save_signal 存储
+4. 如有明确的交易机会，用 create_plan 创建操作计划 (含入场价、止损、目标价)
+
+直接输出简洁的分析结论 (3-5 行)，包含: 技术形态、信号方向、关键价位、是否值得建仓。"""
+
+    return run_claude_prompt(prompt)
+
+
+def run_post_market(market: str):
+    """Post-market analysis: analyze positions + watchlist stocks."""
+    market_name = MARKET_NAMES.get(market, market)
+    logger.info(f"=== {market_name}盘后分析开始 ({date.today()}) ===")
+
+    user_id = get_user_id()
+
+    # Step 1: Get positions + watchlist
+    positions = _get_market_positions(user_id, market)
+    stocks = [p for p in positions if not _is_option_code(market, p["code"].split(".", 1)[-1])]
+    logger.info(f"[1/5] 获取 {market_name} 持仓: {len(positions)} 个 (股票 {len(stocks)}, 期权 {len(positions)-len(stocks)})")
+
+    watchlist = _get_market_watchlist(user_id, market)
+    # Dedup: remove watchlist items already in positions
+    pos_codes = {p["code"] for p in stocks}
+    watchlist_stocks = [
+        w for w in watchlist
+        if w["code"] not in pos_codes
+        and not _is_option_code(market, w["code"].split(".", 1)[-1])
+    ]
+    logger.info(f"[1/5] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})")
+
+    if not stocks and not watchlist_stocks:
+        logger.info("无股票持仓且无关注个股，跳过分析")
+        return
+
+    # Step 2: Analyze position stocks via Claude CLI
+    pos_results = []
+    for i, p in enumerate(stocks, 1):
+        code, name = p["code"], p["name"]
+        pl_pct = p["pl_ratio"] * 100
+        info = f"数量{p['qty']:.0f}, 成本{p['cost_price']:.2f}, 现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+        logger.info(f"[2/5] 持仓分析 ({i}/{len(stocks)}): {code} {name} | {info}")
+
+        output = _analyze_single_stock(code, name, info)
+        pos_results.append({"code": code, "name": name, "info": info, "analysis": output})
+        logger.info(f"  → 完成 ({len(output)} chars)")
+
+    # Step 3: Analyze watchlist stocks via Claude CLI
+    watch_results = []
+    for i, w in enumerate(watchlist_stocks, 1):
+        code, name = w["code"], w["name"]
+        price_info = f"最新价{w['latest_price']:.2f}, 涨跌{w['change_pct']:+.2f}%"
+        logger.info(f"[3/5] 关注分析 ({i}/{len(watchlist_stocks)}): {code} {name} | {price_info}")
+
+        output = _analyze_watchlist_stock(code, name, price_info)
+        watch_results.append({"code": code, "name": name, "info": price_info, "analysis": output})
+        logger.info(f"  → 完成 ({len(output)} chars)")
+
+    # Step 4: Build summary
+    logger.info(f"[4/5] 生成汇总...")
+    lines = [f"## {market_name}盘后分析 ({date.today()})\n"]
+
+    if stocks:
+        total_val = sum(p["market_val"] for p in positions)
+        total_pl = sum(p["pl_val"] for p in positions)
+        lines.append(f"**总市值**: ¥{total_val:,.0f} | **总盈亏**: ¥{total_pl:+,.0f}\n")
+
+    if pos_results:
+        lines.append("### 持仓分析\n")
+        for r in pos_results:
+            lines.append(f"#### {r['code']} {r['name']}")
+            lines.append(f"> {r['info']}")
+            lines.append(f"{r['analysis']}\n")
+
+    if watch_results:
+        lines.append("### 关注分析\n")
+        for r in watch_results:
+            lines.append(f"#### {r['code']} {r['name']}")
+            lines.append(f"> {r['info']}")
+            lines.append(f"{r['analysis']}\n")
 
     base_url = settings.web.base_url
-    url_hint = ""
     if base_url:
-        url_hint = f"""
-   - 在消息末尾加上相关页面链接:
-     [持仓详情]({base_url}/portfolio) | [信号]({base_url}/signals) | [计划]({base_url}/plans)"""
+        lines.append(f"[持仓详情]({base_url}/portfolio) | [关注列表]({base_url}/watchlist) | [信号]({base_url}/signals) | [计划]({base_url}/plans)")
 
-    prompt = f"""
-{market_name}盘后分析 ({date.today()}):
+    summary = "\n".join(lines)
 
-1. 用 sync_data 同步最新 {market_name} 数据
-2. 用 get_positions 获取 {market} 市场持仓
-3. 对每只持仓用 run_technical_analysis 做技术分析
-4. 基于 V12 七层决策框架生成信号:
-   - 卖出信号: 破止损、技术形态恶化
-   - 持有信号: 符合持有条件
-   - 关注信号: 关注列表中有买点的标的
-5. 用 save_signal 存储每个信号
-6. 用 save_analysis_result 存储分析结果
-7. 生成明日操作计划，用 create_plan 存储
-8. 最后用 send_dingtalk_message 推送分析摘要 (markdown 格式)，包含:
-   - 持仓盈亏概览
-   - 重要信号
-   - 明日操作计划{url_hint}
-"""
+    # Step 5: Push to DingTalk
+    logger.info(f"[5/5] 推送钉钉...")
+    try:
+        from services.dingtalk_service import create_dingtalk_service
+        dingtalk = create_dingtalk_service()
+        if len(summary) > 3000:
+            summary = summary[:3000] + "\n...(已截断)"
+        dingtalk.send_markdown(
+            f"{market_name}盘后分析",
+            summary,
+            user_id=user_id,
+            message_type="report",
+        )
+        logger.info("钉钉推送成功")
+    except Exception as e:
+        logger.warning(f"钉钉推送失败: {e}")
 
-    output = run_claude_prompt(prompt)
-    logger.info(f"Post-market analysis done for {market_name}")
+    logger.info(f"=== {market_name}盘后分析完成 (持仓{len(pos_results)}只, 关注{len(watch_results)}只) ===")
 
 
 def run_pre_market(market: str):
-    """Pre-market briefing via Claude CLI + MCP tools."""
+    """Pre-market briefing: analyze positions + watchlist stocks."""
     market_name = MARKET_NAMES.get(market, market)
-    logger.info(f"Starting pre-market briefing for {market_name}...")
+    logger.info(f"=== {market_name}盘前检查开始 ({date.today()}) ===")
 
-    from config import settings
+    user_id = get_user_id()
+
+    # Fetch positions + watchlist
+    positions = _get_market_positions(user_id, market)
+    stocks = [p for p in positions if not _is_option_code(market, p["code"].split(".", 1)[-1])]
+    logger.info(f"[1/3] {market_name} 持仓 {len(stocks)} 只股票")
+
+    watchlist = _get_market_watchlist(user_id, market)
+    pos_codes = {p["code"] for p in stocks}
+    watchlist_stocks = [
+        w for w in watchlist
+        if w["code"] not in pos_codes
+        and not _is_option_code(market, w["code"].split(".", 1)[-1])
+    ]
+    logger.info(f"[1/3] {market_name} 关注 {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})")
+
+    if not stocks and not watchlist_stocks:
+        logger.info("无股票持仓且无关注个股，跳过盘前检查")
+        return
+
+    # Build context for Claude
+    pos_summary = []
+    for p in stocks:
+        pl_pct = p["pl_ratio"] * 100
+        pos_summary.append(f"- {p['code']} {p['name']}: 现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%")
+    pos_text = "\n".join(pos_summary) if pos_summary else "（无持仓）"
+
+    watch_summary = []
+    for w in watchlist_stocks:
+        watch_summary.append(f"- {w['code']} {w['name']}: 最新价{w['latest_price']:.2f}, 涨跌{w['change_pct']:+.2f}%")
+    watch_text = "\n".join(watch_summary) if watch_summary else "（无关注）"
 
     base_url = settings.web.base_url
     url_hint = ""
     if base_url:
-        url_hint = f"""
-   - 在消息末尾加上相关页面链接:
-     [持仓详情]({base_url}/portfolio) | [计划]({base_url}/plans) | [日历]({base_url}/calendar)"""
+        url_hint = f"\n在末尾附上链接: [持仓]({base_url}/portfolio) | [关注]({base_url}/watchlist) | [计划]({base_url}/plans)"
 
-    prompt = f"""
-{market_name}盘前检查 ({date.today()}):
+    prompt = f"""{market_name}盘前检查 ({date.today()}):
 
+当前持仓:
+{pos_text}
+
+关注个股:
+{watch_text}
+
+请执行:
 1. 用 get_signals 查看 {market} 市场活跃信号
-2. 用 get_plans 查看今日操作计划
-3. 用 get_positions 检查 {market} 市场持仓风险
-4. 用 get_klines 检查关键持仓的最新 K 线走势
-5. 生成盘前简报
-6. 用 send_dingtalk_message 推送盘前提醒 (markdown 格式)，包含:
-   - 今日操作计划 (按优先级排列)
-   - 持仓风险提醒
-   - 关键价位提示{url_hint}
-"""
+2. 用 get_plans 查看今日 {market} 市场操作计划
+3. 对关键持仓 (盈亏较大或有信号的) 用 get_klines 检查最新走势
+4. 对关注个股检查是否到达关键价位、是否有入场机会
+5. 生成盘前简报，包含:
+   - 今日操作计划 (按优先级)
+   - 持仓风险提醒 (破位/超涨)
+   - 关键价位提示 (支撑/阻力)
+   - 关注个股机会提示
+6. 用 send_dingtalk_message 推送简报 (markdown 格式){url_hint}
 
+直接输出盘前简报内容。"""
+
+    logger.info(f"[2/3] Claude 生成盘前简报...")
     output = run_claude_prompt(prompt)
-    logger.info(f"Pre-market briefing done for {market_name}")
+    logger.info(f"[3/3] 盘前简报完成 ({len(output)} chars)")
+    logger.info(f"=== {market_name}盘前检查完成 ===")
 
 
 def main():
@@ -208,7 +482,7 @@ def main():
     if len(sys.argv) < 2:
         print("Usage: python scripts/cron_workflow.py <phase> [market]")
         print("  phase: sync | pre_market | post_market")
-        print("  market: HK | US | A")
+        print("  market: HK | US | A | JP")
         sys.exit(1)
 
     phase = sys.argv[1]
@@ -221,12 +495,12 @@ def main():
         run_sync()
     elif phase == "post_market":
         if not market:
-            print("Error: market required for post_market (HK/US/A)")
+            print("Error: market required for post_market (HK/US/A/JP)")
             sys.exit(1)
         run_post_market(market)
     elif phase == "pre_market":
         if not market:
-            print("Error: market required for pre_market (HK/US/A)")
+            print("Error: market required for pre_market (HK/US/A/JP)")
             sys.exit(1)
         run_pre_market(market)
     else:
