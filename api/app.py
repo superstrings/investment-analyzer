@@ -87,6 +87,7 @@ def create_app() -> FastAPI:
     from api.routes.plans import router as plans_router
     from api.routes.portfolio import router as portfolio_router
     from api.routes.signals import router as signals_router
+    from api.routes.stock import router as stock_router
     from api.routes.watchlist import router as watchlist_router
 
     app.include_router(dingtalk_router)
@@ -99,6 +100,7 @@ def create_app() -> FastAPI:
     app.include_router(calendar_router)
     app.include_router(analysis_router)
     app.include_router(charts_router)
+    app.include_router(stock_router)
     app.include_router(dashboard_router)
 
     # Login page
@@ -136,7 +138,9 @@ def create_app() -> FastAPI:
         if not settings.web.username and not settings.web.auth_token:
             return JSONResponse({"success": True, "redirect": "/"})
 
-        return JSONResponse({"success": False, "error": "用户名或密码错误"}, status_code=401)
+        return JSONResponse(
+            {"success": False, "error": "用户名或密码错误"}, status_code=401
+        )
 
     # Dashboard pages (HTML)
     @app.get("/", response_class=HTMLResponse)
@@ -162,5 +166,11 @@ def create_app() -> FastAPI:
     @app.get("/calendar", response_class=HTMLResponse)
     async def calendar_page(request: Request):
         return templates.TemplateResponse("calendar.html", {"request": request})
+
+    @app.get("/stock/{market}/{code}", response_class=HTMLResponse)
+    async def stock_page(request: Request, market: str, code: str):
+        return templates.TemplateResponse(
+            "stock.html", {"request": request, "market": market, "code": code}
+        )
 
     return app

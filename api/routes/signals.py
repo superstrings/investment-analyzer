@@ -33,8 +33,11 @@ async def api_signals(
     market: str = "",
     signal_type: str = "",
     active_only: bool = True,
+    code: str = "",
+    offset: int = 0,
+    limit: int = 20,
 ):
-    """Get signals."""
+    """Get signals with optional pagination."""
     from db.database import get_session
     from db.models import User
 
@@ -46,14 +49,15 @@ async def api_signals(
 
     svc = create_signal_service()
 
-    if active_only:
-        signals = svc.get_active_signals(
-            user_id,
-            market=market or None,
-            signal_type=signal_type or None,
-        )
-    else:
-        signals = svc.get_signals_by_date(user_id)
+    signals, total = svc.get_signals_paginated(
+        user_id,
+        active_only=active_only,
+        market=market or None,
+        signal_type=signal_type or None,
+        code=code or None,
+        offset=offset,
+        limit=limit,
+    )
 
     result = []
     for s in signals:
@@ -81,6 +85,9 @@ async def api_signals(
 
     return {
         "signals": result,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
         "accuracy": {
             "total": accuracy.total_signals,
             "win_rate": accuracy.win_rate,

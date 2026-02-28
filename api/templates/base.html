@@ -39,6 +39,12 @@
                     <a href="/plans" class="text-sm text-gray-300 hover:text-white {% block nav_plans %}{% endblock %}">计划</a>
                     <a href="/calendar" class="text-sm text-gray-300 hover:text-white {% block nav_calendar %}{% endblock %}">日历</a>
                 </div>
+                <div class="relative">
+                    <input id="nav-search" type="text" placeholder="搜索代码/名称..."
+                        class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-40 focus:w-56 transition-all focus:outline-none focus:border-blue-500"
+                        autocomplete="off">
+                    <div id="search-dropdown" class="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
+                </div>
             </div>
         </div>
     </nav>
@@ -74,6 +80,78 @@
             if (val < 0) return 'text-loss';
             return 'text-gray-400';
         }
+
+        // Stock page navigation utilities
+        function stockUrl(fullCode) {
+            const parts = fullCode.split('.');
+            const market = parts[0];
+            const code = parts.slice(1).join('.');
+            return '/stock/' + market + '/' + code;
+        }
+
+        function makeStockLink(fullCode, displayText) {
+            const a = document.createElement('a');
+            a.href = stockUrl(fullCode);
+            a.className = 'text-blue-400 hover:text-blue-300 hover:underline';
+            a.textContent = displayText || fullCode;
+            return a;
+        }
+
+        // Global search
+        (function() {
+            const input = document.getElementById('nav-search');
+            const dropdown = document.getElementById('search-dropdown');
+            let debounceTimer = null;
+
+            input.addEventListener('input', function() {
+                clearTimeout(debounceTimer);
+                const q = this.value.trim();
+                if (q.length < 1) { dropdown.classList.add('hidden'); return; }
+                debounceTimer = setTimeout(() => doSearch(q), 300);
+            });
+
+            input.addEventListener('blur', function() {
+                setTimeout(() => dropdown.classList.add('hidden'), 200);
+            });
+            input.addEventListener('focus', function() {
+                if (dropdown.children.length > 0 && this.value.trim().length >= 1) {
+                    dropdown.classList.remove('hidden');
+                }
+            });
+
+            async function doSearch(q) {
+                try {
+                    const data = await fetchData('/api/search?q=' + encodeURIComponent(q));
+                    dropdown.textContent = '';
+                    if (!data.results || data.results.length === 0) {
+                        const empty = document.createElement('div');
+                        empty.className = 'px-3 py-2 text-sm text-gray-500';
+                        empty.textContent = '无结果';
+                        dropdown.appendChild(empty);
+                    } else {
+                        data.results.forEach(r => {
+                            const item = document.createElement('a');
+                            item.href = stockUrl(r.code);
+                            item.className = 'block px-3 py-2 hover:bg-gray-700 text-sm cursor-pointer';
+                            const codeSp = document.createElement('span');
+                            codeSp.className = 'text-blue-400 font-medium';
+                            codeSp.textContent = r.code;
+                            const nameSp = document.createElement('span');
+                            nameSp.className = 'text-gray-400 ml-2';
+                            nameSp.textContent = r.name || '';
+                            const srcSp = document.createElement('span');
+                            srcSp.className = 'text-gray-600 ml-2 text-xs';
+                            srcSp.textContent = r.source || '';
+                            item.appendChild(codeSp);
+                            item.appendChild(nameSp);
+                            item.appendChild(srcSp);
+                            dropdown.appendChild(item);
+                        });
+                    }
+                    dropdown.classList.remove('hidden');
+                } catch(e) {}
+            }
+        })();
     </script>
     {% block scripts %}{% endblock %}
 </body>

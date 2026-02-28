@@ -89,7 +89,9 @@ async def api_portfolio(
     alerts_by_code = alert_svc.get_alerts_by_codes(user.id, position_codes)
 
     plan_svc = create_plan_service()
-    plans_by_code = plan_svc.get_plans_by_codes(user.id, position_codes, include_history=True)
+    plans_by_code = plan_svc.get_plans_by_codes(
+        user.id, position_codes, include_history=True
+    )
 
     signal_svc = create_signal_service()
     signals_by_code = signal_svc.get_signals_by_codes(user.id, position_codes)
@@ -152,10 +154,29 @@ async def api_portfolio(
                         "priority": pl.priority,
                         "status": pl.status,
                         "plan_date": pl.plan_date.isoformat(),
-                        "entry_price": float(pl.entry_price) if pl.entry_price else None,
-                        "stop_loss": float(pl.stop_loss_price) if pl.stop_loss_price else None,
-                        "target_1": float(pl.target_price_1) if pl.target_price_1 else None,
+                        "entry_price": (
+                            float(pl.entry_price) if pl.entry_price else None
+                        ),
+                        "stop_loss": (
+                            float(pl.stop_loss_price) if pl.stop_loss_price else None
+                        ),
+                        "target_1": (
+                            float(pl.target_price_1) if pl.target_price_1 else None
+                        ),
+                        "target_2": (
+                            float(pl.target_price_2) if pl.target_price_2 else None
+                        ),
+                        "position_size": pl.position_size or "",
                         "reason": pl.reason or "",
+                        "created_at": (
+                            pl.created_at.isoformat() if pl.created_at else None
+                        ),
+                        "executed_at": (
+                            pl.executed_at.isoformat() if pl.executed_at else None
+                        ),
+                        "execution_price": (
+                            float(pl.execution_price) if pl.execution_price else None
+                        ),
                     }
                     for pl in code_plans
                 ],
@@ -165,7 +186,21 @@ async def api_portfolio(
                         "type": sg.signal_type,
                         "source": sg.signal_source,
                         "score": float(sg.score) if sg.score else None,
+                        "confidence": float(sg.confidence) if sg.confidence else None,
+                        "strength": sg.strength,
+                        "trigger_price": (
+                            float(sg.trigger_price) if sg.trigger_price else None
+                        ),
+                        "target_price": (
+                            float(sg.target_price) if sg.target_price else None
+                        ),
+                        "stop_loss": (
+                            float(sg.stop_loss_price) if sg.stop_loss_price else None
+                        ),
                         "reason": sg.reason or "",
+                        "created_at": (
+                            sg.created_at.isoformat() if sg.created_at else None
+                        ),
                     }
                     for sg in code_signals
                 ],
@@ -314,7 +349,8 @@ async def api_portfolio_historical(
         )
 
     snapshots = [
-        {"date": d.isoformat(), "positions": by_date[d]} for d in sorted(by_date.keys(), reverse=True)
+        {"date": d.isoformat(), "positions": by_date[d]}
+        for d in sorted(by_date.keys(), reverse=True)
     ]
 
     return {"snapshots": snapshots}

@@ -157,9 +157,7 @@ function createWatchlistRow(item) {
     const leftDiv = document.createElement('div');
     const codeLine = document.createElement('div');
     codeLine.className = 'font-medium flex items-center gap-1.5';
-    const codeText = document.createElement('span');
-    codeText.textContent = item.full_code;
-    codeLine.appendChild(codeText);
+    codeLine.appendChild(makeStockLink(item.full_code, item.full_code));
     if (item.group_name) {
         const groupBadge = document.createElement('span');
         groupBadge.className = 'text-[10px] bg-gray-700 text-gray-300 px-1 rounded';
@@ -366,6 +364,19 @@ function createSignalCard(s, colors, isHistory) {
         scoreSpan.textContent = s.score.toFixed(0) + '分';
         leftSpan.appendChild(scoreSpan);
     }
+    if (s.confidence) {
+        const confSpan = document.createElement('span');
+        confSpan.className = 'text-[10px] text-gray-500';
+        confSpan.textContent = '置信' + s.confidence.toFixed(0) + '%';
+        leftSpan.appendChild(confSpan);
+    }
+    if (s.strength) {
+        const strColors = {strong:'bg-green-900/50 text-green-400', moderate:'bg-yellow-900/50 text-yellow-400', weak:'bg-gray-800 text-gray-400'};
+        const strBadge = document.createElement('span');
+        strBadge.className = 'text-[10px] px-1 rounded ' + (strColors[s.strength] || 'bg-gray-800 text-gray-400');
+        strBadge.textContent = s.strength;
+        leftSpan.appendChild(strBadge);
+    }
 
     const dateSpan = document.createElement('span');
     dateSpan.className = 'text-[10px] text-gray-500';
@@ -480,6 +491,7 @@ function createPlanCard(p, isHistory) {
     if (p.stop_loss) priceInfo.push('止损: ' + p.stop_loss);
     if (p.target_1) priceInfo.push('目标1: ' + p.target_1);
     if (p.target_2) priceInfo.push('目标2: ' + p.target_2);
+    if (p.position_size) priceInfo.push('仓位: ' + p.position_size);
     if (priceInfo.length > 0) {
         const priceDiv = document.createElement('div');
         priceDiv.className = 'text-[10px] text-gray-500 mt-1';

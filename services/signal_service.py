@@ -164,6 +164,45 @@ class SignalService:
 
             return result
 
+    def get_signals_paginated(
+        self,
+        user_id: int,
+        active_only: bool = True,
+        market: str = None,
+        signal_type: str = None,
+        code: str = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Signal], int]:
+        """Get signals with pagination and filtering. Returns (signals, total_count)."""
+        with get_session() as session:
+            query = session.query(Signal).filter(Signal.user_id == user_id)
+            if active_only:
+                query = query.filter(Signal.is_active == True)
+            if market:
+                query = query.filter(Signal.market == market)
+            if signal_type:
+                query = query.filter(Signal.signal_type == signal_type.upper())
+            if code:
+                # Support full_code like "HK.00700" or just the code part
+                if "." in code:
+                    parts = code.split(".", 1)
+                    query = query.filter(
+                        Signal.market == parts[0], Signal.code == parts[1]
+                    )
+                else:
+                    query = query.filter(Signal.code == code)
+            total = query.count()
+            signals = (
+                query.order_by(Signal.created_at.desc())
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            for s in signals:
+                session.expunge(s)
+            return signals, total
+
     def expire_old_signals(self, user_id: int) -> int:
         """Deactivate expired signals. Returns count of expired signals."""
         now = datetime.now()

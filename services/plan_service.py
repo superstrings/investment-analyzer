@@ -102,6 +102,44 @@ class TradingPlanService:
                 session.expunge(p)
             return plans
 
+    def get_plans_paginated(
+        self,
+        user_id: int,
+        status: str = None,
+        code: str = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[TradingPlanRecord], int]:
+        """Get plans with pagination and filtering. Returns (plans, total_count)."""
+        with get_session() as session:
+            query = session.query(TradingPlanRecord).filter(
+                TradingPlanRecord.user_id == user_id
+            )
+            if status:
+                query = query.filter(TradingPlanRecord.status == status)
+            if code:
+                if "." in code:
+                    parts = code.split(".", 1)
+                    query = query.filter(
+                        TradingPlanRecord.market == parts[0],
+                        TradingPlanRecord.code == parts[1],
+                    )
+                else:
+                    query = query.filter(TradingPlanRecord.code == code)
+            total = query.count()
+            plans = (
+                query.order_by(
+                    TradingPlanRecord.plan_date.desc(),
+                    TradingPlanRecord.created_at.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            for p in plans:
+                session.expunge(p)
+            return plans, total
+
     def mark_executed(
         self,
         plan_id: int,

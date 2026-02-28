@@ -6,20 +6,71 @@
 <div class="space-y-4">
     <div class="flex justify-between items-center">
         <h1 class="text-lg font-bold">操作计划</h1>
-        <input type="date" id="plan-date" onchange="loadPlans()"
-            class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+        <div class="flex items-center gap-2">
+            <input id="pl-code-filter" type="text" placeholder="代码过滤 (如 HK.00700)"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700 w-40"
+                onchange="resetAndLoad()">
+        </div>
     </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2">
+        <button id="tab-all" onclick="switchTab('')" class="text-sm px-3 py-1 rounded bg-blue-600 text-white">全部</button>
+        <button id="tab-pending" onclick="switchTab('pending')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">待执行</button>
+        <button id="tab-executed" onclick="switchTab('executed')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">已执行</button>
+        <button id="tab-cancelled" onclick="switchTab('cancelled')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">已取消</button>
+    </div>
+
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div id="pl-list" class="divide-y divide-gray-800">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
         </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="pl-pagination" class="flex justify-between items-center text-sm text-gray-400 hidden">
+        <button id="pl-prev" onclick="prevPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>上一页</button>
+        <span id="pl-page-info">--</span>
+        <button id="pl-next" onclick="nextPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>下一页</button>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.getElementById('plan-date').valueAsDate = new Date();
+let currentOffset = 0;
+const pageSize = 20;
+let statusFilter = '';
+let totalPlans = 0;
+
+function switchTab(status) {
+    statusFilter = status;
+    ['tab-all', 'tab-pending', 'tab-executed', 'tab-cancelled'].forEach(id => {
+        document.getElementById(id).className = 'text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white';
+    });
+    const activeId = status ? 'tab-' + status : 'tab-all';
+    document.getElementById(activeId).className = 'text-sm px-3 py-1 rounded bg-blue-600 text-white';
+    resetAndLoad();
+}
+
+function resetAndLoad() {
+    currentOffset = 0;
+    loadPlans();
+}
+
+function prevPage() {
+    if (currentOffset >= pageSize) {
+        currentOffset -= pageSize;
+        loadPlans();
+    }
+}
+
+function nextPage() {
+    if (currentOffset + pageSize < totalPlans) {
+        currentOffset += pageSize;
+        loadPlans();
+    }
+}
 
 function createPlanDetailRow(p) {
     const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300',
@@ -37,14 +88,13 @@ function createPlanDetailRow(p) {
     const badge = document.createElement('span');
     badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (prioColors[p.priority] || '');
     badge.textContent = p.action.toUpperCase();
-    const codeSpan = document.createElement('span');
-    codeSpan.className = 'font-medium';
-    codeSpan.textContent = p.code;
+    const codeLink = makeStockLink(p.code, p.code);
+    codeLink.className = 'font-medium text-blue-400 hover:text-blue-300 hover:underline';
     const nameSpan = document.createElement('span');
     nameSpan.className = 'text-xs text-gray-500 ml-1';
     nameSpan.textContent = p.name;
     leftDiv.appendChild(badge);
-    leftDiv.appendChild(codeSpan);
+    leftDiv.appendChild(codeLink);
     leftDiv.appendChild(nameSpan);
 
     const rightDiv = document.createElement('div');
@@ -53,6 +103,13 @@ function createPlanDetailRow(p) {
     statusSpan.className = 'text-xs ' + (statusColors[p.status] || '');
     statusSpan.textContent = p.status;
     rightDiv.appendChild(statusSpan);
+
+    if (p.plan_date) {
+        const dateSpan = document.createElement('span');
+        dateSpan.className = 'text-[10px] text-gray-600';
+        dateSpan.textContent = p.plan_date;
+        rightDiv.appendChild(dateSpan);
+    }
 
     if (p.status === 'pending') {
         const execBtn = document.createElement('button');
@@ -77,6 +134,7 @@ function createPlanDetailRow(p) {
     if (p.entry_price) fields.push('入场: ' + p.entry_price.toFixed(2));
     if (p.stop_loss) fields.push('止损: ' + p.stop_loss.toFixed(2));
     if (p.target_1) fields.push('目标: ' + p.target_1.toFixed(2));
+    if (p.target_2) fields.push('目标2: ' + p.target_2.toFixed(2));
     if (p.position_size) fields.push('仓位: ' + p.position_size);
     fields.forEach(f => {
         const span = document.createElement('span');
@@ -88,17 +146,29 @@ function createPlanDetailRow(p) {
     if (p.reason) {
         const reasonEl = document.createElement('div');
         reasonEl.className = 'mt-1 text-xs text-gray-400';
-        reasonEl.textContent = p.reason.substring(0, 120);
+        reasonEl.textContent = p.reason;
         row.appendChild(reasonEl);
+    }
+
+    if (p.execution_price) {
+        const execEl = document.createElement('div');
+        execEl.className = 'mt-1 text-[10px] text-green-500';
+        execEl.textContent = '成交: ' + p.execution_price.toFixed(2) + (p.executed_at ? ' @ ' + p.executed_at.split('T')[0] : '');
+        row.appendChild(execEl);
     }
 
     return row;
 }
 
 async function loadPlans() {
-    const dateVal = document.getElementById('plan-date').value;
-    const url = dateVal ? '/api/plans?date_str=' + dateVal : '/api/plans';
+    const code = document.getElementById('pl-code-filter').value.trim();
+    let url = '/api/plans?all_dates=true&offset=' + currentOffset + '&limit=' + pageSize;
+    if (statusFilter) url += '&status=' + statusFilter;
+    if (code) url += '&code=' + encodeURIComponent(code);
+
     const data = await fetchData(url);
+    totalPlans = data.total || data.plans.length;
+
     const listEl = document.getElementById('pl-list');
     listEl.textContent = '';
     if (data.plans.length === 0) {
@@ -106,9 +176,22 @@ async function loadPlans() {
         empty.className = 'p-4 text-gray-500 text-sm';
         empty.textContent = '暂无计划';
         listEl.appendChild(empty);
-        return;
+    } else {
+        data.plans.forEach(p => listEl.appendChild(createPlanDetailRow(p)));
     }
-    data.plans.forEach(p => listEl.appendChild(createPlanDetailRow(p)));
+
+    // Update pagination
+    const pagEl = document.getElementById('pl-pagination');
+    if (totalPlans > pageSize) {
+        pagEl.classList.remove('hidden');
+        const page = Math.floor(currentOffset / pageSize) + 1;
+        const totalPages = Math.ceil(totalPlans / pageSize);
+        document.getElementById('pl-page-info').textContent = '第 ' + page + ' / ' + totalPages + ' 页 (共 ' + totalPlans + ' 条)';
+        document.getElementById('pl-prev').disabled = currentOffset === 0;
+        document.getElementById('pl-next').disabled = currentOffset + pageSize >= totalPlans;
+    } else {
+        pagEl.classList.add('hidden');
+    }
 }
 
 async function executePlan(id) {

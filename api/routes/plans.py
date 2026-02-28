@@ -29,8 +29,12 @@ async def api_plans(
     username: str = Depends(get_current_user),
     date_str: str = "",
     status: str = "",
+    code: str = "",
+    all_dates: bool = False,
+    offset: int = 0,
+    limit: int = 20,
 ):
-    """Get trading plans."""
+    """Get trading plans with optional pagination."""
     from db.database import get_session
     from db.models import User
 
@@ -40,13 +44,56 @@ async def api_plans(
             return {"error": "User not found"}
         user_id = user.id
 
+    svc = create_plan_service()
+
+    if all_dates or code:
+        # Use paginated query (no date filter)
+        plans_list, total = svc.get_plans_paginated(
+            user_id,
+            status=status or None,
+            code=code or None,
+            offset=offset,
+            limit=limit,
+        )
+        result = []
+        for p in plans_list:
+            result.append(
+                {
+                    "id": p.id,
+                    "code": f"{p.market}.{p.code}",
+                    "name": p.stock_name or "",
+                    "action": p.action_type,
+                    "priority": p.priority,
+                    "entry_price": float(p.entry_price) if p.entry_price else None,
+                    "stop_loss": (
+                        float(p.stop_loss_price) if p.stop_loss_price else None
+                    ),
+                    "target_1": float(p.target_price_1) if p.target_price_1 else None,
+                    "target_2": float(p.target_price_2) if p.target_price_2 else None,
+                    "position_size": p.position_size or "",
+                    "reason": p.reason or "",
+                    "status": p.status,
+                    "plan_date": p.plan_date.isoformat(),
+                    "created_at": p.created_at.isoformat() if p.created_at else None,
+                    "executed_at": p.executed_at.isoformat() if p.executed_at else None,
+                    "execution_price": (
+                        float(p.execution_price) if p.execution_price else None
+                    ),
+                }
+            )
+        return {
+            "plans": result,
+            "total": total,
+            "offset": offset,
+            "limit": limit,
+        }
+
+    # Legacy date-based query
     from datetime import datetime
 
     target_date = (
         datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
     )
-
-    svc = create_plan_service()
 
     if status:
         plans = svc.get_plans_by_date(user_id, target_date)
@@ -70,6 +117,8 @@ async def api_plans(
                 "position_size": p.position_size or "",
                 "reason": p.reason or "",
                 "status": p.status,
+                "plan_date": p.plan_date.isoformat(),
+                "created_at": p.created_at.isoformat() if p.created_at else None,
                 "executed_at": p.executed_at.isoformat() if p.executed_at else None,
                 "execution_price": (
                     float(p.execution_price) if p.execution_price else None

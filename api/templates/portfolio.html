@@ -107,6 +107,17 @@
     </div>
 </div>
 
+<!-- Detail Modal (shared for signal/plan details) -->
+<div id="detail-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+    <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-md mx-4 p-5 max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 id="detail-modal-title" class="font-bold text-sm"></h3>
+            <button onclick="document.getElementById('detail-modal').classList.add('hidden')" class="text-gray-500 hover:text-white">&times;</button>
+        </div>
+        <div id="detail-modal-body"></div>
+    </div>
+</div>
+
 <!-- Add Manual Position Modal -->
 <div id="add-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
     <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-sm mx-4 p-5">
@@ -236,9 +247,7 @@ function createDetailedPositionRow(p) {
     const leftDiv = document.createElement('div');
     const codeLine = document.createElement('div');
     codeLine.className = 'font-medium flex items-center gap-1.5';
-    const codeText = document.createElement('span');
-    codeText.textContent = p.code;
-    codeLine.appendChild(codeText);
+    codeLine.appendChild(makeStockLink(p.code, p.code));
     if (p.source === 'manual') {
         const badge = document.createElement('span');
         badge.className = 'text-[10px] bg-blue-900 text-blue-300 px-1 rounded';
@@ -312,19 +321,19 @@ function createDetailedPositionRow(p) {
         const planRow = document.createElement('div');
         planRow.className = 'mt-1.5 flex flex-wrap gap-1.5';
         pendingPlans.forEach(pl => {
-            const tag = document.createElement('span');
+            const tag = document.createElement('button');
             const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
-            tag.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (prioColors[pl.priority] || 'bg-gray-700 text-gray-300');
+            tag.className = 'text-[10px] px-1.5 py-0.5 rounded cursor-pointer hover:opacity-80 ' + (prioColors[pl.priority] || 'bg-gray-700 text-gray-300');
             tag.textContent = pl.action.toUpperCase() + (pl.entry_price ? ' @' + pl.entry_price : '');
-            tag.title = pl.reason || pl.action;
+            tag.onclick = (e) => { e.stopPropagation(); showPlanDetail(pl); };
             planRow.appendChild(tag);
         });
         (p.signals || []).forEach(sg => {
-            const tag = document.createElement('span');
+            const tag = document.createElement('button');
             const sigColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300', HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
-            tag.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (sigColors[sg.type] || 'bg-gray-700 text-gray-300');
+            tag.className = 'text-[10px] px-1.5 py-0.5 rounded cursor-pointer hover:opacity-80 ' + (sigColors[sg.type] || 'bg-gray-700 text-gray-300');
             tag.textContent = sg.type + (sg.score ? ' ' + sg.score.toFixed(0) + '分' : '');
-            tag.title = sg.reason || sg.type;
+            tag.onclick = (e) => { e.stopPropagation(); showSignalDetail(sg); };
             planRow.appendChild(tag);
         });
         row.appendChild(planRow);
@@ -584,7 +593,7 @@ async function loadHistorical() {
             const left = document.createElement('div');
             const codeLine = document.createElement('div');
             codeLine.className = 'font-medium text-gray-300';
-            codeLine.textContent = p.code;
+            codeLine.appendChild(makeStockLink(p.code, p.code));
             const nameLine = document.createElement('div');
             nameLine.className = 'text-xs text-gray-600';
             nameLine.textContent = p.name;
@@ -607,6 +616,109 @@ async function loadHistorical() {
             listEl.appendChild(row);
         });
     });
+}
+
+function showSignalDetail(sg) {
+    document.getElementById('detail-modal-title').textContent = '信号详情';
+    const body = document.getElementById('detail-modal-body');
+    body.textContent = '';
+    const sigColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300', HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300'};
+    const html = document.createElement('div');
+    html.className = 'space-y-2 text-sm';
+    const fields = [
+        {label:'类型', value: sg.type, badge: sigColors[sg.type]},
+        {label:'来源', value: sg.source},
+        {label:'分数', value: sg.score ? sg.score.toFixed(0) + '分' : '-'},
+        {label:'置信度', value: sg.confidence ? sg.confidence.toFixed(0) + '%' : '-'},
+        {label:'强度', value: sg.strength || '-'},
+        {label:'触发价', value: sg.trigger_price ? sg.trigger_price.toFixed(2) : '-'},
+        {label:'目标价', value: sg.target_price ? sg.target_price.toFixed(2) : '-'},
+        {label:'止损价', value: sg.stop_loss ? sg.stop_loss.toFixed(2) : '-'},
+        {label:'时间', value: sg.created_at ? sg.created_at.split('T')[0] : '-'},
+    ];
+    fields.forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between';
+        const label = document.createElement('span');
+        label.className = 'text-gray-500';
+        label.textContent = f.label;
+        const val = document.createElement('span');
+        if (f.badge) {
+            val.className = 'px-2 py-0.5 rounded text-xs ' + f.badge;
+        }
+        val.textContent = f.value;
+        row.appendChild(label);
+        row.appendChild(val);
+        html.appendChild(row);
+    });
+    if (sg.reason) {
+        const divider = document.createElement('div');
+        divider.className = 'border-t border-gray-700 pt-2 mt-2';
+        const reasonLabel = document.createElement('div');
+        reasonLabel.className = 'text-gray-500 text-xs mb-1';
+        reasonLabel.textContent = '理由';
+        const reasonText = document.createElement('div');
+        reasonText.className = 'text-gray-300 text-xs whitespace-pre-wrap';
+        reasonText.textContent = sg.reason;
+        divider.appendChild(reasonLabel);
+        divider.appendChild(reasonText);
+        html.appendChild(divider);
+    }
+    body.appendChild(html);
+    document.getElementById('detail-modal').classList.remove('hidden');
+}
+
+function showPlanDetail(pl) {
+    document.getElementById('detail-modal-title').textContent = '计划详情';
+    const body = document.getElementById('detail-modal-body');
+    body.textContent = '';
+    const prioLabels = {must_do:'必须执行', should_do:'应该执行', consider:'考虑执行'};
+    const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
+    const html = document.createElement('div');
+    html.className = 'space-y-2 text-sm';
+    const fields = [
+        {label:'操作', value: pl.action.toUpperCase()},
+        {label:'优先级', value: prioLabels[pl.priority] || pl.priority, badge: prioColors[pl.priority]},
+        {label:'状态', value: pl.status},
+        {label:'日期', value: pl.plan_date},
+        {label:'入场价', value: pl.entry_price ? pl.entry_price.toFixed(2) : '-'},
+        {label:'止损价', value: pl.stop_loss ? pl.stop_loss.toFixed(2) : '-'},
+        {label:'目标1', value: pl.target_1 ? pl.target_1.toFixed(2) : '-'},
+        {label:'目标2', value: pl.target_2 ? pl.target_2.toFixed(2) : '-'},
+        {label:'仓位', value: pl.position_size || '-'},
+    ];
+    if (pl.execution_price) fields.push({label:'成交价', value: pl.execution_price.toFixed(2)});
+    if (pl.executed_at) fields.push({label:'执行时间', value: pl.executed_at.split('T')[0]});
+    fields.forEach(f => {
+        const row = document.createElement('div');
+        row.className = 'flex justify-between';
+        const label = document.createElement('span');
+        label.className = 'text-gray-500';
+        label.textContent = f.label;
+        const val = document.createElement('span');
+        if (f.badge) {
+            val.className = 'px-2 py-0.5 rounded text-xs ' + f.badge;
+        }
+        val.textContent = f.value;
+        row.appendChild(label);
+        row.appendChild(val);
+        html.appendChild(row);
+    });
+    if (pl.reason) {
+        const divider = document.createElement('div');
+        divider.className = 'border-t border-gray-700 pt-2 mt-2';
+        const reasonLabel = document.createElement('div');
+        reasonLabel.className = 'text-gray-500 text-xs mb-1';
+        reasonLabel.textContent = '理由';
+        const reasonText = document.createElement('div');
+        reasonText.className = 'text-gray-300 text-xs whitespace-pre-wrap';
+        reasonText.textContent = pl.reason;
+        divider.appendChild(reasonLabel);
+        divider.appendChild(reasonText);
+        html.appendChild(divider);
+    }
+    body.appendChild(html);
+    document.getElementById('detail-modal').classList.remove('hidden');
 }
 
 loadPortfolio();

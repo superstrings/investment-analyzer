@@ -1,0 +1,538 @@
+{% extends "base.html" %}
+{% block title %}{{ market }}.{{ code }} - Investment Analyzer{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 id="stock-title" class="text-lg font-bold">{{ market }}.{{ code }}</h1>
+            <div id="stock-name" class="text-sm text-gray-500"></div>
+        </div>
+        <div id="stock-price" class="text-right">
+            <div id="latest-price" class="text-2xl font-bold">--</div>
+        </div>
+    </div>
+
+    <!-- K-line Chart -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800 p-3">
+        <div class="flex justify-between items-center mb-2">
+            <span class="text-sm text-gray-400">K线图</span>
+            <div class="flex gap-1">
+                <button onclick="loadKlines(60)" id="btn-60d" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">60天</button>
+                <button onclick="loadKlines(120)" id="btn-120d" class="text-xs px-2 py-0.5 rounded bg-blue-600 text-white">120天</button>
+                <button onclick="loadKlines(250)" id="btn-250d" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">250天</button>
+            </div>
+        </div>
+        <div id="chart-container" style="height: 400px;"></div>
+    </div>
+
+    <!-- Signals -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="font-semibold text-sm">信号</h2>
+        </div>
+        <div id="signals-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+
+    <!-- Plans -->
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="font-semibold text-sm">操作计划</h2>
+        </div>
+        <div id="plans-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+
+    <!-- Position -->
+    <div id="position-section" class="bg-gray-900 rounded-lg border border-gray-800 hidden">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="font-semibold text-sm">持仓</h2>
+        </div>
+        <div id="position-info" class="px-4 py-3"></div>
+    </div>
+
+    <!-- Trades -->
+    <div id="trades-section" class="bg-gray-900 rounded-lg border border-gray-800 hidden">
+        <div class="px-4 py-3 border-b border-gray-800">
+            <h2 class="font-semibold text-sm">交易记录</h2>
+        </div>
+        <div id="trades-list" class="divide-y divide-gray-800"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+const MARKET = '{{ market }}';
+const CODE = '{{ code }}';
+const FULL_CODE = MARKET + '.' + CODE;
+
+let chart = null;
+let candleSeries = null;
+let volumeSeries = null;
+let maLines = {};
+let currentDays = 120;
+let stockData = null;
+
+// Chart theme
+const chartOptions = {
+    layout: {
+        background: { color: '#111827' },
+        textColor: '#9ca3af',
+    },
+    grid: {
+        vertLines: { color: '#1f2937' },
+        horzLines: { color: '#1f2937' },
+    },
+    crosshair: { mode: 0 },
+    rightPriceScale: { borderColor: '#374151' },
+    timeScale: { borderColor: '#374151', timeVisible: false },
+};
+
+const maColors = {
+    ma5: '#f59e0b',
+    ma10: '#3b82f6',
+    ma20: '#a855f7',
+    ma60: '#6b7280',
+};
+
+function initChart() {
+    const container = document.getElementById('chart-container');
+    chart = LightweightCharts.createChart(container, {
+        ...chartOptions,
+        width: container.clientWidth,
+        height: 400,
+    });
+
+    candleSeries = chart.addCandlestickSeries({
+        upColor: '#22c55e',
+        downColor: '#ef4444',
+        borderUpColor: '#22c55e',
+        borderDownColor: '#ef4444',
+        wickUpColor: '#22c55e',
+        wickDownColor: '#ef4444',
+    });
+
+    volumeSeries = chart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+    });
+    chart.priceScale('volume').applyOptions({
+        scaleMargins: { top: 0.8, bottom: 0 },
+    });
+
+    // MA lines
+    Object.entries(maColors).forEach(([key, color]) => {
+        maLines[key] = chart.addLineSeries({
+            color: color,
+            lineWidth: 1,
+            priceLineVisible: false,
+            lastValueVisible: false,
+        });
+    });
+
+    // Resize handler
+    const ro = new ResizeObserver(entries => {
+        for (const entry of entries) {
+            chart.applyOptions({ width: entry.contentRect.width });
+        }
+    });
+    ro.observe(container);
+}
+
+async function loadKlines(days) {
+    currentDays = days;
+    // Update button styles
+    [60, 120, 250].forEach(d => {
+        const btn = document.getElementById('btn-' + d + 'd');
+        btn.className = d === days
+            ? 'text-xs px-2 py-0.5 rounded bg-blue-600 text-white'
+            : 'text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white';
+    });
+
+    const data = await fetchData('/api/stock/' + MARKET + '/' + CODE + '/klines?days=' + days);
+    if (!data.klines || data.klines.length === 0) return;
+
+    const candles = data.klines.map(k => ({
+        time: k.time,
+        open: k.open,
+        high: k.high,
+        low: k.low,
+        close: k.close,
+    }));
+    candleSeries.setData(candles);
+
+    const volumes = data.klines.map(k => ({
+        time: k.time,
+        value: k.volume,
+        color: k.close >= k.open ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)',
+    }));
+    volumeSeries.setData(volumes);
+
+    // MA lines
+    Object.keys(maColors).forEach(key => {
+        const maData = data.klines
+            .filter(k => k[key] !== null)
+            .map(k => ({ time: k.time, value: k[key] }));
+        maLines[key].setData(maData);
+    });
+
+    // Add trade markers
+    if (stockData && stockData.trades) {
+        addTradeMarkers(stockData.trades, data.klines);
+    }
+
+    // Add signal markers
+    if (stockData && stockData.signals) {
+        addSignalMarkers(stockData.signals, data.klines);
+    }
+
+    chart.timeScale().fitContent();
+}
+
+function addTradeMarkers(trades, klines) {
+    const dateSet = new Set(klines.map(k => k.time));
+    const markers = [];
+    trades.forEach(t => {
+        const d = t.time ? t.time.split('T')[0] : null;
+        if (d && dateSet.has(d)) {
+            markers.push({
+                time: d,
+                position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
+                color: t.side === 'BUY' ? '#22c55e' : '#ef4444',
+                shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+                text: t.side + ' ' + t.qty,
+            });
+        }
+    });
+    // Sort by time
+    markers.sort((a, b) => a.time < b.time ? -1 : 1);
+    if (markers.length > 0) {
+        candleSeries.setMarkers(markers);
+    }
+}
+
+function addSignalMarkers(signals, klines) {
+    // Get existing markers (trades) and add signal markers
+    const existing = candleSeries.markers ? [] : [];
+    const dateSet = new Set(klines.map(k => k.time));
+    const markers = [];
+    signals.forEach(s => {
+        const d = s.created_at ? s.created_at.split('T')[0] : null;
+        if (d && dateSet.has(d)) {
+            const isBuy = ['BUY', 'WATCH'].includes(s.type);
+            markers.push({
+                time: d,
+                position: isBuy ? 'belowBar' : 'aboveBar',
+                color: isBuy ? '#3b82f6' : '#f97316',
+                shape: 'circle',
+                text: s.type + (s.score ? ' ' + s.score.toFixed(0) : ''),
+            });
+        }
+    });
+    if (markers.length > 0) {
+        // Merge with trade markers
+        const all = [...(candleSeries.markers || [])];
+        // Re-get trade markers, then append signal markers
+        const tradeMarkers = [];
+        if (stockData && stockData.trades) {
+            stockData.trades.forEach(t => {
+                const d = t.time ? t.time.split('T')[0] : null;
+                if (d && dateSet.has(d)) {
+                    tradeMarkers.push({
+                        time: d,
+                        position: t.side === 'BUY' ? 'belowBar' : 'aboveBar',
+                        color: t.side === 'BUY' ? '#22c55e' : '#ef4444',
+                        shape: t.side === 'BUY' ? 'arrowUp' : 'arrowDown',
+                        text: t.side + ' ' + t.qty,
+                    });
+                }
+            });
+        }
+        const combined = [...tradeMarkers, ...markers];
+        combined.sort((a, b) => a.time < b.time ? -1 : 1);
+        candleSeries.setMarkers(combined);
+    }
+}
+
+function renderSignals(signals) {
+    const listEl = document.getElementById('signals-list');
+    listEl.textContent = '';
+    if (!signals || signals.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无信号';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    const sigColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300',
+                       HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300',
+                       REDUCE:'bg-orange-900 text-orange-300'};
+
+    signals.forEach(s => {
+        const row = document.createElement('div');
+        row.className = 'px-4 py-2' + (s.is_active ? '' : ' opacity-50');
+        const top = document.createElement('div');
+        top.className = 'flex justify-between items-center';
+
+        const left = document.createElement('div');
+        left.className = 'flex items-center gap-2';
+        const badge = document.createElement('span');
+        badge.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (sigColors[s.type] || 'bg-gray-700 text-gray-300');
+        badge.textContent = s.type;
+        left.appendChild(badge);
+        const src = document.createElement('span');
+        src.className = 'text-xs text-gray-400';
+        src.textContent = s.source;
+        left.appendChild(src);
+        if (s.score) {
+            const scoreEl = document.createElement('span');
+            scoreEl.className = 'text-xs text-gray-300';
+            scoreEl.textContent = s.score.toFixed(0) + '分';
+            left.appendChild(scoreEl);
+        }
+        if (s.strength) {
+            const strEl = document.createElement('span');
+            strEl.className = 'text-[10px] text-gray-500';
+            strEl.textContent = s.strength;
+            left.appendChild(strEl);
+        }
+
+        const dateEl = document.createElement('span');
+        dateEl.className = 'text-[10px] text-gray-600';
+        dateEl.textContent = s.created_at ? s.created_at.split('T')[0] : '';
+        top.appendChild(left);
+        top.appendChild(dateEl);
+        row.appendChild(top);
+
+        if (s.reason) {
+            const reason = document.createElement('div');
+            reason.className = 'text-xs text-gray-400 mt-1';
+            reason.textContent = s.reason;
+            row.appendChild(reason);
+        }
+
+        const prices = [];
+        if (s.trigger_price) prices.push('触发: ' + s.trigger_price.toFixed(2));
+        if (s.target_price) prices.push('目标: ' + s.target_price.toFixed(2));
+        if (s.stop_loss) prices.push('止损: ' + s.stop_loss.toFixed(2));
+        if (prices.length > 0) {
+            const priceRow = document.createElement('div');
+            priceRow.className = 'text-[10px] text-gray-500 mt-1';
+            priceRow.textContent = prices.join(' | ');
+            row.appendChild(priceRow);
+        }
+
+        listEl.appendChild(row);
+    });
+}
+
+function renderPlans(plans) {
+    const listEl = document.getElementById('plans-list');
+    listEl.textContent = '';
+    if (!plans || plans.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无计划';
+        listEl.appendChild(empty);
+        return;
+    }
+
+    const prioColors = {must_do:'bg-red-900 text-red-300', should_do:'bg-yellow-900 text-yellow-300', consider:'bg-gray-700 text-gray-300'};
+    const statusColors = {pending:'text-blue-400', executed:'text-green-400', cancelled:'text-gray-500', expired:'text-gray-600'};
+
+    plans.forEach(p => {
+        const row = document.createElement('div');
+        row.className = 'px-4 py-2';
+        const top = document.createElement('div');
+        top.className = 'flex justify-between items-center';
+
+        const left = document.createElement('div');
+        left.className = 'flex items-center gap-2';
+        const badge = document.createElement('span');
+        badge.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (prioColors[p.priority] || 'bg-gray-700 text-gray-300');
+        badge.textContent = p.action.toUpperCase();
+        left.appendChild(badge);
+        const statusEl = document.createElement('span');
+        statusEl.className = 'text-xs ' + (statusColors[p.status] || 'text-gray-400');
+        statusEl.textContent = p.status;
+        left.appendChild(statusEl);
+
+        const rightEl = document.createElement('div');
+        rightEl.className = 'flex items-center gap-2';
+        const dateEl = document.createElement('span');
+        dateEl.className = 'text-[10px] text-gray-600';
+        dateEl.textContent = p.plan_date;
+        rightEl.appendChild(dateEl);
+
+        if (p.status === 'pending') {
+            const execBtn = document.createElement('button');
+            execBtn.className = 'text-xs bg-green-800 hover:bg-green-700 px-2 py-0.5 rounded';
+            execBtn.textContent = '执行';
+            execBtn.onclick = () => executePlan(p.id);
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'text-xs bg-gray-700 hover:bg-gray-600 px-2 py-0.5 rounded';
+            cancelBtn.textContent = '取消';
+            cancelBtn.onclick = () => cancelPlan(p.id);
+            rightEl.appendChild(execBtn);
+            rightEl.appendChild(cancelBtn);
+        }
+
+        top.appendChild(left);
+        top.appendChild(rightEl);
+        row.appendChild(top);
+
+        const prices = [];
+        if (p.entry_price) prices.push('入场: ' + p.entry_price.toFixed(2));
+        if (p.stop_loss) prices.push('止损: ' + p.stop_loss.toFixed(2));
+        if (p.target_1) prices.push('目标: ' + p.target_1.toFixed(2));
+        if (p.position_size) prices.push('仓位: ' + p.position_size);
+        if (prices.length > 0) {
+            const priceRow = document.createElement('div');
+            priceRow.className = 'text-[10px] text-gray-500 mt-1';
+            priceRow.textContent = prices.join(' | ');
+            row.appendChild(priceRow);
+        }
+
+        if (p.reason) {
+            const reason = document.createElement('div');
+            reason.className = 'text-xs text-gray-400 mt-1';
+            reason.textContent = p.reason;
+            row.appendChild(reason);
+        }
+
+        if (p.execution_price) {
+            const exec = document.createElement('div');
+            exec.className = 'text-[10px] text-green-500 mt-1';
+            exec.textContent = '成交: ' + p.execution_price.toFixed(2) + (p.executed_at ? ' @ ' + p.executed_at.split('T')[0] : '');
+            row.appendChild(exec);
+        }
+
+        listEl.appendChild(row);
+    });
+}
+
+function renderPosition(pos) {
+    const section = document.getElementById('position-section');
+    const info = document.getElementById('position-info');
+    if (!pos) {
+        section.classList.add('hidden');
+        return;
+    }
+    section.classList.remove('hidden');
+    info.textContent = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'grid grid-cols-4 gap-3 text-sm';
+    const fields = [
+        {label: '数量', value: formatNum(pos.qty)},
+        {label: '成本价', value: pos.cost_price.toFixed(2)},
+        {label: '现价', value: pos.market_price.toFixed(2)},
+        {label: '市值', value: formatNum(pos.market_val)},
+    ];
+    fields.forEach(f => {
+        const cell = document.createElement('div');
+        const label = document.createElement('div');
+        label.className = 'text-xs text-gray-500';
+        label.textContent = f.label;
+        const val = document.createElement('div');
+        val.className = 'font-medium';
+        val.textContent = f.value;
+        cell.appendChild(label);
+        cell.appendChild(val);
+        grid.appendChild(cell);
+    });
+    info.appendChild(grid);
+
+    const plRow = document.createElement('div');
+    plRow.className = 'mt-2 text-sm ' + plColor(pos.pl_val);
+    plRow.textContent = '盈亏: ' + formatNum(pos.pl_val) + ' (' + formatPct(pos.pl_ratio / 100) + ')';
+    info.appendChild(plRow);
+}
+
+function renderTrades(trades) {
+    const section = document.getElementById('trades-section');
+    const listEl = document.getElementById('trades-list');
+    if (!trades || trades.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+    section.classList.remove('hidden');
+    listEl.textContent = '';
+
+    trades.forEach(t => {
+        const row = document.createElement('div');
+        row.className = 'px-4 py-2 flex justify-between items-center text-sm';
+
+        const left = document.createElement('div');
+        const side = document.createElement('span');
+        side.className = 'text-xs font-bold px-1.5 py-0.5 rounded mr-2 ' +
+            (t.side === 'BUY' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300');
+        side.textContent = t.side;
+        const time = document.createElement('span');
+        time.className = 'text-gray-400';
+        time.textContent = t.time ? t.time.replace('T', ' ').substring(0, 16) : '';
+        left.appendChild(side);
+        left.appendChild(time);
+
+        const right = document.createElement('div');
+        right.className = 'text-right text-gray-300';
+        right.textContent = t.price.toFixed(2) + ' x ' + formatNum(t.qty) +
+            (t.amount ? ' = ' + formatNum(t.amount) : '');
+
+        row.appendChild(left);
+        row.appendChild(right);
+        listEl.appendChild(row);
+    });
+}
+
+async function executePlan(id) {
+    const price = prompt('执行价格 (可选):');
+    const body = {};
+    if (price) body.price = parseFloat(price);
+    await fetch('/api/plans/' + id + '/execute', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+    loadStockData();
+}
+
+async function cancelPlan(id) {
+    const reason = prompt('取消原因 (可选):');
+    await fetch('/api/plans/' + id + '/cancel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({reason: reason || ''}),
+    });
+    loadStockData();
+}
+
+async function loadStockData() {
+    stockData = await fetchData('/api/stock/' + MARKET + '/' + CODE);
+
+    document.getElementById('stock-title').textContent = stockData.code;
+    document.getElementById('stock-name').textContent = stockData.name || '';
+    if (stockData.latest_price) {
+        document.getElementById('latest-price').textContent = stockData.latest_price.toFixed(2);
+    }
+
+    renderSignals(stockData.signals);
+    renderPlans(stockData.plans);
+    renderPosition(stockData.position);
+    renderTrades(stockData.trades);
+
+    // Load klines after stock data (for markers)
+    loadKlines(currentDays);
+}
+
+initChart();
+loadStockData();
+</script>
+{% endblock %}

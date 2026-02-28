@@ -4,7 +4,23 @@
 
 {% block content %}
 <div class="space-y-4">
-    <h1 class="text-lg font-bold">交易信号</h1>
+    <div class="flex justify-between items-center">
+        <h1 class="text-lg font-bold">交易信号</h1>
+        <div class="flex items-center gap-2">
+            <input id="s-code-filter" type="text" placeholder="代码过滤 (如 HK.00700)"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700 w-40"
+                onchange="resetAndLoad()">
+            <select id="s-market-filter" onchange="resetAndLoad()"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="">全部市场</option>
+                <option value="HK">港股</option>
+                <option value="US">美股</option>
+                <option value="A">A股</option>
+                <option value="JP">日股</option>
+            </select>
+        </div>
+    </div>
+
     <div class="grid grid-cols-4 gap-3">
         <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
             <div class="text-xs text-gray-500">总信号</div>
@@ -23,16 +39,65 @@
             <div id="s-loss" class="text-lg font-bold text-loss">--</div>
         </div>
     </div>
+
+    <!-- Tabs -->
+    <div class="flex gap-2">
+        <button id="tab-active" onclick="switchTab(true)" class="text-sm px-3 py-1 rounded bg-blue-600 text-white">活跃信号</button>
+        <button id="tab-all" onclick="switchTab(false)" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">全部信号</button>
+    </div>
+
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div id="s-list" class="divide-y divide-gray-800">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
         </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="s-pagination" class="flex justify-between items-center text-sm text-gray-400 hidden">
+        <button id="s-prev" onclick="prevPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>上一页</button>
+        <span id="s-page-info">--</span>
+        <button id="s-next" onclick="nextPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>下一页</button>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+let currentOffset = 0;
+const pageSize = 20;
+let activeOnly = true;
+let totalSignals = 0;
+
+function switchTab(isActive) {
+    activeOnly = isActive;
+    document.getElementById('tab-active').className = isActive
+        ? 'text-sm px-3 py-1 rounded bg-blue-600 text-white'
+        : 'text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white';
+    document.getElementById('tab-all').className = !isActive
+        ? 'text-sm px-3 py-1 rounded bg-blue-600 text-white'
+        : 'text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white';
+    resetAndLoad();
+}
+
+function resetAndLoad() {
+    currentOffset = 0;
+    loadSignals();
+}
+
+function prevPage() {
+    if (currentOffset >= pageSize) {
+        currentOffset -= pageSize;
+        loadSignals();
+    }
+}
+
+function nextPage() {
+    if (currentOffset + pageSize < totalSignals) {
+        currentOffset += pageSize;
+        loadSignals();
+    }
+}
+
 function createSignalDetailRow(s) {
     const typeColors = {BUY:'bg-green-900 text-green-300', SELL:'bg-red-900 text-red-300',
                         HOLD:'bg-yellow-900 text-yellow-300', WATCH:'bg-blue-900 text-blue-300',
@@ -49,13 +114,12 @@ function createSignalDetailRow(s) {
     badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (typeColors[s.type] || 'bg-gray-800');
     badge.textContent = (typeLabels[s.type] || s.type) + ' ' + s.type;
     const codeDiv = document.createElement('div');
-    const codeSpan = document.createElement('span');
-    codeSpan.className = 'font-medium';
-    codeSpan.textContent = s.code;
+    const codeLink = makeStockLink(s.code, s.code);
+    codeLink.className = 'font-medium text-blue-400 hover:text-blue-300 hover:underline';
     const nameSpan = document.createElement('span');
     nameSpan.className = 'text-xs text-gray-500 ml-1';
     nameSpan.textContent = s.name;
-    codeDiv.appendChild(codeSpan);
+    codeDiv.appendChild(codeLink);
     codeDiv.appendChild(nameSpan);
     leftDiv.appendChild(badge);
     leftDiv.appendChild(codeDiv);
@@ -74,6 +138,12 @@ function createSignalDetailRow(s) {
         strengthEl.textContent = s.strength;
         rightDiv.appendChild(strengthEl);
     }
+    if (s.created_at) {
+        const dateEl = document.createElement('div');
+        dateEl.className = 'text-[10px] text-gray-600';
+        dateEl.textContent = s.created_at.split('T')[0];
+        rightDiv.appendChild(dateEl);
+    }
     topRow.appendChild(leftDiv);
     topRow.appendChild(rightDiv);
     row.appendChild(topRow);
@@ -91,6 +161,7 @@ function createSignalDetailRow(s) {
     if (s.trigger_price) priceFields.push('触发: ' + s.trigger_price.toFixed(2));
     if (s.target_price) priceFields.push('目标: ' + s.target_price.toFixed(2));
     if (s.stop_loss) priceFields.push('止损: ' + s.stop_loss.toFixed(2));
+    if (s.confidence) priceFields.push('置信: ' + s.confidence.toFixed(0) + '%');
     priceFields.push(s.source);
     priceFields.forEach(f => {
         const span = document.createElement('span');
@@ -103,8 +174,16 @@ function createSignalDetailRow(s) {
 }
 
 async function loadSignals() {
-    const data = await fetchData('/api/signals');
-    document.getElementById('s-total').textContent = data.signals.length;
+    const market = document.getElementById('s-market-filter').value;
+    const code = document.getElementById('s-code-filter').value.trim();
+    let url = '/api/signals?active_only=' + activeOnly + '&offset=' + currentOffset + '&limit=' + pageSize;
+    if (market) url += '&market=' + market;
+    if (code) url += '&code=' + encodeURIComponent(code);
+
+    const data = await fetchData(url);
+    totalSignals = data.total || data.signals.length;
+
+    document.getElementById('s-total').textContent = totalSignals;
     document.getElementById('s-winrate').textContent =
         data.accuracy.win_rate > 0 ? data.accuracy.win_rate.toFixed(1) + '%' : '--';
     document.getElementById('s-profit').textContent = data.accuracy.profitable;
@@ -115,11 +194,24 @@ async function loadSignals() {
     if (data.signals.length === 0) {
         const empty = document.createElement('div');
         empty.className = 'p-4 text-gray-500 text-sm';
-        empty.textContent = '暂无活跃信号';
+        empty.textContent = activeOnly ? '暂无活跃信号' : '暂无信号';
         listEl.appendChild(empty);
-        return;
+    } else {
+        data.signals.forEach(s => listEl.appendChild(createSignalDetailRow(s)));
     }
-    data.signals.forEach(s => listEl.appendChild(createSignalDetailRow(s)));
+
+    // Update pagination
+    const pagEl = document.getElementById('s-pagination');
+    if (totalSignals > pageSize) {
+        pagEl.classList.remove('hidden');
+        const page = Math.floor(currentOffset / pageSize) + 1;
+        const totalPages = Math.ceil(totalSignals / pageSize);
+        document.getElementById('s-page-info').textContent = '第 ' + page + ' / ' + totalPages + ' 页 (共 ' + totalSignals + ' 条)';
+        document.getElementById('s-prev').disabled = currentOffset === 0;
+        document.getElementById('s-next').disabled = currentOffset + pageSize >= totalSignals;
+    } else {
+        pagEl.classList.add('hidden');
+    }
 }
 loadSignals();
 </script>
