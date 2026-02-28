@@ -167,6 +167,10 @@ def create_app() -> FastAPI:
     async def calendar_page(request: Request):
         return templates.TemplateResponse("calendar.html", {"request": request})
 
+    @app.get("/analysis", response_class=HTMLResponse)
+    async def analysis_page(request: Request):
+        return templates.TemplateResponse("analysis.html", {"request": request})
+
     @app.get("/stock/{market}/{code}", response_class=HTMLResponse)
     async def stock_page(request: Request, market: str, code: str):
         return templates.TemplateResponse(

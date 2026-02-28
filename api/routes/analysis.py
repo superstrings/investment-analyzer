@@ -1,45 +1,66 @@
 """
 Analysis results API routes.
+
+Provides:
+- GET /api/analysis — paginated list with market/code filters
+- POST /api/stock/{market}/{code}/analyze — trigger Claude analysis
+- GET /api/stock/{market}/{code}/analysis — latest analysis for a stock
 """
 
+import asyncio
+import json
+import logging
+import re
 from datetime import date
 
 from fastapi import APIRouter, Depends
 
 from api.auth import get_current_user
+from db.database import get_session
+from db.models import User
 from services.analysis_service import create_analysis_service
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["analysis"])
+
+
+def _resolve_user_id(username: str) -> int | None:
+    with get_session() as session:
+        user = session.query(User).filter_by(username=username).first()
+        return user.id if user else None
 
 
 @router.get("/api/analysis")
 async def api_analysis_results(
     username: str = Depends(get_current_user),
-    date_str: str = "",
+    market: str = "",
+    code: str = "",
+    offset: int = 0,
+    limit: int = 20,
 ):
-    """Get analysis results for a date."""
-    from datetime import datetime
-
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
-
-    target_date = (
-        datetime.strptime(date_str, "%Y-%m-%d").date() if date_str else date.today()
-    )
+    """Get paginated analysis results with optional market/code filter."""
+    user_id = _resolve_user_id(username)
+    if not user_id:
+        return {"error": "User not found"}
 
     svc = create_analysis_service()
-    results = svc.get_results_by_date(user_id, target_date)
+    results, total = svc.get_results_paginated(
+        user_id,
+        market=market or None,
+        code=code or None,
+        offset=offset,
+        limit=limit,
+    )
+    stats = svc.get_stats(user_id)
 
     data = []
     for r in results:
+        summary = ""
+        if r.result_json:
+            summary = r.result_json[:500]
         data.append(
             {
+                "id": r.id,
                 "code": f"{r.market}.{r.code}",
                 "name": r.stock_name or "",
                 "type": r.analysis_type,
@@ -50,48 +71,163 @@ async def api_analysis_results(
                 "price": float(r.current_price) if r.current_price else None,
                 "support": float(r.support_price) if r.support_price else None,
                 "resistance": float(r.resistance_price) if r.resistance_price else None,
+                "analysis_date": r.analysis_date.isoformat(),
+                "summary": summary,
             }
         )
 
-    return {"results": data, "date": target_date.isoformat()}
+    return {
+        "results": data,
+        "total": total,
+        "offset": offset,
+        "limit": limit,
+        "stats": stats,
+    }
 
 
-@router.get("/api/analysis/{code}")
-async def api_analysis_history(
+@router.post("/api/stock/{market}/{code}/analyze")
+async def api_trigger_analysis(
+    market: str,
     code: str,
     username: str = Depends(get_current_user),
-    days: int = 30,
 ):
-    """Get analysis history for a stock."""
-    from db.database import get_session
-    from db.models import User
+    """Trigger V12 analysis for a stock via Claude CLI (background task)."""
+    user_id = _resolve_user_id(username)
+    if not user_id:
+        return {"error": "User not found"}
 
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    asyncio.create_task(_run_analysis(market, code, user_id))
+    return {"status": "started", "code": f"{market}.{code}"}
 
-    parts = code.split(".", 1)
-    if len(parts) != 2:
-        return {"error": "Invalid code format"}
 
-    market, stock_code = parts
-    db_market = "A" if market in ("SH", "SZ") else market
+@router.get("/api/stock/{market}/{code}/analysis")
+async def api_stock_latest_analysis(
+    market: str,
+    code: str,
+    username: str = Depends(get_current_user),
+):
+    """Get the latest analysis result for a stock."""
+    user_id = _resolve_user_id(username)
+    if not user_id:
+        return {"error": "User not found"}
 
     svc = create_analysis_service()
-    results = svc.get_results_history(user_id, db_market, stock_code, days)
+    # Try exact market first, then fallback for A-share (SH/SZ vs A)
+    r = svc.get_latest_result(user_id, market, code)
+    if not r and market in ("SH", "SZ"):
+        r = svc.get_latest_result(user_id, "A", code)
+    elif not r and market == "A":
+        for m in ("SH", "SZ"):
+            r = svc.get_latest_result(user_id, m, code)
+            if r:
+                break
 
-    data = []
-    for r in results:
-        data.append(
-            {
-                "date": r.analysis_date.isoformat(),
-                "type": r.analysis_type,
-                "overall_score": float(r.overall_score) if r.overall_score else None,
-                "rating": r.rating,
-                "price": float(r.current_price) if r.current_price else None,
-            }
-        )
+    if not r:
+        return {"result": None}
 
-    return {"code": code, "history": data}
+    return {
+        "result": {
+            "id": r.id,
+            "code": f"{r.market}.{r.code}",
+            "name": r.stock_name or "",
+            "type": r.analysis_type,
+            "overall_score": float(r.overall_score) if r.overall_score else None,
+            "obv_score": float(r.obv_score) if r.obv_score else None,
+            "vcp_score": float(r.vcp_score) if r.vcp_score else None,
+            "rating": r.rating,
+            "price": float(r.current_price) if r.current_price else None,
+            "support": float(r.support_price) if r.support_price else None,
+            "resistance": float(r.resistance_price) if r.resistance_price else None,
+            "analysis_date": r.analysis_date.isoformat(),
+            "result_json": r.result_json or "",
+        }
+    }
+
+
+async def _run_analysis(market: str, code: str, user_id: int):
+    """Background task: run Claude analysis and save result to DB."""
+    from api.claude_runner import run_claude
+    from config.prompts import V12_FRAMEWORK_PROMPT
+
+    full_code = f"{market}.{code}"
+
+    prompt = (
+        f"分析 {full_code}:\n\n"
+        f"{V12_FRAMEWORK_PROMPT}\n\n"
+        f"请执行:\n"
+        f"1. 用 run_technical_analysis 做技术分析\n"
+        f"2. 按框架: 估值筛选 → 技术评分 → 信号判定\n"
+        f"3. 用 save_signal 存储信号\n"
+        f"4. 如技术≥7且估值通过, 评估期权机会, 有则 save_signal(signal_category=\"option\")\n"
+        f"5. 用 save_analysis_result 存储分析结果 (包含 overall_score, obv_score, vcp_score, rating, result_json 完整分析文本)\n"
+        f"6. 简洁总结: 估值、评分X/12、信号、操作建议"
+    )
+
+    async def on_complete(result: str):
+        _fallback_save_result(market, code, user_id, result)
+
+    await run_claude(prompt, callback=on_complete)
+
+
+def _fallback_save_result(market: str, code: str, user_id: int, text: str):
+    """Fallback: parse Claude output and save to DB if MCP didn't already save."""
+    svc = create_analysis_service()
+
+    # Check if MCP already saved a result for today
+    existing = svc.get_latest_result(user_id, market, code)
+    if existing and existing.analysis_date == date.today():
+        # MCP already saved — update result_json if it's empty
+        if not existing.result_json and text:
+            svc.save_result(
+                user_id=user_id,
+                market=market,
+                code=code,
+                analysis_type=existing.analysis_type,
+                analysis_date=date.today(),
+                stock_name=existing.stock_name,
+                overall_score=existing.overall_score,
+                obv_score=existing.obv_score,
+                vcp_score=existing.vcp_score,
+                rating=existing.rating,
+                current_price=existing.current_price,
+                support_price=existing.support_price,
+                resistance_price=existing.resistance_price,
+                result_json=text,
+            )
+        return
+
+    # MCP didn't save — try to parse scores from text
+    overall = _extract_score(text)
+    rating = _extract_rating(text)
+
+    svc.save_result(
+        user_id=user_id,
+        market=market,
+        code=code,
+        analysis_type="llm",
+        analysis_date=date.today(),
+        overall_score=overall,
+        rating=rating,
+        result_json=text,
+    )
+
+
+def _extract_score(text: str):
+    """Try to extract overall score like '8/12' or '评分: 8' from text."""
+    from decimal import Decimal
+
+    m = re.search(r"(\d+(?:\.\d+)?)\s*/\s*12", text)
+    if m:
+        return Decimal(m.group(1))
+    m = re.search(r"评分[：:]\s*(\d+(?:\.\d+)?)", text)
+    if m:
+        return Decimal(m.group(1))
+    return None
+
+
+def _extract_rating(text: str) -> str | None:
+    """Try to extract rating keyword from text."""
+    for kw in ["极强加仓", "强势持有", "观望", "减仓", "止损"]:
+        if kw in text:
+            return kw
+    return None

@@ -1,0 +1,231 @@
+{% extends "base.html" %}
+{% block title %}分析 - Investment Analyzer{% endblock %}
+{% block nav_analysis %}text-white font-semibold{% endblock %}
+
+{% block content %}
+<div class="space-y-4">
+    <div class="flex justify-between items-center">
+        <h1 class="text-lg font-bold">分析结果</h1>
+        <div class="flex items-center gap-2">
+            <input id="a-code-filter" type="text" placeholder="代码过滤 (如 HK.00700)"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700 w-40"
+                onchange="resetAndLoad()">
+            <select id="a-market-filter" onchange="resetAndLoad()"
+                class="bg-gray-800 text-sm rounded px-2 py-1 border border-gray-700">
+                <option value="">全部市场</option>
+                <option value="HK">港股</option>
+                <option value="US">美股</option>
+                <option value="A">A股</option>
+                <option value="JP">日股</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-4 gap-3">
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">总分析</div>
+            <div id="a-total" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">平均评分</div>
+            <div id="a-avg" class="text-lg font-bold">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">最高评分</div>
+            <div id="a-max" class="text-lg font-bold text-profit">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
+            <div class="text-xs text-gray-500">最低评分</div>
+            <div id="a-min" class="text-lg font-bold text-loss">--</div>
+        </div>
+    </div>
+
+    <div class="bg-gray-900 rounded-lg border border-gray-800">
+        <div id="a-list" class="divide-y divide-gray-800">
+            <div class="p-4 text-gray-500 text-sm">加载中...</div>
+        </div>
+    </div>
+
+    <!-- Pagination -->
+    <div id="a-pagination" class="flex justify-between items-center text-sm text-gray-400 hidden">
+        <button id="a-prev" onclick="prevPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>上一页</button>
+        <span id="a-page-info">--</span>
+        <button id="a-next" onclick="nextPage()" class="px-3 py-1 bg-gray-800 rounded hover:bg-gray-700 disabled:opacity-50" disabled>下一页</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentOffset = 0;
+const pageSize = 20;
+let totalResults = 0;
+
+function resetAndLoad() {
+    currentOffset = 0;
+    loadAnalysis();
+}
+
+function prevPage() {
+    if (currentOffset >= pageSize) {
+        currentOffset -= pageSize;
+        loadAnalysis();
+    }
+}
+
+function nextPage() {
+    if (currentOffset + pageSize < totalResults) {
+        currentOffset += pageSize;
+        loadAnalysis();
+    }
+}
+
+function scoreColor(score) {
+    if (score >= 9) return 'bg-green-900 text-green-300';
+    if (score >= 7) return 'bg-blue-900 text-blue-300';
+    if (score >= 5) return 'bg-yellow-900 text-yellow-300';
+    if (score >= 3) return 'bg-orange-900 text-orange-300';
+    return 'bg-red-900 text-red-300';
+}
+
+function makeScoreBadge(score) {
+    const el = document.createElement('span');
+    el.className = 'text-xs font-bold px-2 py-0.5 rounded ' + scoreColor(score);
+    el.textContent = score.toFixed(1) + '/12';
+    return el;
+}
+
+function makeRatingBadge(rating) {
+    const colors = {
+        '极强加仓': 'bg-green-900 text-green-300',
+        '强势持有': 'bg-blue-900 text-blue-300',
+        '观望': 'bg-yellow-900 text-yellow-300',
+        '减仓': 'bg-orange-900 text-orange-300',
+        '止损': 'bg-red-900 text-red-300',
+    };
+    const el = document.createElement('span');
+    el.className = 'text-[10px] px-1.5 py-0.5 rounded ' + (colors[rating] || 'bg-gray-700 text-gray-300');
+    el.textContent = rating;
+    return el;
+}
+
+function createAnalysisRow(r) {
+    const row = document.createElement('div');
+    row.className = 'px-4 py-3';
+
+    const topRow = document.createElement('div');
+    topRow.className = 'flex justify-between items-start';
+
+    const leftDiv = document.createElement('div');
+    leftDiv.className = 'flex items-center gap-2 flex-wrap';
+
+    if (r.overall_score !== null && r.overall_score !== undefined) {
+        leftDiv.appendChild(makeScoreBadge(r.overall_score));
+    }
+
+    const codeLink = makeStockLink(r.code, r.code);
+    codeLink.className = 'font-medium text-blue-400 hover:text-blue-300 hover:underline';
+    leftDiv.appendChild(codeLink);
+
+    if (r.name) {
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'text-xs text-gray-500';
+        nameSpan.textContent = r.name;
+        leftDiv.appendChild(nameSpan);
+    }
+
+    if (r.rating) {
+        leftDiv.appendChild(makeRatingBadge(r.rating));
+    }
+
+    const rightDiv = document.createElement('div');
+    rightDiv.className = 'text-right flex-shrink-0';
+
+    const dateEl = document.createElement('div');
+    dateEl.className = 'text-xs text-gray-500';
+    dateEl.textContent = r.analysis_date;
+    rightDiv.appendChild(dateEl);
+
+    if (r.price) {
+        const priceEl = document.createElement('div');
+        priceEl.className = 'text-sm text-gray-300';
+        priceEl.textContent = r.price.toFixed(2);
+        rightDiv.appendChild(priceEl);
+    }
+
+    topRow.appendChild(leftDiv);
+    topRow.appendChild(rightDiv);
+    row.appendChild(topRow);
+
+    // Score details
+    const details = [];
+    if (r.obv_score !== null && r.obv_score !== undefined) details.push('OBV: ' + r.obv_score.toFixed(1));
+    if (r.vcp_score !== null && r.vcp_score !== undefined) details.push('VCP: ' + r.vcp_score.toFixed(1));
+    if (r.support) details.push('支撑: ' + r.support.toFixed(2));
+    if (r.resistance) details.push('阻力: ' + r.resistance.toFixed(2));
+    if (details.length > 0) {
+        const detailEl = document.createElement('div');
+        detailEl.className = 'mt-1 text-[10px] text-gray-500';
+        detailEl.textContent = details.join(' | ');
+        row.appendChild(detailEl);
+    }
+
+    // Summary
+    if (r.summary) {
+        const summaryEl = document.createElement('div');
+        summaryEl.className = 'mt-1 text-xs text-gray-400 line-clamp-2';
+        summaryEl.textContent = r.summary;
+        row.appendChild(summaryEl);
+    }
+
+    return row;
+}
+
+async function loadAnalysis() {
+    const market = document.getElementById('a-market-filter').value;
+    const code = document.getElementById('a-code-filter').value.trim();
+    let url = '/api/analysis?offset=' + currentOffset + '&limit=' + pageSize;
+    if (market) url += '&market=' + market;
+    if (code) url += '&code=' + encodeURIComponent(code);
+
+    const data = await fetchData(url);
+    totalResults = data.total || 0;
+
+    // Stats
+    document.getElementById('a-total').textContent = totalResults;
+    if (data.stats) {
+        document.getElementById('a-avg').textContent =
+            data.stats.avg_score !== null ? data.stats.avg_score.toFixed(1) + '/12' : '--';
+        document.getElementById('a-max').textContent =
+            data.stats.max_score !== null ? data.stats.max_score.toFixed(1) + '/12' : '--';
+        document.getElementById('a-min').textContent =
+            data.stats.min_score !== null ? data.stats.min_score.toFixed(1) + '/12' : '--';
+    }
+
+    const listEl = document.getElementById('a-list');
+    listEl.textContent = '';
+    if (!data.results || data.results.length === 0) {
+        const empty = document.createElement('div');
+        empty.className = 'p-4 text-gray-500 text-sm';
+        empty.textContent = '暂无分析结果';
+        listEl.appendChild(empty);
+    } else {
+        data.results.forEach(r => listEl.appendChild(createAnalysisRow(r)));
+    }
+
+    // Pagination
+    const pagEl = document.getElementById('a-pagination');
+    if (totalResults > pageSize) {
+        pagEl.classList.remove('hidden');
+        const page = Math.floor(currentOffset / pageSize) + 1;
+        const totalPages = Math.ceil(totalResults / pageSize);
+        document.getElementById('a-page-info').textContent = '第 ' + page + ' / ' + totalPages + ' 页 (共 ' + totalResults + ' 条)';
+        document.getElementById('a-prev').disabled = currentOffset === 0;
+        document.getElementById('a-next').disabled = currentOffset + pageSize >= totalResults;
+    } else {
+        pagEl.classList.add('hidden');
+    }
+}
+loadAnalysis();
+</script>
+{% endblock %}

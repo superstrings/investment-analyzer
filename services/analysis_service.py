@@ -9,6 +9,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from db.database import get_session
@@ -105,6 +106,64 @@ class AnalysisResultService:
             if result:
                 session.expunge(result)
             return result
+
+    def get_results_paginated(
+        self,
+        user_id: int,
+        market: str = None,
+        code: str = None,
+        offset: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[AnalysisResult], int]:
+        """Get analysis results with pagination and filtering. Returns (results, total)."""
+        with get_session() as session:
+            query = session.query(AnalysisResult).filter(
+                AnalysisResult.user_id == user_id
+            )
+            if market:
+                query = query.filter(AnalysisResult.market == market)
+            if code:
+                if "." in code:
+                    parts = code.split(".", 1)
+                    query = query.filter(
+                        AnalysisResult.market == parts[0],
+                        AnalysisResult.code == parts[1],
+                    )
+                else:
+                    query = query.filter(AnalysisResult.code == code)
+            total = query.count()
+            results = (
+                query.order_by(
+                    AnalysisResult.analysis_date.desc(),
+                    AnalysisResult.created_at.desc(),
+                )
+                .offset(offset)
+                .limit(limit)
+                .all()
+            )
+            for r in results:
+                session.expunge(r)
+            return results, total
+
+    def get_stats(self, user_id: int) -> dict:
+        """Get aggregate stats for analysis results."""
+        with get_session() as session:
+            row = (
+                session.query(
+                    func.count(AnalysisResult.id).label("total"),
+                    func.avg(AnalysisResult.overall_score).label("avg_score"),
+                    func.max(AnalysisResult.overall_score).label("max_score"),
+                    func.min(AnalysisResult.overall_score).label("min_score"),
+                )
+                .filter(AnalysisResult.user_id == user_id)
+                .first()
+            )
+            return {
+                "total": row.total or 0,
+                "avg_score": float(row.avg_score) if row.avg_score else None,
+                "max_score": float(row.max_score) if row.max_score else None,
+                "min_score": float(row.min_score) if row.min_score else None,
+            }
 
     def get_results_by_date(
         self, user_id: int, target_date: date = None

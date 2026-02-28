@@ -9,8 +9,14 @@
             <h1 id="stock-title" class="text-lg font-bold">{{ market }}.{{ code }}</h1>
             <div id="stock-name" class="text-sm text-gray-500"></div>
         </div>
-        <div id="stock-price" class="text-right">
-            <div id="latest-price" class="text-2xl font-bold">--</div>
+        <div class="flex items-center gap-3">
+            <div id="stock-price" class="text-right">
+                <div id="latest-price" class="text-2xl font-bold">--</div>
+            </div>
+            <button id="analyze-btn" onclick="triggerAnalysis()"
+                class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap">
+                分析
+            </button>
         </div>
     </div>
 
@@ -25,6 +31,15 @@
             </div>
         </div>
         <div id="chart-container" style="height: 400px;"></div>
+    </div>
+
+    <!-- Analysis Result -->
+    <div id="analysis-section" class="bg-gray-900 rounded-lg border border-gray-800 hidden">
+        <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
+            <h2 class="font-semibold text-sm">分析结果</h2>
+            <span id="analysis-date" class="text-[10px] text-gray-600"></span>
+        </div>
+        <div id="analysis-content" class="px-4 py-3"></div>
     </div>
 
     <!-- Signals -->
@@ -532,7 +547,132 @@ async function loadStockData() {
     loadKlines(currentDays);
 }
 
+// --- Analysis ---
+let analysisPollTimer = null;
+let analysisPollCount = 0;
+
+async function triggerAnalysis() {
+    const btn = document.getElementById('analyze-btn');
+    btn.disabled = true;
+    btn.textContent = '分析中...';
+
+    try {
+        await fetch('/api/stock/' + MARKET + '/' + CODE + '/analyze', { method: 'POST' });
+    } catch(e) {
+        btn.disabled = false;
+        btn.textContent = '分析';
+        return;
+    }
+
+    // Poll for result
+    analysisPollCount = 0;
+    if (analysisPollTimer) clearInterval(analysisPollTimer);
+    analysisPollTimer = setInterval(async () => {
+        analysisPollCount++;
+        if (analysisPollCount > 60) {
+            clearInterval(analysisPollTimer);
+            btn.disabled = false;
+            btn.textContent = '分析';
+            return;
+        }
+        const data = await fetchData('/api/stock/' + MARKET + '/' + CODE + '/analysis');
+        if (data.result && data.result.analysis_date === new Date().toISOString().split('T')[0]) {
+            clearInterval(analysisPollTimer);
+            btn.disabled = false;
+            btn.textContent = '分析';
+            renderAnalysisResult(data.result);
+        }
+    }, 5000);
+}
+
+function renderAnalysisResult(r) {
+    const section = document.getElementById('analysis-section');
+    const content = document.getElementById('analysis-content');
+    if (!r) {
+        section.classList.add('hidden');
+        return;
+    }
+    section.classList.remove('hidden');
+    document.getElementById('analysis-date').textContent = r.analysis_date;
+    content.textContent = '';
+
+    // Score row
+    const scoreRow = document.createElement('div');
+    scoreRow.className = 'flex items-center gap-3 flex-wrap';
+
+    if (r.overall_score !== null && r.overall_score !== undefined) {
+        const scoreEl = document.createElement('span');
+        let color = 'bg-gray-700 text-gray-300';
+        if (r.overall_score >= 9) color = 'bg-green-900 text-green-300';
+        else if (r.overall_score >= 7) color = 'bg-blue-900 text-blue-300';
+        else if (r.overall_score >= 5) color = 'bg-yellow-900 text-yellow-300';
+        else if (r.overall_score >= 3) color = 'bg-orange-900 text-orange-300';
+        else color = 'bg-red-900 text-red-300';
+        scoreEl.className = 'text-sm font-bold px-2 py-0.5 rounded ' + color;
+        scoreEl.textContent = r.overall_score.toFixed(1) + '/12';
+        scoreRow.appendChild(scoreEl);
+    }
+
+    if (r.rating) {
+        const ratingColors = {
+            '极强加仓': 'bg-green-900 text-green-300',
+            '强势持有': 'bg-blue-900 text-blue-300',
+            '观望': 'bg-yellow-900 text-yellow-300',
+            '减仓': 'bg-orange-900 text-orange-300',
+            '止损': 'bg-red-900 text-red-300',
+        };
+        const ratingEl = document.createElement('span');
+        ratingEl.className = 'text-xs px-1.5 py-0.5 rounded ' + (ratingColors[r.rating] || 'bg-gray-700 text-gray-300');
+        ratingEl.textContent = r.rating;
+        scoreRow.appendChild(ratingEl);
+    }
+
+    const details = [];
+    if (r.obv_score !== null && r.obv_score !== undefined) details.push('OBV: ' + r.obv_score.toFixed(1));
+    if (r.vcp_score !== null && r.vcp_score !== undefined) details.push('VCP: ' + r.vcp_score.toFixed(1));
+    if (r.support) details.push('支撑: ' + r.support.toFixed(2));
+    if (r.resistance) details.push('阻力: ' + r.resistance.toFixed(2));
+    if (details.length > 0) {
+        const detailSpan = document.createElement('span');
+        detailSpan.className = 'text-[10px] text-gray-500';
+        detailSpan.textContent = details.join(' | ');
+        scoreRow.appendChild(detailSpan);
+    }
+
+    content.appendChild(scoreRow);
+
+    // Result text
+    if (r.result_json) {
+        const textDiv = document.createElement('div');
+        textDiv.className = 'mt-2 text-xs text-gray-400 whitespace-pre-wrap';
+        const isLong = r.result_json.length > 300;
+        textDiv.textContent = isLong ? r.result_json.substring(0, 300) + '...' : r.result_json;
+        content.appendChild(textDiv);
+
+        if (isLong) {
+            const expandBtn = document.createElement('button');
+            expandBtn.className = 'mt-1 text-xs text-blue-400 hover:text-blue-300';
+            expandBtn.textContent = '展开全文';
+            let expanded = false;
+            expandBtn.onclick = function() {
+                expanded = !expanded;
+                textDiv.textContent = expanded ? r.result_json : r.result_json.substring(0, 300) + '...';
+                expandBtn.textContent = expanded ? '收起' : '展开全文';
+            };
+            content.appendChild(expandBtn);
+        }
+    }
+}
+
+async function loadAnalysisResult() {
+    const data = await fetchData('/api/stock/' + MARKET + '/' + CODE + '/analysis');
+    if (data.result) {
+        renderAnalysisResult(data.result);
+    }
+}
+
 initChart();
 loadStockData();
+loadAnalysisResult();
 </script>
 {% endblock %}
