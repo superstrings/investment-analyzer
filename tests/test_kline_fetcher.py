@@ -1,7 +1,7 @@
 """Tests for K-line data fetcher module.
 
 Tests the KlineFetcher class and related data types.
-Since akshare fetches real market data, we use mocks for testing.
+Uses mocks for both Futu API and akshare to avoid external dependencies.
 """
 
 from datetime import date
@@ -18,6 +18,11 @@ from fetchers import (
     Market,
     create_kline_fetcher,
 )
+
+
+def _make_futu_fetch_fail(fetcher):
+    """Helper to make Futu path raise so akshare fallback is tested."""
+    fetcher._get_futu_ctx = MagicMock(side_effect=Exception("Futu not available"))
 
 
 class TestKlineData:
@@ -132,11 +137,18 @@ class TestKlineFetcherInit:
         """Test default initialization."""
         fetcher = KlineFetcher()
         assert fetcher.default_days == 250
+        assert fetcher.futu_host == "127.0.0.1"
+        assert fetcher.futu_port == 11111
+        assert fetcher._futu_ctx is None
 
     def test_custom_init(self):
         """Test custom initialization."""
-        fetcher = KlineFetcher(default_days=60)
+        fetcher = KlineFetcher(
+            default_days=60, futu_host="192.168.1.1", futu_port=22222
+        )
         assert fetcher.default_days == 60
+        assert fetcher.futu_host == "192.168.1.1"
+        assert fetcher.futu_port == 22222
 
 
 class TestKlineFetcherParseCode:
@@ -244,11 +256,11 @@ class TestKlineFetcherDetectMarket:
 
 
 class TestKlineFetcherWithMock:
-    """Tests for KlineFetcher with mocked akshare API."""
+    """Tests for KlineFetcher with mocked APIs (akshare fallback path)."""
 
     @patch("fetchers.kline_fetcher.ak")
-    def test_fetch_hk_success(self, mock_ak):
-        """Test successful HK stock fetch."""
+    def test_fetch_hk_akshare_fallback(self, mock_ak):
+        """Test HK stock fetch via akshare when Futu fails."""
         mock_df = pd.DataFrame(
             {
                 "date": pd.to_datetime(["2025-12-12", "2025-12-13", "2025-12-14"]),
@@ -262,7 +274,12 @@ class TestKlineFetcherWithMock:
         mock_ak.stock_hk_daily.return_value = mock_df
 
         fetcher = KlineFetcher()
-        result = fetcher.fetch("HK.00700", days=5)
+        _make_futu_fetch_fail(fetcher)
+        result = fetcher.fetch(
+            "HK.00700",
+            start_date=date(2025, 12, 10),
+            end_date=date(2025, 12, 15),
+        )
 
         assert result.success is True
         assert result.records_count == 3
@@ -270,10 +287,11 @@ class TestKlineFetcherWithMock:
 
     @patch("fetchers.kline_fetcher.ak")
     def test_fetch_hk_empty_result(self, mock_ak):
-        """Test HK stock fetch with empty result."""
+        """Test HK stock fetch with empty result from akshare."""
         mock_ak.stock_hk_daily.return_value = pd.DataFrame()
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         result = fetcher.fetch("HK.00700", days=5)
 
         assert result.success is False
@@ -281,10 +299,11 @@ class TestKlineFetcherWithMock:
 
     @patch("fetchers.kline_fetcher.ak")
     def test_fetch_hk_none_result(self, mock_ak):
-        """Test HK stock fetch with None result."""
+        """Test HK stock fetch with None result from akshare."""
         mock_ak.stock_hk_daily.return_value = None
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         result = fetcher.fetch("HK.00700", days=5)
 
         assert result.success is False
@@ -292,7 +311,7 @@ class TestKlineFetcherWithMock:
 
     @patch("fetchers.kline_fetcher.ak")
     def test_fetch_us_success(self, mock_ak):
-        """Test successful US stock fetch."""
+        """Test successful US stock fetch (always via akshare)."""
         mock_df = pd.DataFrame(
             {
                 "date": pd.to_datetime(["2025-12-12", "2025-12-13"]),
@@ -306,15 +325,19 @@ class TestKlineFetcherWithMock:
         mock_ak.stock_us_daily.return_value = mock_df
 
         fetcher = KlineFetcher()
-        result = fetcher.fetch("US.NVDA", days=5)
+        result = fetcher.fetch(
+            "US.NVDA",
+            start_date=date(2025, 12, 10),
+            end_date=date(2025, 12, 15),
+        )
 
         assert result.success is True
         assert result.records_count == 2
         mock_ak.stock_us_daily.assert_called_once()
 
     @patch("fetchers.kline_fetcher.ak")
-    def test_fetch_a_share_success(self, mock_ak):
-        """Test successful A-share fetch."""
+    def test_fetch_a_share_akshare_fallback(self, mock_ak):
+        """Test A-share fetch via akshare when Futu fails."""
         mock_df = pd.DataFrame(
             {
                 "日期": pd.to_datetime(["2025-12-12", "2025-12-13", "2025-12-14"]),
@@ -331,6 +354,7 @@ class TestKlineFetcherWithMock:
         mock_ak.stock_zh_a_hist.return_value = mock_df
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         result = fetcher.fetch("A.600519", days=5)
 
         assert result.success is True
@@ -339,10 +363,11 @@ class TestKlineFetcherWithMock:
 
     @patch("fetchers.kline_fetcher.ak")
     def test_fetch_exception_handling(self, mock_ak):
-        """Test exception handling during fetch."""
+        """Test exception handling when both Futu and akshare fail."""
         mock_ak.stock_hk_daily.side_effect = Exception("Network error")
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         result = fetcher.fetch("HK.00700", days=5)
 
         assert result.success is False
@@ -375,6 +400,7 @@ class TestKlineFetcherWithMock:
         mock_ak.stock_us_daily.return_value = mock_us_df
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         results = fetcher.fetch_batch(["HK.00700", "US.NVDA"], days=5)
 
         assert "HK.00700" in results
@@ -398,6 +424,7 @@ class TestKlineFetcherWithMock:
         mock_ak.stock_hk_daily.return_value = mock_df
 
         fetcher = KlineFetcher()
+        _make_futu_fetch_fail(fetcher)
         result = fetcher.fetch(
             "HK.00700",
             start_date=date(2025, 12, 10),
@@ -427,7 +454,12 @@ class TestKlineFetcherDataConversion:
         mock_ak.stock_hk_daily.return_value = mock_df
 
         fetcher = KlineFetcher()
-        result = fetcher.fetch("HK.00700", days=5)
+        _make_futu_fetch_fail(fetcher)
+        result = fetcher.fetch(
+            "HK.00700",
+            start_date=date(2025, 12, 13),
+            end_date=date(2025, 12, 15),
+        )
 
         assert result.success is True
         kline = result.data[0]
@@ -453,12 +485,241 @@ class TestKlineFetcherDataConversion:
         mock_ak.stock_hk_daily.return_value = mock_df
 
         fetcher = KlineFetcher()
-        result = fetcher.fetch("HK.00700", days=5)
+        _make_futu_fetch_fail(fetcher)
+        result = fetcher.fetch(
+            "HK.00700",
+            start_date=date(2025, 12, 13),
+            end_date=date(2025, 12, 15),
+        )
 
         assert result.success is True
         kline = result.data[0]
         assert isinstance(kline.trade_date, date)
         assert kline.trade_date == date(2025, 12, 14)
+
+
+class TestToFutuCode:
+    """Tests for _to_futu_code method."""
+
+    def test_hk_code(self):
+        fetcher = KlineFetcher()
+        assert fetcher._to_futu_code(Market.HK, "00700") == "HK.00700"
+        assert fetcher._to_futu_code(Market.HK, "01378") == "HK.01378"
+
+    def test_a_share_shanghai(self):
+        fetcher = KlineFetcher()
+        assert fetcher._to_futu_code(Market.A, "600519") == "SH.600519"
+        assert fetcher._to_futu_code(Market.A, "601318") == "SH.601318"
+        assert fetcher._to_futu_code(Market.A, "688981") == "SH.688981"
+
+    def test_a_share_shenzhen(self):
+        fetcher = KlineFetcher()
+        assert fetcher._to_futu_code(Market.A, "000975") == "SZ.000975"
+        assert fetcher._to_futu_code(Market.A, "002594") == "SZ.002594"
+        assert fetcher._to_futu_code(Market.A, "300750") == "SZ.300750"
+
+    def test_us_code(self):
+        fetcher = KlineFetcher()
+        assert fetcher._to_futu_code(Market.US, "NVDA") == "US.NVDA"
+
+
+class TestFutuFetchPath:
+    """Tests for Futu API fetch path."""
+
+    def test_fetch_hk_via_futu(self):
+        """Test HK fetch succeeds via Futu without touching akshare."""
+        futu_df = pd.DataFrame(
+            {
+                "code": ["HK.00700"] * 3,
+                "time_key": ["2025-12-12", "2025-12-13", "2025-12-14"],
+                "open": [378.0, 380.0, 382.0],
+                "high": [382.0, 385.0, 388.0],
+                "low": [376.0, 378.0, 380.0],
+                "close": [380.0, 382.0, 385.0],
+                "volume": [1000000, 1200000, 1100000],
+                "turnover": [380000000, 460000000, 420000000],
+                "turnover_rate": [0.1, 0.12, 0.11],
+                "change_rate": [0.5, 0.53, 0.79],
+            }
+        )
+
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        mock_ctx.request_history_kline.return_value = (0, futu_df, None)  # RET_OK=0
+        fetcher._futu_ctx = mock_ctx
+
+        with patch("fetchers.kline_fetcher.ak") as mock_ak:
+            result = fetcher.fetch("HK.00700", days=5)
+            mock_ak.stock_hk_daily.assert_not_called()
+
+        assert result.success is True
+        assert result.records_count == 3
+        assert result.data[0].market == Market.HK
+        assert result.data[0].code == "00700"
+
+    def test_fetch_a_share_via_futu(self):
+        """Test A-share fetch succeeds via Futu without touching akshare."""
+        futu_df = pd.DataFrame(
+            {
+                "code": ["SH.600519"] * 2,
+                "time_key": ["2025-12-13", "2025-12-14"],
+                "open": [1820.0, 1835.0],
+                "high": [1850.0, 1860.0],
+                "low": [1810.0, 1825.0],
+                "close": [1840.0, 1855.0],
+                "volume": [12000, 11000],
+                "turnover": [21600000, 20350000],
+                "turnover_rate": [0.6, 0.55],
+                "change_rate": [1.1, 0.82],
+            }
+        )
+
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        mock_ctx.request_history_kline.return_value = (0, futu_df, None)
+        fetcher._futu_ctx = mock_ctx
+
+        with patch("fetchers.kline_fetcher.ak") as mock_ak:
+            result = fetcher.fetch("A.600519", days=5)
+            mock_ak.stock_zh_a_hist.assert_not_called()
+
+        assert result.success is True
+        assert result.records_count == 2
+        assert result.data[0].market == Market.A
+
+    def test_futu_pagination(self):
+        """Test Futu pagination with page_req_key."""
+        page1_df = pd.DataFrame(
+            {
+                "code": ["HK.00700"],
+                "time_key": ["2025-12-12"],
+                "open": [378.0],
+                "high": [382.0],
+                "low": [376.0],
+                "close": [380.0],
+                "volume": [1000000],
+                "turnover": [380000000],
+            }
+        )
+        page2_df = pd.DataFrame(
+            {
+                "code": ["HK.00700"],
+                "time_key": ["2025-12-13"],
+                "open": [380.0],
+                "high": [385.0],
+                "low": [378.0],
+                "close": [382.0],
+                "volume": [1200000],
+                "turnover": [460000000],
+            }
+        )
+
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        mock_ctx.request_history_kline.side_effect = [
+            (0, page1_df, "next_page_key"),
+            (0, page2_df, None),
+        ]
+        fetcher._futu_ctx = mock_ctx
+
+        result = fetcher.fetch("HK.00700", days=5)
+
+        assert result.success is True
+        assert result.records_count == 2
+        assert mock_ctx.request_history_kline.call_count == 2
+
+    def test_futu_api_error_falls_back_to_akshare(self):
+        """Test that Futu API error triggers akshare fallback."""
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        mock_ctx.request_history_kline.return_value = (
+            -1,  # RET_ERROR
+            "Request timeout",
+            None,
+        )
+        fetcher._futu_ctx = mock_ctx
+
+        mock_hk_df = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2025-12-14"]),
+                "open": [380.0],
+                "high": [385.0],
+                "low": [378.0],
+                "close": [382.0],
+                "volume": [1000000],
+            }
+        )
+
+        with patch("fetchers.kline_fetcher.ak") as mock_ak:
+            mock_ak.stock_hk_daily.return_value = mock_hk_df
+            result = fetcher.fetch(
+                "HK.00700",
+                start_date=date(2025, 12, 13),
+                end_date=date(2025, 12, 15),
+            )
+            mock_ak.stock_hk_daily.assert_called_once()
+
+        assert result.success is True
+        assert result.records_count == 1
+
+    def test_us_never_uses_futu(self):
+        """Test that US stocks never attempt Futu API."""
+        mock_us_df = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2025-12-14"]),
+                "open": [140.0],
+                "high": [145.0],
+                "low": [139.0],
+                "close": [143.0],
+                "volume": [50000000],
+            }
+        )
+
+        fetcher = KlineFetcher()
+        # Set a _futu_ctx that would fail if called
+        mock_ctx = MagicMock()
+        mock_ctx.request_history_kline.side_effect = AssertionError(
+            "Futu should not be called for US stocks"
+        )
+        fetcher._futu_ctx = mock_ctx
+
+        with patch("fetchers.kline_fetcher.ak") as mock_ak:
+            mock_ak.stock_us_daily.return_value = mock_us_df
+            result = fetcher.fetch("US.NVDA", days=5)
+
+        assert result.success is True
+        mock_ctx.request_history_kline.assert_not_called()
+
+
+class TestFutuContextLifecycle:
+    """Tests for Futu context management."""
+
+    def test_close_futu_ctx(self):
+        """Test _close_futu_ctx properly closes and nullifies."""
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        fetcher._futu_ctx = mock_ctx
+
+        fetcher._close_futu_ctx()
+
+        mock_ctx.close.assert_called_once()
+        assert fetcher._futu_ctx is None
+
+    def test_close_futu_ctx_handles_error(self):
+        """Test _close_futu_ctx handles close() errors gracefully."""
+        fetcher = KlineFetcher()
+        mock_ctx = MagicMock()
+        mock_ctx.close.side_effect = Exception("Already closed")
+        fetcher._futu_ctx = mock_ctx
+
+        fetcher._close_futu_ctx()
+        assert fetcher._futu_ctx is None
+
+    def test_close_futu_ctx_when_none(self):
+        """Test _close_futu_ctx is a no-op when context is None."""
+        fetcher = KlineFetcher()
+        fetcher._close_futu_ctx()  # Should not raise
+        assert fetcher._futu_ctx is None
 
 
 class TestCreateKlineFetcher:
@@ -473,3 +734,15 @@ class TestCreateKlineFetcher:
         """Test creating fetcher with custom days."""
         fetcher = create_kline_fetcher(default_days=60)
         assert fetcher.default_days == 60
+
+    def test_create_reads_futu_settings(self):
+        """Test that factory reads Futu settings from config."""
+        fetcher = create_kline_fetcher()
+        assert fetcher.futu_host == "127.0.0.1"
+        assert fetcher.futu_port == 11111
+
+    def test_create_with_custom_futu_params(self):
+        """Test factory with explicit Futu params."""
+        fetcher = create_kline_fetcher(futu_host="10.0.0.1", futu_port=22222)
+        assert fetcher.futu_host == "10.0.0.1"
+        assert fetcher.futu_port == 22222

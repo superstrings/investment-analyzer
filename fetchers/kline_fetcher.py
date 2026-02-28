@@ -1,12 +1,11 @@
 """
-K-line data fetcher using akshare.
+K-line data fetcher with Futu API priority and akshare fallback.
 
-Fetches daily K-line (OHLCV) data from free sources:
-- Hong Kong stocks via akshare
-- US stocks via akshare
-- A-shares (China) via akshare
+Data source priority:
+- HK/A-shares: Futu OpenD API (primary) → akshare (fallback)
+- US stocks: akshare only (Futu has no US quote permission)
 
-Note: akshare provides free market data without API key requirements.
+Futu OpenD must be running locally for HK/A-share primary path.
 """
 
 import logging
@@ -60,9 +59,10 @@ class KlineFetchResult(FetchResult):
 
 class KlineFetcher:
     """
-    K-line data fetcher using akshare.
+    K-line data fetcher with Futu API priority and akshare fallback.
 
-    Fetches daily OHLCV data for HK, US, and A-share stocks.
+    For HK and A-share stocks, tries Futu OpenD first, then falls back to
+    akshare on failure. US stocks always use akshare (no Futu permission).
 
     Usage:
         fetcher = KlineFetcher()
@@ -86,14 +86,24 @@ class KlineFetcher:
     A_SH_PATTERN = re.compile(r"^(6\d{5})$")  # Starts with 6: 600519 (Shanghai)
     A_SZ_PATTERN = re.compile(r"^(0\d{5}|3\d{5})$")  # Starts with 0 or 3 (Shenzhen)
 
-    def __init__(self, default_days: int = 250):
+    def __init__(
+        self,
+        default_days: int = 250,
+        futu_host: str = "127.0.0.1",
+        futu_port: int = 11111,
+    ):
         """
         Initialize K-line fetcher.
 
         Args:
             default_days: Default number of days to fetch
+            futu_host: Futu OpenD host address
+            futu_port: Futu OpenD port number
         """
         self.default_days = default_days
+        self.futu_host = futu_host
+        self.futu_port = futu_port
+        self._futu_ctx = None
 
     def fetch(
         self,
@@ -163,25 +173,158 @@ class KlineFetcher:
             results[code] = self.fetch(code, days=days, adjust=adjust)
         return results
 
+    def _get_futu_ctx(self):
+        """Get or create Futu OpenQuoteContext (lazy initialization)."""
+        if self._futu_ctx is None:
+            from futu import OpenQuoteContext
+
+            self._futu_ctx = OpenQuoteContext(host=self.futu_host, port=self.futu_port)
+        return self._futu_ctx
+
+    def _close_futu_ctx(self):
+        """Close Futu context if open."""
+        if self._futu_ctx is not None:
+            try:
+                self._futu_ctx.close()
+            except Exception:
+                pass
+            self._futu_ctx = None
+
+    def __del__(self):
+        """Ensure Futu context is released."""
+        self._close_futu_ctx()
+
+    def _to_futu_code(self, market: Market, code: str) -> str:
+        """
+        Convert internal code to Futu format.
+
+        Args:
+            market: Market enum
+            code: Pure stock code (e.g., "00700", "600519")
+
+        Returns:
+            Futu-format code (e.g., "HK.00700", "SH.600519", "SZ.000975")
+        """
+        if market == Market.HK:
+            return f"HK.{code}"
+        elif market == Market.A:
+            if self.A_SH_PATTERN.match(code):
+                return f"SH.{code}"
+            else:
+                return f"SZ.{code}"
+        elif market == Market.US:
+            return f"US.{code}"
+        return f"HK.{code}"
+
+    def _fetch_via_futu(
+        self,
+        futu_code: str,
+        start_date: date,
+        end_date: date,
+        market: Market,
+        pure_code: str,
+    ) -> KlineFetchResult:
+        """
+        Fetch K-line data via Futu OpenD API.
+
+        Args:
+            futu_code: Futu-format code (e.g., "HK.00700")
+            start_date: Start date
+            end_date: End date
+            market: Market enum for KlineData
+            pure_code: Pure code for KlineData
+
+        Returns:
+            KlineFetchResult with data
+
+        Raises:
+            Exception: If Futu API call fails
+        """
+        from futu import RET_OK, AuType, KLType
+
+        ctx = self._get_futu_ctx()
+        all_data = []
+        page_req_key = None
+
+        while True:
+            ret, data, page_req_key = ctx.request_history_kline(
+                futu_code,
+                start=start_date.strftime("%Y-%m-%d"),
+                end=end_date.strftime("%Y-%m-%d"),
+                ktype=KLType.K_DAY,
+                autype=AuType.QFQ,
+                max_count=500,
+                page_req_key=page_req_key,
+            )
+            if ret != RET_OK:
+                raise Exception(f"Futu API error: {data}")
+            all_data.append(data)
+            if page_req_key is None:
+                break
+
+        df = pd.concat(all_data, ignore_index=True)
+
+        if df.empty:
+            raise Exception(f"No data returned from Futu for {futu_code}")
+
+        # Standardize Futu columns to our format
+        # Futu returns: code, name, time_key, open, close, high, low,
+        #   pe_ratio, turnover_rate, volume, turnover, change_rate, last_close
+        df = self._standardize_futu_columns(df)
+
+        klines = self._df_to_klines(df, market, pure_code)
+        logger.info(f"Fetched {len(klines)} bars for {futu_code} via Futu API")
+        return KlineFetchResult.ok_with_df(klines, df)
+
+    def _standardize_futu_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Standardize Futu DataFrame columns to our format."""
+        column_map = {
+            "time_key": "trade_date",
+            "open": "open",
+            "high": "high",
+            "low": "low",
+            "close": "close",
+            "volume": "volume",
+            "turnover": "amount",
+            "turnover_rate": "turnover_rate",
+            "change_rate": "change_pct",
+        }
+        rename_dict = {k: v for k, v in column_map.items() if k in df.columns}
+        df = df.rename(columns=rename_dict)
+
+        if "trade_date" in df.columns:
+            df["trade_date"] = pd.to_datetime(df["trade_date"])
+
+        for col in ["amount", "turnover_rate", "change_pct"]:
+            if col not in df.columns:
+                df[col] = 0
+
+        return df
+
     def _fetch_hk(
         self, code: str, start_date: date, end_date: date, adjust: str
     ) -> KlineFetchResult:
-        """Fetch Hong Kong stock K-line data."""
+        """Fetch Hong Kong stock K-line data. Tries Futu first, then akshare."""
+        # 1. Try Futu API first
         try:
-            # akshare HK stock daily data
-            # Note: akshare uses different API depending on version
+            futu_code = self._to_futu_code(Market.HK, code)
+            return self._fetch_via_futu(
+                futu_code, start_date, end_date, Market.HK, code
+            )
+        except Exception as e:
+            logger.info(
+                f"Futu fetch failed for HK.{code}, falling back to akshare: {e}"
+            )
+
+        # 2. Fallback to akshare
+        try:
             df = ak.stock_hk_daily(symbol=code, adjust=adjust)
 
             if df is None or df.empty:
                 return KlineFetchResult.error(f"No data returned for HK.{code}")
 
-            # Standardize column names
             df = self._standardize_hk_columns(df)
-
-            # Filter by date range
             df = self._filter_by_date(df, start_date, end_date)
-
-            # Convert to KlineData list
             klines = self._df_to_klines(df, Market.HK, code)
 
             return KlineFetchResult.ok_with_df(klines, df)
@@ -219,10 +362,16 @@ class KlineFetcher:
     def _fetch_a_share(
         self, code: str, start_date: date, end_date: date, adjust: str
     ) -> KlineFetchResult:
-        """Fetch A-share (China) stock K-line data."""
+        """Fetch A-share (China) stock K-line data. Tries Futu first, then akshare."""
+        # 1. Try Futu API first
         try:
-            # akshare A-share daily data
-            # Convert adjust type: qfq -> qfq, hfq -> hfq, "" -> ""
+            futu_code = self._to_futu_code(Market.A, code)
+            return self._fetch_via_futu(futu_code, start_date, end_date, Market.A, code)
+        except Exception as e:
+            logger.info(f"Futu fetch failed for A.{code}, falling back to akshare: {e}")
+
+        # 2. Fallback to akshare
+        try:
             ak_adjust = adjust if adjust in ("qfq", "hfq") else ""
 
             df = ak.stock_zh_a_hist(
@@ -236,10 +385,7 @@ class KlineFetcher:
             if df is None or df.empty:
                 return KlineFetchResult.error(f"No data returned for A.{code}")
 
-            # Standardize column names
             df = self._standardize_a_share_columns(df)
-
-            # Convert to KlineData list
             klines = self._df_to_klines(df, Market.A, code)
 
             return KlineFetchResult.ok_with_df(klines, df)
@@ -423,14 +569,28 @@ class KlineFetcher:
         return market
 
 
-def create_kline_fetcher(default_days: int = 250) -> KlineFetcher:
+def create_kline_fetcher(
+    default_days: int = 250,
+    futu_host: Optional[str] = None,
+    futu_port: Optional[int] = None,
+) -> KlineFetcher:
     """
     Factory function to create a KlineFetcher.
 
+    If futu_host/futu_port are not provided, reads from settings.
+
     Args:
         default_days: Default number of days to fetch
+        futu_host: Futu OpenD host (default: from settings)
+        futu_port: Futu OpenD port (default: from settings)
 
     Returns:
         KlineFetcher instance
     """
-    return KlineFetcher(default_days=default_days)
+    from config.settings import settings
+
+    return KlineFetcher(
+        default_days=default_days,
+        futu_host=futu_host or settings.futu.default_host,
+        futu_port=futu_port or settings.futu.default_port,
+    )
