@@ -104,7 +104,7 @@ function createSignalDetailRow(s) {
 
 async function loadSignals() {
     const data = await fetchData('/api/signals');
-    document.getElementById('s-total').textContent = data.accuracy.total;
+    document.getElementById('s-total').textContent = data.signals.length;
     document.getElementById('s-winrate').textContent =
         data.accuracy.win_rate > 0 ? data.accuracy.win_rate.toFixed(1) + '%' : '--';
     document.getElementById('s-profit').textContent = data.accuracy.profitable;
