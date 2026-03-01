@@ -76,6 +76,64 @@ class DingtalkService:
         }
         return self._send(payload, title, user_id, message_type)
 
+    def send_markdown_chunked(
+        self,
+        title: str,
+        text: str,
+        user_id: int = None,
+        message_type: str = "report",
+        max_chars: int = 3000,
+    ) -> bool:
+        """Send long markdown by splitting into multiple messages.
+
+        Splits on section headers (### or ####) to keep each chunk
+        under max_chars. Falls back to hard split if a single section
+        exceeds the limit.
+        """
+        if len(text) <= max_chars:
+            return self.send_markdown(title, text, user_id, message_type)
+
+        chunks = self._split_by_sections(text, max_chars)
+        success = True
+        for i, chunk in enumerate(chunks):
+            chunk_title = f"{title} ({i + 1}/{len(chunks)})"
+            ok = self.send_markdown(chunk_title, chunk, user_id, message_type)
+            if not ok:
+                success = False
+            if i < len(chunks) - 1:
+                time.sleep(1)  # Rate limit between messages
+        return success
+
+    @staticmethod
+    def _split_by_sections(text: str, max_chars: int) -> list[str]:
+        """Split markdown text by section headers, respecting max_chars."""
+        import re
+
+        # Split on ### or #### headers (keep the header with the following content)
+        parts = re.split(r"(?=^#{3,4}\s)", text, flags=re.MULTILINE)
+        parts = [p for p in parts if p.strip()]
+
+        chunks = []
+        current = ""
+        for part in parts:
+            if len(current) + len(part) > max_chars and current:
+                chunks.append(current.strip())
+                current = ""
+            if len(part) > max_chars:
+                # Single section too long — hard split
+                while part:
+                    space = max_chars - len(current)
+                    current += part[:space]
+                    part = part[space:]
+                    if len(current) >= max_chars:
+                        chunks.append(current.strip())
+                        current = ""
+            else:
+                current += part
+        if current.strip():
+            chunks.append(current.strip())
+        return chunks if chunks else [text[:max_chars]]
+
     def _send(
         self,
         payload: dict,
