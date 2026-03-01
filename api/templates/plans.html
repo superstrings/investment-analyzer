@@ -21,8 +21,8 @@
         <button id="tab-cancelled" onclick="switchTab('cancelled')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">已取消</button>
     </div>
 
-    <div class="bg-gray-900 rounded-lg border border-gray-800">
-        <div id="pl-list" class="divide-y divide-gray-800">
+    <div class="bg-gray-900 rounded-lg border border-gray-800 overflow-hidden">
+        <div id="pl-list" class="divide-y divide-gray-800 overflow-hidden">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
         </div>
     </div>
@@ -79,12 +79,12 @@ function createPlanDetailRow(p) {
                          cancelled:'text-gray-500', expired:'text-gray-600'};
 
     const row = document.createElement('div');
-    row.className = 'px-4 py-3';
+    row.className = 'px-4 py-3 overflow-hidden';
 
     const topRow = document.createElement('div');
     topRow.className = 'flex flex-col sm:flex-row justify-between items-start gap-2';
     const leftDiv = document.createElement('div');
-    leftDiv.className = 'flex items-center space-x-2 flex-wrap';
+    leftDiv.className = 'flex items-center space-x-2 flex-wrap min-w-0';
     const badge = document.createElement('span');
     badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (prioColors[p.priority] || '');
     badge.textContent = p.action.toUpperCase();
@@ -127,7 +127,7 @@ function createPlanDetailRow(p) {
     row.appendChild(topRow);
 
     const metaRow = document.createElement('div');
-    metaRow.className = 'mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500';
+    metaRow.className = 'mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500 break-words';
     const fields = [];
     if (p.entry_price) fields.push('入场: ' + p.entry_price.toFixed(2));
     if (p.stop_loss) fields.push('止损: ' + p.stop_loss.toFixed(2));
@@ -143,7 +143,7 @@ function createPlanDetailRow(p) {
 
     if (p.reason) {
         const reasonEl = document.createElement('div');
-        reasonEl.className = 'mt-1 text-xs text-gray-400';
+        reasonEl.className = 'mt-1 text-xs text-gray-400 break-words';
         reasonEl.textContent = p.reason;
         row.appendChild(reasonEl);
     }
@@ -216,6 +216,18 @@ async function cancelPlan(id) {
 
 loadPlans();
 // Prevent mobile keyboard from popping up on page load
-if (document.activeElement) document.activeElement.blur();
+// Mobile Safari may auto-focus after script execution, so use repeated deferred blur
+(function preventAutoFocus() {
+    var filter = document.getElementById('pl-code-filter');
+    if (!filter) return;
+    function blurIfFocused() {
+        if (document.activeElement === filter) filter.blur();
+    }
+    blurIfFocused();
+    setTimeout(blurIfFocused, 0);
+    setTimeout(blurIfFocused, 100);
+    setTimeout(blurIfFocused, 300);
+    // After 500ms assume user may intentionally focus, stop interfering
+})();
 </script>
 {% endblock %}
