@@ -173,12 +173,22 @@ function renderExpandedContent(r) {
             indRow.textContent = parts.join(' | ');
             if (parts.length > 0) wrap.appendChild(indRow);
         }
-    } else if (r.summary) {
-        // Full summary text (not truncated)
-        const textDiv = document.createElement('div');
-        textDiv.className = 'text-xs text-gray-400 whitespace-pre-wrap';
-        textDiv.textContent = text || r.summary;
-        wrap.appendChild(textDiv);
+    } else {
+        // Try Markdown analysis format {"analysis": "..."}
+        var analysisText = extractAnalysisText(text);
+        if (analysisText) {
+            var mdDiv = document.createElement('div');
+            mdDiv.className = 'md-content';
+            // Safe: renderMarkdown() uses DOMPurify.sanitize() to prevent XSS
+            mdDiv.innerHTML = renderMarkdown(analysisText);
+            wrap.appendChild(mdDiv);
+        } else if (r.summary) {
+            // Full summary text (not truncated)
+            var textDiv = document.createElement('div');
+            textDiv.className = 'text-xs text-gray-400 whitespace-pre-wrap';
+            textDiv.textContent = text || r.summary;
+            wrap.appendChild(textDiv);
+        }
     }
 
     return wrap;

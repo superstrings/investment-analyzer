@@ -233,6 +233,28 @@ def _extract_rating(text: str) -> str | None:
     return None
 
 
+def _strip_markdown(text: str) -> str:
+    """Strip Markdown syntax to produce clean plain text for summaries."""
+    # Remove headers
+    s = re.sub(r"^#{1,6}\s+", "", text, flags=re.MULTILINE)
+    # Remove bold/italic markers
+    s = re.sub(r"\*{1,3}([^*]+)\*{1,3}", r"\1", s)
+    # Remove inline code
+    s = re.sub(r"`([^`]+)`", r"\1", s)
+    # Remove links [text](url) → text
+    s = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", s)
+    # Remove list markers
+    s = re.sub(r"^[\s]*[-*+]\s+", "", s, flags=re.MULTILINE)
+    s = re.sub(r"^[\s]*\d+\.\s+", "", s, flags=re.MULTILINE)
+    # Collapse multiple newlines to separator
+    s = re.sub(r"\n{2,}", " | ", s)
+    # Single newlines to space
+    s = re.sub(r"\n", " ", s)
+    # Collapse multiple spaces
+    s = re.sub(r" {2,}", " ", s)
+    return s.strip()
+
+
 def _make_summary(result_json: str | None) -> str:
     """Extract a human-readable summary from result_json."""
     if not result_json:
@@ -259,6 +281,11 @@ def _make_summary(result_json: str | None) -> str:
             label = labels.get(k, k)
             parts.append(f"{label}: {v}")
         return " | ".join(parts)
+    # Markdown analysis text — strip syntax and truncate
+    analysis_text = data.get("analysis")
+    if analysis_text and isinstance(analysis_text, str):
+        clean = _strip_markdown(analysis_text)
+        return clean[:300] + ("..." if len(clean) > 300 else "")
     # Generic JSON — return first-level string values
     parts = []
     for k, v in data.items():

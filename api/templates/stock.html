@@ -709,23 +709,33 @@ function renderAnalysisResult(r) {
             if (parts.length > 0) content.appendChild(indRow);
         }
     } else if (text && !isError) {
-        // Plain text fallback
-        const textDiv = document.createElement('div');
-        textDiv.className = 'mt-2 text-xs text-gray-400 whitespace-pre-wrap';
-        const isLong = text.length > 300;
-        textDiv.textContent = isLong ? text.substring(0, 300) + '...' : text;
-        content.appendChild(textDiv);
-        if (isLong) {
-            const expandBtn = document.createElement('button');
-            expandBtn.className = 'mt-1 text-xs text-blue-400 hover:text-blue-300';
-            expandBtn.textContent = '展开全文';
-            let expanded = false;
-            expandBtn.onclick = function() {
-                expanded = !expanded;
-                textDiv.textContent = expanded ? text : text.substring(0, 300) + '...';
-                expandBtn.textContent = expanded ? '收起' : '展开全文';
-            };
-            content.appendChild(expandBtn);
+        // Try Markdown analysis format {"analysis": "..."}
+        var analysisText = extractAnalysisText(text);
+        if (analysisText) {
+            var mdDiv = document.createElement('div');
+            mdDiv.className = 'mt-2 md-content';
+            // Safe: renderMarkdown uses DOMPurify.sanitize to prevent XSS
+            mdDiv.innerHTML = renderMarkdown(analysisText);
+            content.appendChild(mdDiv);
+        } else {
+            // Plain text fallback
+            const textDiv = document.createElement('div');
+            textDiv.className = 'mt-2 text-xs text-gray-400 whitespace-pre-wrap';
+            const isLong = text.length > 300;
+            textDiv.textContent = isLong ? text.substring(0, 300) + '...' : text;
+            content.appendChild(textDiv);
+            if (isLong) {
+                const expandBtn = document.createElement('button');
+                expandBtn.className = 'mt-1 text-xs text-blue-400 hover:text-blue-300';
+                expandBtn.textContent = '展开全文';
+                let expanded = false;
+                expandBtn.onclick = function() {
+                    expanded = !expanded;
+                    textDiv.textContent = expanded ? text : text.substring(0, 300) + '...';
+                    expandBtn.textContent = expanded ? '收起' : '展开全文';
+                };
+                content.appendChild(expandBtn);
+            }
         }
     }
 }
