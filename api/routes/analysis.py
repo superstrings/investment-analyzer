@@ -266,7 +266,8 @@ def _make_summary(result_json: str | None) -> str:
     try:
         data = json.loads(result_json)
     except (json.JSONDecodeError, TypeError):
-        return result_json[:300]
+        clean = _strip_markdown(result_json)
+        return clean[:300] + ("..." if len(clean) > 300 else "")
     # Extract v12 analysis fields
     v12 = data.get("v12_analysis") or data.get("v12_framework")
     if v12:
