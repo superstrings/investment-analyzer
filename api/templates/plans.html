@@ -14,7 +14,7 @@
     </div>
 
     <!-- Tabs -->
-    <div class="flex gap-2">
+    <div class="flex flex-wrap gap-2">
         <button id="tab-all" onclick="switchTab('')" class="text-sm px-3 py-1 rounded bg-blue-600 text-white">全部</button>
         <button id="tab-pending" onclick="switchTab('pending')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">待执行</button>
         <button id="tab-executed" onclick="switchTab('executed')" class="text-sm px-3 py-1 rounded bg-gray-800 text-gray-400 hover:text-white">已执行</button>
@@ -82,9 +82,9 @@ function createPlanDetailRow(p) {
     row.className = 'px-4 py-3';
 
     const topRow = document.createElement('div');
-    topRow.className = 'flex justify-between items-start';
+    topRow.className = 'flex flex-col sm:flex-row justify-between items-start gap-2';
     const leftDiv = document.createElement('div');
-    leftDiv.className = 'flex items-center space-x-2';
+    leftDiv.className = 'flex items-center space-x-2 flex-wrap';
     const badge = document.createElement('span');
     badge.className = 'text-xs font-bold px-2 py-0.5 rounded ' + (prioColors[p.priority] || '');
     badge.textContent = p.action.toUpperCase();
@@ -98,18 +98,16 @@ function createPlanDetailRow(p) {
     leftDiv.appendChild(nameSpan);
 
     const rightDiv = document.createElement('div');
-    rightDiv.className = 'flex items-center space-x-2';
+    rightDiv.className = 'flex items-center flex-wrap gap-1';
     const statusSpan = document.createElement('span');
     statusSpan.className = 'text-xs ' + (statusColors[p.status] || '');
     statusSpan.textContent = p.status;
     rightDiv.appendChild(statusSpan);
 
-    if (p.plan_date) {
-        const dateSpan = document.createElement('span');
-        dateSpan.className = 'text-[10px] text-gray-600';
-        dateSpan.textContent = p.plan_date;
-        rightDiv.appendChild(dateSpan);
-    }
+    const dateSpan = document.createElement('span');
+    dateSpan.className = 'text-[10px] text-gray-600';
+    dateSpan.textContent = p.created_at ? formatTime(p.created_at) : (p.plan_date || '');
+    rightDiv.appendChild(dateSpan);
 
     if (p.status === 'pending') {
         const execBtn = document.createElement('button');
@@ -129,7 +127,7 @@ function createPlanDetailRow(p) {
     row.appendChild(topRow);
 
     const metaRow = document.createElement('div');
-    metaRow.className = 'mt-1 flex space-x-3 text-xs text-gray-500';
+    metaRow.className = 'mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-gray-500';
     const fields = [];
     if (p.entry_price) fields.push('入场: ' + p.entry_price.toFixed(2));
     if (p.stop_loss) fields.push('止损: ' + p.stop_loss.toFixed(2));
@@ -217,5 +215,7 @@ async function cancelPlan(id) {
 }
 
 loadPlans();
+// Prevent mobile keyboard from popping up on page load
+if (document.activeElement) document.activeElement.blur();
 </script>
 {% endblock %}

@@ -39,7 +39,7 @@
                         <a href="/signals" class="text-sm text-gray-300 hover:text-white {% block nav_signals %}{% endblock %}">信号</a>
                         <a href="/plans" class="text-sm text-gray-300 hover:text-white {% block nav_plans %}{% endblock %}">计划</a>
                         <a href="/analysis" class="text-sm text-gray-300 hover:text-white {% block nav_analysis %}{% endblock %}">分析</a>
-                        <a href="/calendar" class="text-sm text-gray-300 hover:text-white {% block nav_calendar %}{% endblock %}">日历</a>
+                        <a href="/calendar" class="text-sm text-gray-300 hover:text-white {% block nav_calendar %}{% endblock %}">工具</a>
                     </div>
                 </div>
                 <div class="flex items-center gap-2">
@@ -49,32 +49,32 @@
                             autocomplete="off">
                         <div id="search-dropdown" class="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
                     </div>
-                    <button id="mobile-menu-btn" onclick="toggleMobileMenu()" class="md:hidden text-gray-300 hover:text-white p-1">
-                        <svg id="menu-icon-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-                        <svg id="menu-icon-close" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    <button id="mobile-search-btn" onclick="toggleMobileSearch()" class="md:hidden text-gray-300 hover:text-white p-1">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
                     </button>
                 </div>
             </div>
-            <!-- Mobile menu -->
-            <div id="mobile-menu" class="hidden md:hidden pb-3 border-t border-gray-800 mt-1">
-                <div class="flex flex-col space-y-1 pt-2">
-                    <a href="/" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_home_m %}{% endblock %}">首页</a>
-                    <a href="/portfolio" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_portfolio_m %}{% endblock %}">持仓</a>
-                    <a href="/watchlist" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_watchlist_m %}{% endblock %}">关注</a>
-                    <a href="/signals" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_signals_m %}{% endblock %}">信号</a>
-                    <a href="/plans" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_plans_m %}{% endblock %}">计划</a>
-                    <a href="/analysis" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_analysis_m %}{% endblock %}">分析</a>
-                    <a href="/calendar" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_calendar_m %}{% endblock %}">日历</a>
-                </div>
-                <div class="relative mt-2 px-2">
+            <!-- Mobile search bar (toggled) -->
+            <div id="mobile-search-bar" class="hidden md:hidden pb-2 px-2">
+                <div class="relative">
                     <input id="nav-search-mobile" type="text" placeholder="搜索代码/名称..."
                         class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:border-blue-500"
                         autocomplete="off">
-                    <div id="search-dropdown-mobile" class="absolute left-2 right-2 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
+                    <div id="search-dropdown-mobile" class="absolute left-0 right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
                 </div>
             </div>
         </div>
     </nav>
+    <!-- Mobile two-row nav -->
+    <div class="md:hidden bg-gray-900 border-b border-gray-800 px-3 py-1.5 flex flex-wrap gap-x-1 gap-y-0.5 text-xs sticky top-12 z-40">
+        <a href="/" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_home_m %}{% endblock %}">首页</a>
+        <a href="/portfolio" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_portfolio_m %}{% endblock %}">持仓</a>
+        <a href="/watchlist" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_watchlist_m %}{% endblock %}">关注</a>
+        <a href="/signals" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_signals_m %}{% endblock %}">信号</a>
+        <a href="/plans" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_plans_m %}{% endblock %}">计划</a>
+        <a href="/analysis" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_analysis_m %}{% endblock %}">分析</a>
+        <a href="/calendar" class="px-2 py-1 text-gray-300 hover:text-white rounded hover:bg-gray-800 {% block nav_calendar_m %}{% endblock %}">工具</a>
+    </div>
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto px-4 py-4">
@@ -124,15 +124,24 @@
             return a;
         }
 
-        // Mobile menu toggle
-        function toggleMobileMenu() {
-            const menu = document.getElementById('mobile-menu');
-            const iconOpen = document.getElementById('menu-icon-open');
-            const iconClose = document.getElementById('menu-icon-close');
-            const isHidden = menu.classList.contains('hidden');
-            menu.classList.toggle('hidden');
-            iconOpen.classList.toggle('hidden', !isHidden);
-            iconClose.classList.toggle('hidden', isHidden);
+        // Mobile search toggle
+        function toggleMobileSearch() {
+            const bar = document.getElementById('mobile-search-bar');
+            const isHidden = bar.classList.contains('hidden');
+            bar.classList.toggle('hidden');
+            if (isHidden) {
+                const input = document.getElementById('nav-search-mobile');
+                if (input) input.focus();
+            }
+        }
+
+        // Format ISO datetime to MM-DD HH:mm
+        function formatTime(isoStr) {
+            if (!isoStr) return '';
+            const d = new Date(isoStr);
+            if (isNaN(d.getTime())) return isoStr;
+            const pad = n => String(n).padStart(2, '0');
+            return pad(d.getMonth()+1) + '-' + pad(d.getDate()) + ' ' + pad(d.getHours()) + ':' + pad(d.getMinutes());
         }
 
         // Global search (shared logic for desktop + mobile)

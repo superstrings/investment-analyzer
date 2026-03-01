@@ -216,13 +216,21 @@ function createAnalysisRow(r) {
         leftDiv.appendChild(makeRatingBadge(r.rating));
     }
 
+    if (r.type) {
+        const typeMap = {pre_market:'盘前', post_market:'盘后', llm:'手动', deep:'深度', technical:'技术'};
+        const srcBadge = document.createElement('span');
+        srcBadge.className = 'text-[10px] px-1.5 py-0.5 rounded bg-gray-700 text-gray-300';
+        srcBadge.textContent = typeMap[r.type] || r.type;
+        leftDiv.appendChild(srcBadge);
+    }
+
     const rightDiv = document.createElement('div');
     rightDiv.className = 'text-right flex-shrink-0 flex items-center gap-2';
 
     const infoDiv = document.createElement('div');
     const dateEl = document.createElement('div');
     dateEl.className = 'text-xs text-gray-500';
-    dateEl.textContent = r.analysis_date;
+    dateEl.textContent = r.created_at ? formatTime(r.created_at) : r.analysis_date;
     infoDiv.appendChild(dateEl);
 
     if (r.price) {

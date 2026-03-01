@@ -70,6 +70,7 @@ async def api_analysis_results(
                 "support": float(r.support_price) if r.support_price else None,
                 "resistance": float(r.resistance_price) if r.resistance_price else None,
                 "analysis_date": r.analysis_date.isoformat(),
+                "created_at": r.created_at.isoformat() if r.created_at else None,
                 "summary": summary,
                 "result_json": r.result_json or "",
             }

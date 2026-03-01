@@ -23,21 +23,6 @@
         </div>
     </div>
 
-    <div class="bg-gray-900 rounded-lg border border-gray-800 p-4">
-        <div class="flex justify-between items-center mb-3">
-            <h2 class="font-semibold text-sm">汇率 (→ CNY)</h2>
-            <button id="refresh-rates-btn" onclick="refreshRates()"
-                class="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-colors">
-                刷新汇率
-            </button>
-        </div>
-        <div id="rates-container" class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div class="text-center"><div class="text-xs text-gray-500">USD/CNY</div><div id="rate-USD" class="text-lg font-bold">--</div><div id="rate-time-USD" class="text-xs text-gray-600">--</div></div>
-            <div class="text-center"><div class="text-xs text-gray-500">HKD/CNY</div><div id="rate-HKD" class="text-lg font-bold">--</div><div id="rate-time-HKD" class="text-xs text-gray-600">--</div></div>
-            <div class="text-center"><div class="text-xs text-gray-500">JPY/CNY</div><div id="rate-JPY" class="text-lg font-bold">--</div><div id="rate-time-JPY" class="text-xs text-gray-600">--</div></div>
-        </div>
-    </div>
-
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
             <h2 class="font-semibold">持仓</h2>
@@ -207,49 +192,6 @@ function createPlanRow(p) {
     return row;
 }
 
-function formatRateTime(isoStr) {
-    if (!isoStr) return '--';
-    const d = new Date(isoStr);
-    const pad = n => String(n).padStart(2, '0');
-    return `${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
-
-function updateRateDisplay(rates) {
-    rates.forEach(r => {
-        const valEl = document.getElementById('rate-' + r.currency);
-        const timeEl = document.getElementById('rate-time-' + r.currency);
-        if (valEl) valEl.textContent = r.rate_to_cny.toFixed(r.currency === 'JPY' ? 4 : 3);
-        if (timeEl) timeEl.textContent = formatRateTime(r.updated_at);
-    });
-}
-
-async function loadRates() {
-    const data = await fetchData('/api/exchange-rates');
-    if (data && data.rates) updateRateDisplay(data.rates);
-}
-
-async function refreshRates() {
-    const btn = document.getElementById('refresh-rates-btn');
-    btn.disabled = true;
-    btn.textContent = '刷新中...';
-    btn.classList.add('opacity-50');
-    try {
-        const res = await fetch('/api/exchange-rates/refresh', {method: 'POST', headers: {'Content-Type': 'application/json'}});
-        const data = await res.json();
-        if (data.success) {
-            await loadRates();
-        } else {
-            alert(data.message || '刷新失败');
-        }
-    } catch (e) {
-        alert('刷新失败: ' + e.message);
-    } finally {
-        btn.disabled = false;
-        btn.textContent = '刷新汇率';
-        btn.classList.remove('opacity-50');
-    }
-}
-
 async function pushToDingTalk() {
     const btn = document.getElementById('push-dingtalk-btn');
     btn.disabled = true;
@@ -266,8 +208,6 @@ async function pushToDingTalk() {
 }
 
 async function loadDashboard() {
-    loadRates();
-
     const data = await fetchData('/api/dashboard/summary');
     const p = data.portfolio;
     document.getElementById('total-val').textContent = '¥' + formatNum(p.total_market_val);
