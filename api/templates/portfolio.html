@@ -4,9 +4,9 @@
 
 {% block content %}
 <div class="space-y-4">
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <h1 class="text-lg font-bold">持仓详情</h1>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
             <button id="refresh-prices-btn" onclick="refreshManualPrices()" class="bg-green-700 hover:bg-green-600 text-white text-xs rounded px-3 py-1">
                 刷新行情
             </button>
@@ -23,7 +23,7 @@
             </select>
         </div>
     </div>
-    <div class="grid grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="bg-gray-900 rounded-lg p-3 border border-gray-800">
             <div class="text-xs text-gray-500">总市值</div>
             <div id="p-total-val" class="text-lg font-bold">--</div>
@@ -123,7 +123,7 @@
     <div class="bg-gray-900 rounded-lg border border-gray-700 w-full max-w-sm mx-4 p-5">
         <h3 class="font-bold mb-4">手动添加持仓</h3>
         <form id="add-form" class="space-y-3">
-            <div class="grid grid-cols-2 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">市场</label>
                     <select id="m-market" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
@@ -144,7 +144,7 @@
                 <input id="m-name" type="text" placeholder="贵州茅台"
                     class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm">
             </div>
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
                     <label class="block text-xs text-gray-500 mb-1">数量</label>
                     <input id="m-qty" type="number" step="1" required placeholder="100"

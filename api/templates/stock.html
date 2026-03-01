@@ -4,7 +4,7 @@
 {% block content %}
 <div class="space-y-4">
     <!-- Header -->
-    <div class="flex justify-between items-center">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
         <div>
             <h1 id="stock-title" class="text-lg font-bold">{{ market }}.{{ code }}</h1>
             <div id="stock-name" class="text-sm text-gray-500"></div>
@@ -25,12 +25,12 @@
         <div class="flex justify-between items-center mb-2">
             <span class="text-sm text-gray-400">K线图</span>
             <div class="flex gap-1">
-                <button onclick="loadKlines(60)" id="btn-60d" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">60天</button>
-                <button onclick="loadKlines(120)" id="btn-120d" class="text-xs px-2 py-0.5 rounded bg-blue-600 text-white">120天</button>
-                <button onclick="loadKlines(250)" id="btn-250d" class="text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">250天</button>
+                <button onclick="loadKlines(60)" id="btn-60d" class="text-xs px-2 py-1 sm:py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">60天</button>
+                <button onclick="loadKlines(120)" id="btn-120d" class="text-xs px-2 py-1 sm:py-0.5 rounded bg-blue-600 text-white">120天</button>
+                <button onclick="loadKlines(250)" id="btn-250d" class="text-xs px-2 py-1 sm:py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white">250天</button>
             </div>
         </div>
-        <div id="chart-container" style="height: 400px;"></div>
+        <div id="chart-container" class="h-[250px] sm:h-[350px] md:h-[400px]"></div>
     </div>
 
     <!-- Analysis Result -->
@@ -121,7 +121,7 @@ function initChart() {
     chart = LightweightCharts.createChart(container, {
         ...chartOptions,
         width: container.clientWidth,
-        height: 400,
+        height: container.clientHeight,
     });
 
     candleSeries = chart.addCandlestickSeries({
@@ -154,7 +154,7 @@ function initChart() {
     // Resize handler
     const ro = new ResizeObserver(entries => {
         for (const entry of entries) {
-            chart.applyOptions({ width: entry.contentRect.width });
+            chart.applyOptions({ width: entry.contentRect.width, height: entry.contentRect.height });
         }
     });
     ro.observe(container);
@@ -166,8 +166,8 @@ async function loadKlines(days) {
     [60, 120, 250].forEach(d => {
         const btn = document.getElementById('btn-' + d + 'd');
         btn.className = d === days
-            ? 'text-xs px-2 py-0.5 rounded bg-blue-600 text-white'
-            : 'text-xs px-2 py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white';
+            ? 'text-xs px-2 py-1 sm:py-0.5 rounded bg-blue-600 text-white'
+            : 'text-xs px-2 py-1 sm:py-0.5 rounded bg-gray-800 text-gray-400 hover:text-white';
     });
 
     const data = await fetchData('/api/stock/' + MARKET + '/' + CODE + '/klines?days=' + days);
@@ -444,7 +444,7 @@ function renderPosition(pos) {
     info.textContent = '';
 
     const grid = document.createElement('div');
-    grid.className = 'grid grid-cols-4 gap-3 text-sm';
+    grid.className = 'grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm';
     const fields = [
         {label: '数量', value: formatNum(pos.qty)},
         {label: '成本价', value: pos.cost_price.toFixed(2)},

@@ -32,19 +32,45 @@
             <div class="flex items-center justify-between h-12">
                 <div class="flex items-center space-x-4">
                     <a href="/" class="text-lg font-bold text-blue-400">IA</a>
-                    <a href="/" class="text-sm text-gray-300 hover:text-white {% block nav_home %}{% endblock %}">首页</a>
-                    <a href="/portfolio" class="text-sm text-gray-300 hover:text-white {% block nav_portfolio %}{% endblock %}">持仓</a>
-                    <a href="/watchlist" class="text-sm text-gray-300 hover:text-white {% block nav_watchlist %}{% endblock %}">关注</a>
-                    <a href="/signals" class="text-sm text-gray-300 hover:text-white {% block nav_signals %}{% endblock %}">信号</a>
-                    <a href="/plans" class="text-sm text-gray-300 hover:text-white {% block nav_plans %}{% endblock %}">计划</a>
-                    <a href="/analysis" class="text-sm text-gray-300 hover:text-white {% block nav_analysis %}{% endblock %}">分析</a>
-                    <a href="/calendar" class="text-sm text-gray-300 hover:text-white {% block nav_calendar %}{% endblock %}">日历</a>
+                    <div class="hidden md:flex items-center space-x-4">
+                        <a href="/" class="text-sm text-gray-300 hover:text-white {% block nav_home %}{% endblock %}">首页</a>
+                        <a href="/portfolio" class="text-sm text-gray-300 hover:text-white {% block nav_portfolio %}{% endblock %}">持仓</a>
+                        <a href="/watchlist" class="text-sm text-gray-300 hover:text-white {% block nav_watchlist %}{% endblock %}">关注</a>
+                        <a href="/signals" class="text-sm text-gray-300 hover:text-white {% block nav_signals %}{% endblock %}">信号</a>
+                        <a href="/plans" class="text-sm text-gray-300 hover:text-white {% block nav_plans %}{% endblock %}">计划</a>
+                        <a href="/analysis" class="text-sm text-gray-300 hover:text-white {% block nav_analysis %}{% endblock %}">分析</a>
+                        <a href="/calendar" class="text-sm text-gray-300 hover:text-white {% block nav_calendar %}{% endblock %}">日历</a>
+                    </div>
                 </div>
-                <div class="relative">
-                    <input id="nav-search" type="text" placeholder="搜索代码/名称..."
-                        class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-40 focus:w-56 transition-all focus:outline-none focus:border-blue-500"
+                <div class="flex items-center gap-2">
+                    <div class="relative hidden md:block">
+                        <input id="nav-search" type="text" placeholder="搜索代码/名称..."
+                            class="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm w-40 focus:w-56 transition-all focus:outline-none focus:border-blue-500"
+                            autocomplete="off">
+                        <div id="search-dropdown" class="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
+                    </div>
+                    <button id="mobile-menu-btn" onclick="toggleMobileMenu()" class="md:hidden text-gray-300 hover:text-white p-1">
+                        <svg id="menu-icon-open" class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+                        <svg id="menu-icon-close" class="w-6 h-6 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                </div>
+            </div>
+            <!-- Mobile menu -->
+            <div id="mobile-menu" class="hidden md:hidden pb-3 border-t border-gray-800 mt-1">
+                <div class="flex flex-col space-y-1 pt-2">
+                    <a href="/" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_home_m %}{% endblock %}">首页</a>
+                    <a href="/portfolio" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_portfolio_m %}{% endblock %}">持仓</a>
+                    <a href="/watchlist" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_watchlist_m %}{% endblock %}">关注</a>
+                    <a href="/signals" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_signals_m %}{% endblock %}">信号</a>
+                    <a href="/plans" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_plans_m %}{% endblock %}">计划</a>
+                    <a href="/analysis" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_analysis_m %}{% endblock %}">分析</a>
+                    <a href="/calendar" class="text-sm text-gray-300 hover:text-white hover:bg-gray-800 px-2 py-2 rounded {% block nav_calendar_m %}{% endblock %}">日历</a>
+                </div>
+                <div class="relative mt-2 px-2">
+                    <input id="nav-search-mobile" type="text" placeholder="搜索代码/名称..."
+                        class="bg-gray-800 border border-gray-700 rounded px-2 py-1.5 text-sm w-full focus:outline-none focus:border-blue-500"
                         autocomplete="off">
-                    <div id="search-dropdown" class="absolute right-0 top-full mt-1 w-64 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
+                    <div id="search-dropdown-mobile" class="absolute left-2 right-2 top-full mt-1 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-[60] hidden max-h-80 overflow-y-auto"></div>
                 </div>
             </div>
         </div>
@@ -98,19 +124,26 @@
             return a;
         }
 
-        // Global search
-        (function() {
-            const input = document.getElementById('nav-search');
-            const dropdown = document.getElementById('search-dropdown');
-            let debounceTimer = null;
+        // Mobile menu toggle
+        function toggleMobileMenu() {
+            const menu = document.getElementById('mobile-menu');
+            const iconOpen = document.getElementById('menu-icon-open');
+            const iconClose = document.getElementById('menu-icon-close');
+            const isHidden = menu.classList.contains('hidden');
+            menu.classList.toggle('hidden');
+            iconOpen.classList.toggle('hidden', !isHidden);
+            iconClose.classList.toggle('hidden', isHidden);
+        }
 
+        // Global search (shared logic for desktop + mobile)
+        function initSearch(input, dropdown) {
+            let debounceTimer = null;
             input.addEventListener('input', function() {
                 clearTimeout(debounceTimer);
                 const q = this.value.trim();
                 if (q.length < 1) { dropdown.classList.add('hidden'); return; }
-                debounceTimer = setTimeout(() => doSearch(q), 300);
+                debounceTimer = setTimeout(() => doSearch(q, dropdown), 300);
             });
-
             input.addEventListener('blur', function() {
                 setTimeout(() => dropdown.classList.add('hidden'), 200);
             });
@@ -119,39 +152,50 @@
                     dropdown.classList.remove('hidden');
                 }
             });
+        }
 
-            async function doSearch(q) {
-                try {
-                    const data = await fetchData('/api/search?q=' + encodeURIComponent(q));
-                    dropdown.textContent = '';
-                    if (!data.results || data.results.length === 0) {
-                        const empty = document.createElement('div');
-                        empty.className = 'px-3 py-2 text-sm text-gray-500';
-                        empty.textContent = '无结果';
-                        dropdown.appendChild(empty);
-                    } else {
-                        data.results.forEach(r => {
-                            const item = document.createElement('a');
-                            item.href = stockUrl(r.code);
-                            item.className = 'block px-3 py-2 hover:bg-gray-700 text-sm cursor-pointer';
-                            const codeSp = document.createElement('span');
-                            codeSp.className = 'text-blue-400 font-medium';
-                            codeSp.textContent = r.code;
-                            const nameSp = document.createElement('span');
-                            nameSp.className = 'text-gray-400 ml-2';
-                            nameSp.textContent = r.name || '';
-                            const srcSp = document.createElement('span');
-                            srcSp.className = 'text-gray-600 ml-2 text-xs';
-                            srcSp.textContent = r.source || '';
-                            item.appendChild(codeSp);
-                            item.appendChild(nameSp);
-                            item.appendChild(srcSp);
-                            dropdown.appendChild(item);
-                        });
-                    }
-                    dropdown.classList.remove('hidden');
-                } catch(e) {}
-            }
+        async function doSearch(q, dropdown) {
+            try {
+                const data = await fetchData('/api/search?q=' + encodeURIComponent(q));
+                dropdown.textContent = '';
+                if (!data.results || data.results.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'px-3 py-2 text-sm text-gray-500';
+                    empty.textContent = '无结果';
+                    dropdown.appendChild(empty);
+                } else {
+                    data.results.forEach(r => {
+                        const item = document.createElement('a');
+                        item.href = stockUrl(r.code);
+                        item.className = 'block px-3 py-2 hover:bg-gray-700 text-sm cursor-pointer';
+                        const codeSp = document.createElement('span');
+                        codeSp.className = 'text-blue-400 font-medium';
+                        codeSp.textContent = r.code;
+                        const nameSp = document.createElement('span');
+                        nameSp.className = 'text-gray-400 ml-2';
+                        nameSp.textContent = r.name || '';
+                        const srcSp = document.createElement('span');
+                        srcSp.className = 'text-gray-600 ml-2 text-xs';
+                        srcSp.textContent = r.source || '';
+                        item.appendChild(codeSp);
+                        item.appendChild(nameSp);
+                        item.appendChild(srcSp);
+                        dropdown.appendChild(item);
+                    });
+                }
+                dropdown.classList.remove('hidden');
+            } catch(e) {}
+        }
+
+        // Init both desktop and mobile search
+        (function() {
+            const desktopInput = document.getElementById('nav-search');
+            const desktopDropdown = document.getElementById('search-dropdown');
+            if (desktopInput && desktopDropdown) initSearch(desktopInput, desktopDropdown);
+
+            const mobileInput = document.getElementById('nav-search-mobile');
+            const mobileDropdown = document.getElementById('search-dropdown-mobile');
+            if (mobileInput && mobileDropdown) initSearch(mobileInput, mobileDropdown);
         })();
     </script>
     {% block scripts %}{% endblock %}
