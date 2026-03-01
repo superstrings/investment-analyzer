@@ -129,7 +129,7 @@ def run_claude_prompt(prompt: str, model: str = None) -> str:
             cmd,
             capture_output=True,
             text=True,
-            timeout=900,  # 15 min timeout for analysis (WebSearch + technical analysis)
+            timeout=1200,  # 20 min timeout (WebSearch + technical analysis + parallel contention)
             cwd=str(PROJECT_DIR),
             env=settings.proxy.get_subprocess_env(),
         )
@@ -291,14 +291,14 @@ def _get_market_watchlist(user_id: int, market: str) -> list:
         if not items:
             return []
 
-        # Batch fetch latest prices from Kline
-        codes = [f"{it.market}.{it.code}" for it in items]
+        # Batch fetch latest prices from Kline (code without prefix, filter by market)
+        pure_codes = [it.code for it in items]
         latest_dates = (
             session.query(
                 Kline.code,
                 func.max(Kline.trade_date).label("max_date"),
             )
-            .filter(Kline.code.in_(codes))
+            .filter(Kline.market == market, Kline.code.in_(pure_codes))
             .group_by(Kline.code)
             .subquery()
         )
@@ -320,7 +320,7 @@ def _get_market_watchlist(user_id: int, market: str) -> list:
         result = []
         for it in items:
             full_code = f"{it.market}.{it.code}"
-            close, change_pct = price_map.get(full_code, (0.0, 0.0))
+            close, change_pct = price_map.get(it.code, (0.0, 0.0))
             result.append(
                 {
                     "code": full_code,
@@ -329,6 +329,54 @@ def _get_market_watchlist(user_id: int, market: str) -> list:
                     "change_pct": change_pct,
                 }
             )
+        return result
+
+
+def _get_latest_prices(codes: list[str]) -> dict[str, tuple[float, float]]:
+    """Get latest close price and change_pct from Kline table.
+
+    Args:
+        codes: List of full codes with market prefix (e.g. "HK.00981").
+
+    Returns:
+        Dict mapping full_code → (close, change_pct).
+    """
+    from sqlalchemy import and_, func
+
+    from db.database import get_session
+    from db.models import Kline
+
+    # Split codes into pure_code → full_code mapping
+    code_map = {}  # pure_code -> full_code
+    for c in codes:
+        pure = c.split(".", 1)[-1] if "." in c else c
+        code_map[pure] = c
+
+    with get_session() as session:
+        latest_dates = (
+            session.query(
+                Kline.code,
+                func.max(Kline.trade_date).label("max_date"),
+            )
+            .filter(Kline.code.in_(list(code_map.keys())))
+            .group_by(Kline.code)
+            .subquery()
+        )
+        latest_klines = (
+            session.query(Kline.code, Kline.close, Kline.change_pct)
+            .join(
+                latest_dates,
+                and_(
+                    Kline.code == latest_dates.c.code,
+                    Kline.trade_date == latest_dates.c.max_date,
+                ),
+            )
+            .all()
+        )
+        result = {}
+        for k in latest_klines:
+            if float(k.close) > 0 and k.code in code_map:
+                result[code_map[k.code]] = (float(k.close), float(k.change_pct or 0))
         return result
 
 
@@ -383,6 +431,72 @@ def _ensure_klines_synced(codes: list[str], kline_days: int = 5) -> None:
         logger.warning(f"K线同步失败: {e}")
 
 
+def _extract_analysis_brief(analysis: str) -> str:
+    """Extract a meaningful one-line brief from Claude's analysis output.
+
+    Skips preamble lines like "All data saved", "Signal saved", markdown
+    headers, and finds lines containing actual analysis keywords.
+    """
+    import re
+
+    if not analysis or len(analysis) < 10:
+        return "分析失败/超时"
+
+    # Preamble patterns to skip
+    skip_patterns = [
+        r"^(All |Signal |数据已|全部保存|Based on|Here'?s|已保存|保存成功)",
+        r"^#{1,4}\s",  # Markdown headers
+        r"^---",  # Horizontal rules
+        r"^>\s",  # Blockquotes
+        r"^\s*$",  # Empty lines
+        r"^Sources:",
+        r"^\*\*[A-Z]{2}\.",  # Bold stock code headers like **US.NVDA...
+    ]
+
+    # Analysis keywords that indicate meaningful content
+    analysis_keywords = [
+        "估值",
+        "技术",
+        "信号",
+        "PE",
+        "PB",
+        "HOLD",
+        "BUY",
+        "SELL",
+        "WATCH",
+        "评分",
+        "支撑",
+        "阻力",
+        "止损",
+    ]
+
+    lines = analysis.strip().split("\n")
+
+    # First pass: find line with analysis keywords
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or len(stripped) < 10:
+            continue
+        if any(re.match(p, stripped, re.IGNORECASE) for p in skip_patterns):
+            continue
+        if any(kw in stripped for kw in analysis_keywords):
+            # Clean up markdown formatting
+            brief = re.sub(r"\*\*", "", stripped)
+            return brief[:120]
+
+    # Fallback: first non-preamble line
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or len(stripped) < 10:
+            continue
+        if any(re.match(p, stripped, re.IGNORECASE) for p in skip_patterns):
+            continue
+        brief = re.sub(r"\*\*", "", stripped)
+        return brief[:120]
+
+    return analysis.split("\n")[0][:100]
+
+
 def _get_valuation_search_hint(market: str, code: str, name: str) -> str:
     """Get market-specific valuation search keyword for WebSearch."""
     pure_code = code.split(".", 1)[-1] if "." in code else code
@@ -416,6 +530,7 @@ def _analyze_single_stock(
 6. 用 save_analysis_result 保存分析结果
 7. 正股≥7分且估值通过→评估期权,有则 save_signal(signal_category="option")
 
+不要输出保存状态(如"All data saved"等)，直接输出分析结论。
 输出格式(2-3行): 估值(Forward PE=xx/PB=xx) | 技术X/12 | 信号 | 关键价位 | 操作建议"""
 
     return run_claude_prompt(prompt)
@@ -442,6 +557,7 @@ def _analyze_watchlist_stock(
 6. 用 save_analysis_result 保存分析结果
 7. ≥7分且估值通过→评估期权,有则 save_signal(signal_category="option")
 
+不要输出保存状态(如"All data saved"等)，直接输出分析结论。
 输出格式(2-3行): 估值(Forward PE=xx/PB=xx) | 技术X/12 | 信号 | 关键价位 | 是否建仓"""
 
     return run_claude_prompt(prompt)
@@ -496,7 +612,7 @@ def _send_stock_dingtalk(
         logger.warning(f"钉钉推送失败 {result['code']}: {e}")
 
 
-def run_post_market(market: str, max_workers: int = 4):
+def run_post_market(market: str, max_workers: int = 3):
     """Post-market analysis: parallel analyze positions + watchlist stocks."""
     import time as _time
 
@@ -541,6 +657,17 @@ def run_post_market(market: str, max_workers: int = 4):
     logger.info(f"[2/4] 同步 K 线 ({len(all_codes)} 只)...")
     _ensure_klines_synced(all_codes)
 
+    # Refresh watchlist prices after kline sync (fixes price=0 for newly added stocks)
+    zero_price_codes = [w["code"] for w in watchlist_stocks if w["latest_price"] == 0]
+    if zero_price_codes:
+        refreshed = _get_latest_prices(zero_price_codes)
+        for w in watchlist_stocks:
+            if w["code"] in refreshed:
+                w["latest_price"], w["change_pct"] = refreshed[w["code"]]
+        logger.info(
+            f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
+        )
+
     # Step 3: Build unified task list
     tasks = []
     for p in stocks:
@@ -574,7 +701,7 @@ def run_post_market(market: str, max_workers: int = 4):
             task = future_to_task[future]
             completed += 1
             try:
-                result = future.result(timeout=900)
+                result = future.result(timeout=1200)
             except Exception as e:
                 logger.error(f"分析异常 {task['code']}: {e}")
                 result = {**task, "analysis": f"分析失败: {e}"}
@@ -605,14 +732,13 @@ def run_post_market(market: str, max_workers: int = 4):
     if pos_results:
         summary_lines.append("### 持仓\n")
         for r in sorted(pos_results, key=lambda x: x["code"]):
-            # Extract first line of analysis as brief summary
-            brief = r["analysis"].split("\n")[0][:100] if r["analysis"] else "分析失败"
+            brief = _extract_analysis_brief(r["analysis"])
             summary_lines.append(f"- **{r['code']}** {r['name']}: {brief}")
 
     if watch_results:
         summary_lines.append("\n### 关注\n")
         for r in sorted(watch_results, key=lambda x: x["code"]):
-            brief = r["analysis"].split("\n")[0][:100] if r["analysis"] else "分析失败"
+            brief = _extract_analysis_brief(r["analysis"])
             summary_lines.append(f"- **{r['code']}** {r['name']}: {brief}")
 
     base_url = settings.web.base_url
