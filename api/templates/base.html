@@ -25,7 +25,7 @@
         .htmx-request .htmx-indicator { display: inline-block; }
     </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
+<body class="bg-gray-950 text-gray-100 min-h-screen overflow-x-hidden">
     <!-- Navigation -->
     <nav class="bg-gray-900 border-b border-gray-800 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4">
@@ -77,7 +77,7 @@
     </div>
 
     <!-- Main Content -->
-    <main class="max-w-7xl mx-auto px-4 py-4 overflow-x-hidden">
+    <main class="max-w-7xl mx-auto px-4 py-4">
         {% block content %}{% endblock %}
     </main>
 
