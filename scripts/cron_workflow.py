@@ -332,11 +332,14 @@ def _get_market_watchlist(user_id: int, market: str) -> list:
         return result
 
 
-def _get_latest_prices(codes: list[str]) -> dict[str, tuple[float, float]]:
+def _get_latest_prices(
+    codes: list[str], market: str = None
+) -> dict[str, tuple[float, float]]:
     """Get latest close price and change_pct from Kline table.
 
     Args:
         codes: List of full codes with market prefix (e.g. "HK.00981").
+        market: Market code (HK/US/A/JP) to filter by. Prevents cross-market collision.
 
     Returns:
         Dict mapping full_code → (close, change_pct).
@@ -353,12 +356,16 @@ def _get_latest_prices(codes: list[str]) -> dict[str, tuple[float, float]]:
         code_map[pure] = c
 
     with get_session() as session:
+        base_filter = [Kline.code.in_(list(code_map.keys()))]
+        if market:
+            base_filter.append(Kline.market == market)
+
         latest_dates = (
             session.query(
                 Kline.code,
                 func.max(Kline.trade_date).label("max_date"),
             )
-            .filter(Kline.code.in_(list(code_map.keys())))
+            .filter(*base_filter)
             .group_by(Kline.code)
             .subquery()
         )
@@ -381,7 +388,12 @@ def _get_latest_prices(codes: list[str]) -> dict[str, tuple[float, float]]:
 
 
 def _save_analysis_output(
-    code: str, name: str, market: str, analysis_text: str
+    code: str,
+    name: str,
+    market: str,
+    analysis_text: str,
+    user_id: int = None,
+    analysis_type: str = "post_market",
 ) -> None:
     """Save analysis output to DB (AnalysisResult) and local file."""
     # DB: save to AnalysisResult
@@ -389,14 +401,15 @@ def _save_analysis_output(
         from services.analysis_service import create_analysis_service
 
         svc = create_analysis_service()
-        user_id = get_user_id()
+        if user_id is None:
+            user_id = get_user_id()
         pure_code = code.split(".", 1)[-1] if "." in code else code
         svc.save_result(
             user_id=user_id,
             market=market,
             code=pure_code,
             stock_name=name,
-            analysis_type="post_market",
+            analysis_type=analysis_type,
             result_json=json.dumps({"analysis": analysis_text}, ensure_ascii=False),
         )
         logger.info(f"  → 分析结果已保存到DB: {code}")
@@ -563,12 +576,13 @@ def _analyze_watchlist_stock(
     return run_claude_prompt(prompt)
 
 
-def _analyze_stock_task(stock: dict, market: str) -> dict:
+def _analyze_stock_task(stock: dict, market: str, user_id: int = None) -> dict:
     """Analyze a single stock (position or watchlist). Used as ThreadPoolExecutor target.
 
     Args:
         stock: Dict with 'code', 'name', 'info', 'type' ('position' or 'watchlist').
         market: Market code (HK/US/A/JP).
+        user_id: User ID for DB persistence (avoids redundant DB lookups).
 
     Returns:
         Dict with analysis result added.
@@ -586,7 +600,7 @@ def _analyze_stock_task(stock: dict, market: str) -> dict:
         output = f"分析失败: {e}"
 
     # Persist analysis output
-    _save_analysis_output(code, name, market, output)
+    _save_analysis_output(code, name, market, output, user_id=user_id)
 
     return {**stock, "analysis": output}
 
@@ -610,6 +624,143 @@ def _send_stock_dingtalk(
         )
     except Exception as e:
         logger.warning(f"钉钉推送失败 {result['code']}: {e}")
+
+
+def _get_market_signals_context(user_id: int, market: str) -> dict[str, str]:
+    """Fetch active signals for a market, grouped by full code.
+
+    Returns:
+        Dict mapping full_code → signal summary text.
+    """
+    try:
+        from services.signal_service import create_signal_service
+
+        svc = create_signal_service()
+        signals = svc.get_active_signals(user_id, market=market)
+        result = {}
+        for s in signals:
+            full_code = f"{s.market}.{s.code}"
+            parts = [f"Signal #{s.id}: {s.signal_type}"]
+            if s.score:
+                parts.append(f"评分{s.score}")
+            if s.reason:
+                parts.append(s.reason[:80])
+            if s.target_price:
+                parts.append(f"目标{s.target_price}")
+            if s.stop_loss_price:
+                parts.append(f"止损{s.stop_loss_price}")
+            line = " | ".join(parts)
+            if full_code in result:
+                result[full_code] += f"; {line}"
+            else:
+                result[full_code] = line
+        return result
+    except Exception as e:
+        logger.warning(f"获取信号失败: {e}")
+        return {}
+
+
+def _get_market_plans_context(user_id: int, market: str) -> dict[str, str]:
+    """Fetch active plans for a market, grouped by full code.
+
+    Returns:
+        Dict mapping full_code → plan summary text.
+    """
+    try:
+        from services.plan_service import create_plan_service
+
+        svc = create_plan_service()
+        plans = svc.get_active_plans(user_id)
+        result = {}
+        for p in plans:
+            if p.market != market:
+                continue
+            full_code = f"{p.market}.{p.code}"
+            parts = [f"Plan #{p.id}: {p.action_type}({p.priority})"]
+            if p.entry_price:
+                parts.append(f"入场{p.entry_price}")
+            if p.stop_loss_price:
+                parts.append(f"止损{p.stop_loss_price}")
+            if p.target_price_1:
+                parts.append(f"目标{p.target_price_1}")
+            if p.reason:
+                parts.append(p.reason[:60])
+            line = " | ".join(parts)
+            if full_code in result:
+                result[full_code] += f"; {line}"
+            else:
+                result[full_code] = line
+        return result
+    except Exception as e:
+        logger.warning(f"获取计划失败: {e}")
+        return {}
+
+
+def _analyze_pre_market_stock(
+    code: str,
+    name: str,
+    stock_info: str,
+    signal_ctx: str,
+    plan_ctx: str,
+    market: str = "",
+) -> str:
+    """Analyze a stock for pre-market briefing. Lighter than post-market (no WebSearch)."""
+    if not market:
+        market = code.split(".")[0] if "." in code else ""
+
+    context_parts = []
+    if signal_ctx:
+        context_parts.append(f"活跃信号: {signal_ctx}")
+    if plan_ctx:
+        context_parts.append(f"操作计划: {plan_ctx}")
+    context_text = "\n".join(context_parts) if context_parts else "无活跃信号/计划"
+
+    prompt = f"""盘前快速检查 {code} ({name})，{stock_info}
+
+已有数据:
+{context_text}
+
+请执行:
+1. 用 run_technical_analysis 对 {code} 做技术分析
+2. 检查止损: 股票亏损≥10% / 期权亏损≥30% → 标记 must_do
+3. 对比昨日信号，判断今日是否需要操作
+4. 识别关键价位（支撑/阻力/止损位）
+
+不要用 WebSearch。不要输出保存状态。直接输出检查结论。
+输出格式(1-2行): 技术状态 | 风险等级(高/中/低) | 今日操作建议 | 关键价位"""
+
+    return run_claude_prompt(prompt)
+
+
+def _analyze_pre_market_task(stock: dict, market: str, user_id: int = None) -> dict:
+    """Pre-market analysis for a single stock. ThreadPoolExecutor target."""
+    code, name, info = stock["code"], stock["name"], stock["info"]
+    signal_ctx = stock.get("signal_ctx", "")
+    plan_ctx = stock.get("plan_ctx", "")
+
+    try:
+        output = _analyze_pre_market_stock(
+            code,
+            name,
+            info,
+            signal_ctx,
+            plan_ctx,
+            market=market,
+        )
+    except Exception as e:
+        logger.error(f"盘前分析失败 {code}: {e}")
+        output = f"分析失败: {e}"
+
+    _save_analysis_output(
+        code,
+        name,
+        market,
+        output,
+        user_id=user_id,
+        analysis_type="pre_market",
+    )
+
+    return {**stock, "analysis": output}
 
 
 def run_post_market(market: str, max_workers: int = 3):
@@ -660,7 +811,7 @@ def run_post_market(market: str, max_workers: int = 3):
     # Refresh watchlist prices after kline sync (fixes price=0 for newly added stocks)
     zero_price_codes = [w["code"] for w in watchlist_stocks if w["latest_price"] == 0]
     if zero_price_codes:
-        refreshed = _get_latest_prices(zero_price_codes)
+        refreshed = _get_latest_prices(zero_price_codes, market=market)
         for w in watchlist_stocks:
             if w["code"] in refreshed:
                 w["latest_price"], w["change_pct"] = refreshed[w["code"]]
@@ -694,7 +845,8 @@ def run_post_market(market: str, max_workers: int = 3):
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_task = {
-            executor.submit(_analyze_stock_task, task, market): task for task in tasks
+            executor.submit(_analyze_stock_task, task, market, user_id): task
+            for task in tasks
         }
 
         for future in as_completed(future_to_task):
@@ -723,8 +875,8 @@ def run_post_market(market: str, max_workers: int = 3):
     summary_lines = [f"## {market_name}盘后分析汇总 ({date.today()})\n"]
 
     if stocks:
-        total_val = sum(p["market_val"] for p in positions)
-        total_pl = sum(p["pl_val"] for p in positions)
+        total_val = sum(p["market_val"] for p in stocks)
+        total_pl = sum(p["pl_val"] for p in stocks)
         summary_lines.append(
             f"**总市值**: ¥{total_val:,.0f} | **总盈亏**: ¥{total_pl:+,.0f}\n"
         )
@@ -769,14 +921,17 @@ def run_post_market(market: str, max_workers: int = 3):
     )
 
 
-def run_pre_market(market: str):
-    """Pre-market briefing: analyze positions + watchlist stocks."""
+def run_pre_market(market: str, max_workers: int = 3):
+    """Pre-market briefing: parallel analyze positions + watchlist, then send briefing."""
+    import time as _time
+
     market_name = MARKET_NAMES.get(market, market)
     logger.info(f"=== {market_name}盘前检查开始 ({date.today()}) ===")
+    start_time = _time.time()
 
     user_id = get_user_id()
 
-    # Fetch positions + watchlist (filter out options, indices, ETFs)
+    # Step 1: Get positions + watchlist (filter out options, indices, ETFs)
     positions = _get_market_positions(user_id, market)
     stocks = [
         p
@@ -784,7 +939,10 @@ def run_pre_market(market: str):
         if not _is_option_code(market, p["code"].split(".", 1)[-1])
         and not _should_skip_analysis(market, p["code"])
     ]
-    logger.info(f"[1/3] {market_name} 持仓 {len(stocks)} 只股票 (共{len(positions)}个)")
+    logger.info(
+        f"[1/5] 获取 {market_name} 持仓: {len(positions)} 个 (分析 {len(stocks)}, "
+        f"跳过 {len(positions) - len(stocks)})"
+    )
 
     watchlist = _get_market_watchlist(user_id, market)
     pos_codes = {p["code"] for p in stocks}
@@ -796,68 +954,159 @@ def run_pre_market(market: str):
         and not _should_skip_analysis(market, w["code"])
     ]
     logger.info(
-        f"[1/3] {market_name} 关注 {len(watchlist_stocks)} 只股票 (共{len(watchlist)}个)"
+        f"[1/5] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})"
     )
 
     if not stocks and not watchlist_stocks:
         logger.info("无股票持仓且无关注个股，跳过盘前检查")
         return
 
-    # Build context for Claude
-    pos_summary = []
+    # Step 2: Sync klines
+    all_codes = [p["code"] for p in stocks] + [w["code"] for w in watchlist_stocks]
+    logger.info(f"[2/5] 同步 K 线 ({len(all_codes)} 只)...")
+    _ensure_klines_synced(all_codes)
+
+    # Refresh watchlist prices after kline sync
+    zero_price_codes = [w["code"] for w in watchlist_stocks if w["latest_price"] == 0]
+    if zero_price_codes:
+        refreshed = _get_latest_prices(zero_price_codes, market=market)
+        for w in watchlist_stocks:
+            if w["code"] in refreshed:
+                w["latest_price"], w["change_pct"] = refreshed[w["code"]]
+        logger.info(
+            f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
+        )
+
+    # Step 3: Fetch existing signals + plans from DB (no LLM needed)
+    logger.info(f"[3/5] 加载信号和计划...")
+    signals_ctx = _get_market_signals_context(user_id, market)
+    plans_ctx = _get_market_plans_context(user_id, market)
+    logger.info(f"  信号 {len(signals_ctx)} 只, 计划 {len(plans_ctx)} 只")
+
+    # Step 4: Build unified task list with signal/plan context
+    tasks = []
     for p in stocks:
         pl_pct = p["pl_ratio"] * 100
-        pos_summary.append(
-            f"- {p['code']} {p['name']}: 现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+        info = (
+            f"持仓{p['qty']:.0f}股, 成本{p['cost_price']:.2f}, "
+            f"现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
         )
-    pos_text = "\n".join(pos_summary) if pos_summary else "（无持仓）"
+        tasks.append(
+            {
+                "code": p["code"],
+                "name": p["name"],
+                "info": info,
+                "type": "position",
+                "signal_ctx": signals_ctx.get(p["code"], ""),
+                "plan_ctx": plans_ctx.get(p["code"], ""),
+            }
+        )
 
-    watch_summary = []
     for w in watchlist_stocks:
-        watch_summary.append(
-            f"- {w['code']} {w['name']}: 最新价{w['latest_price']:.2f}, 涨跌{w['change_pct']:+.2f}%"
+        info = f"最新价{w['latest_price']:.2f}, 涨跌{w['change_pct']:+.2f}%"
+        tasks.append(
+            {
+                "code": w["code"],
+                "name": w["name"],
+                "info": info,
+                "type": "watchlist",
+                "signal_ctx": signals_ctx.get(w["code"], ""),
+                "plan_ctx": plans_ctx.get(w["code"], ""),
+            }
         )
-    watch_text = "\n".join(watch_summary) if watch_summary else "（无关注）"
+
+    logger.info(
+        f"[4/5] 并行盘前分析 {len(tasks)} 只股票 (max_workers={max_workers})..."
+    )
+
+    # Parallel analysis
+    from services.dingtalk_service import create_dingtalk_service
+
+    dingtalk = create_dingtalk_service()
+    results = []
+    completed = 0
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_task = {
+            executor.submit(_analyze_pre_market_task, task, market, user_id): task
+            for task in tasks
+        }
+
+        for future in as_completed(future_to_task):
+            task = future_to_task[future]
+            completed += 1
+            try:
+                result = future.result(timeout=1200)
+            except Exception as e:
+                logger.error(f"盘前分析异常 {task['code']}: {e}")
+                result = {**task, "analysis": f"分析失败: {e}"}
+
+            results.append(result)
+            logger.info(
+                f"  [{completed}/{len(tasks)}] {result['code']} {result['name']} "
+                f"完成 ({len(result['analysis'])} chars)"
+            )
+
+    # Step 5: Send briefing summary via DingTalk
+    logger.info(f"[5/5] 推送盘前简报...")
+    pos_results = [r for r in results if r["type"] == "position"]
+    watch_results = [r for r in results if r["type"] == "watchlist"]
+
+    # Identify stop-loss triggers and high-risk items
+    risk_items = []
+    for r in pos_results:
+        # Check if pl_ratio indicates stop-loss territory
+        for p in stocks:
+            if p["code"] == r["code"] and p["pl_ratio"] <= -0.10:
+                risk_items.append(
+                    f"- **{r['code']}** {r['name']}: 亏损{p['pl_ratio']*100:.1f}% **触发止损线**"
+                )
+
+    summary_lines = [f"## {market_name}盘前简报 ({date.today()})\n"]
+
+    if risk_items:
+        summary_lines.append("### 风险警告\n")
+        summary_lines.extend(risk_items)
+        summary_lines.append("")
+
+    if pos_results:
+        summary_lines.append("### 持仓检查\n")
+        for r in sorted(pos_results, key=lambda x: x["code"]):
+            brief = _extract_analysis_brief(r["analysis"])
+            summary_lines.append(f"- **{r['code']}** {r['name']}: {brief}")
+
+    if watch_results:
+        summary_lines.append("\n### 关注个股\n")
+        for r in sorted(watch_results, key=lambda x: x["code"]):
+            brief = _extract_analysis_brief(r["analysis"])
+            summary_lines.append(f"- **{r['code']}** {r['name']}: {brief}")
 
     base_url = settings.web.base_url
-    url_hint = ""
     if base_url:
-        url_hint = f"\n在末尾附上链接: [持仓]({base_url}/portfolio) | [关注]({base_url}/watchlist) | [计划]({base_url}/plans)"
+        summary_lines.append(
+            f"\n[持仓]({base_url}/portfolio) | [关注]({base_url}/watchlist) "
+            f"| [信号]({base_url}/signals) | [计划]({base_url}/plans)"
+        )
 
-    prompt = f"""{market_name}盘前检查 ({date.today()}):
+    elapsed = _time.time() - start_time
+    summary_lines.append(f"\n*耗时 {elapsed / 60:.1f} 分钟*")
 
-当前持仓:
-{pos_text}
+    try:
+        dingtalk.send_markdown_chunked(
+            f"{market_name}盘前简报",
+            "\n".join(summary_lines),
+            user_id=user_id,
+            message_type="report",
+        )
+        logger.info("盘前简报推送成功")
+    except Exception as e:
+        logger.warning(f"盘前简报推送失败: {e}")
 
-关注个股:
-{watch_text}
-
-{V12_FRAMEWORK_PROMPT}
-
-请执行:
-1. 用 get_signals 查看 {market} 市场活跃信号 (包括 signal_category=option 的期权信号)
-2. 用 get_plans 查看今日 {market} 市场操作计划
-3. 对关键持仓 (盈亏较大或有信号的) 用 get_klines 检查最新走势
-4. 用 WebSearch 搜索持仓和关注个股的最新估值数据 (forward PE, PEG, PB, ROE)，可搜索 "股票名 forward PE 2025 2026" 或从 Yahoo Finance / 东方财富获取
-5. 按 V12 框架检查:
-   - 止损触发: 股票亏损≥10% / 期权亏损≥30% → 列为 must_do
-   - 估值+技术面概要 (用搜索到的数据，仅标注需要注意的)
-   - 关注个股入场机会
-   - 期权信号提示 (查看活跃期权信号)
-6. 生成盘前简报，包含:
-   - 今日操作计划 (按优先级, 止损最优先)
-   - 持仓风险提醒 (止损触发/破位/超涨)
-   - 关键价位提示 (支撑/阻力)
-   - 关注个股机会提示
-   - 期权机会提示 (如有)
-7. 用 send_dingtalk_message 推送简报 (markdown 格式){url_hint}
-
-直接输出盘前简报内容。"""
-
-    logger.info(f"[2/3] Claude 生成盘前简报...")
-    output = run_claude_prompt(prompt)
-    logger.info(f"[3/3] 盘前简报完成 ({len(output)} chars)")
-    logger.info(f"=== {market_name}盘前检查完成 ===")
+    logger.info(
+        f"=== {market_name}盘前检查完成 "
+        f"(持仓{len(pos_results)}只, 关注{len(watch_results)}只, "
+        f"耗时{elapsed / 60:.1f}分钟) ==="
+    )
 
 
 def main():
