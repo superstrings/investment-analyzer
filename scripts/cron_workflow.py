@@ -702,32 +702,42 @@ def _analyze_pre_market_stock(
     stock_info: str,
     signal_ctx: str,
     plan_ctx: str,
+    stock_type: str = "position",
     market: str = "",
 ) -> str:
-    """Analyze a stock for pre-market briefing. Lighter than post-market (no WebSearch)."""
+    """Analyze a stock for pre-market — full V12+V2 framework with signal/plan context."""
     if not market:
         market = code.split(".")[0] if "." in code else ""
+    search_hint = _get_valuation_search_hint(market, code, name)
 
     context_parts = []
     if signal_ctx:
-        context_parts.append(f"活跃信号: {signal_ctx}")
+        context_parts.append(f"已有信号: {signal_ctx}")
     if plan_ctx:
-        context_parts.append(f"操作计划: {plan_ctx}")
+        context_parts.append(f"已有计划: {plan_ctx}")
     context_text = "\n".join(context_parts) if context_parts else "无活跃信号/计划"
 
-    prompt = f"""盘前快速检查 {code} ({name})，{stock_info}
+    type_label = "持仓" if stock_type == "position" else "关注个股"
 
-已有数据:
+    prompt = f"""盘前分析 {type_label} {code} ({name})，{stock_info}
+
+{V12_FRAMEWORK_PROMPT}
+
+已有信号/计划参考:
 {context_text}
 
 请执行:
-1. 用 run_technical_analysis 对 {code} 做技术分析
-2. 检查止损: 股票亏损≥10% / 期权亏损≥30% → 标记 must_do
-3. 对比昨日信号，判断今日是否需要操作
-4. 识别关键价位（支撑/阻力/止损位）
+1. 用 WebSearch 搜索 {search_hint} 获取估值数据。**只搜索一次**，搜不到就跳过估值筛选直接技术评分
+2. 用 run_technical_analysis 对 {code} 做技术分析
+3. 按框架: 止损检查→估值筛选→技术评分→信号判定
+4. 对比已有信号/计划，判断今日是否需要新操作或调整
+5. 用 save_signal 存储信号 (signal_source="pre_market")
+6. 如有操作建议用 create_plan 存储（含入场价/止损/目标价）
+7. 用 save_analysis_result 保存分析结果
+8. 正股≥7分且估值通过→评估期权,有则 save_signal(signal_category="option")
 
-不要用 WebSearch。不要输出保存状态。直接输出检查结论。
-输出格式(1-2行): 技术状态 | 风险等级(高/中/低) | 今日操作建议 | 关键价位"""
+不要输出保存状态(如"All data saved"等)，直接输出分析结论。
+输出格式(2-3行): 估值(Forward PE=xx/PB=xx) | 技术X/12 | 信号 | 关键价位 | 今日操作建议"""
 
     return run_claude_prompt(prompt)
 
@@ -745,6 +755,7 @@ def _analyze_pre_market_task(stock: dict, market: str, user_id: int = None) -> d
             info,
             signal_ctx,
             plan_ctx,
+            stock_type=stock.get("type", "position"),
             market=market,
         )
     except Exception as e:
@@ -1046,6 +1057,9 @@ def run_pre_market(market: str, max_workers: int = 3):
                 f"  [{completed}/{len(tasks)}] {result['code']} {result['name']} "
                 f"完成 ({len(result['analysis'])} chars)"
             )
+
+            # Send DingTalk per stock immediately
+            _send_stock_dingtalk(dingtalk, market_name, result, user_id)
 
     # Step 5: Send briefing summary via DingTalk
     logger.info(f"[5/5] 推送盘前简报...")
