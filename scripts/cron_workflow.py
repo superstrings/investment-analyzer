@@ -111,12 +111,35 @@ def run_sync():
         sys.exit(1)
 
 
-def run_claude_prompt(prompt: str, model: str = None) -> str:
+def _check_claude_auth() -> bool:
+    """Check if Claude CLI is authenticated. Returns True if logged in."""
+    try:
+        result = subprocess.run(
+            ["claude", "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=settings.proxy.get_subprocess_env(),
+        )
+        if result.returncode == 0 and '"loggedIn": true' in result.stdout:
+            return True
+        logger.warning(f"Claude auth check failed: {result.stdout[:200]}")
+        return False
+    except Exception as e:
+        logger.warning(f"Claude auth check error: {e}")
+        return False
+
+
+_AUTH_RETRY_ERRORS = ("Not logged in", "Failed to authenticate", "403")
+
+
+def run_claude_prompt(prompt: str, model: str = None, _retries: int = 2) -> str:
     """Run a claude CLI prompt and return the output.
 
     Args:
         prompt: The prompt text to send to Claude CLI.
         model: Optional model name (e.g. "sonnet"). Defaults to CLI default.
+        _retries: Number of retries on auth errors (default 2).
     """
     logger.info("Running Claude CLI analysis...")
 
@@ -124,39 +147,56 @@ def run_claude_prompt(prompt: str, model: str = None) -> str:
     if model:
         cmd.extend(["--model", model])
 
-    try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=1200,  # 20 min timeout (WebSearch + technical analysis + parallel contention)
-            cwd=str(PROJECT_DIR),
-            env=settings.proxy.get_subprocess_env(),
-        )
-
-        if result.returncode != 0:
-            logger.error(f"Claude CLI error (rc={result.returncode})")
-            logger.error(
-                f"  stderr: {result.stderr[:500] if result.stderr else '(empty)'}"
+    for attempt in range(_retries + 1):
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=1200,  # 20 min timeout (WebSearch + technical analysis + parallel contention)
+                cwd=str(PROJECT_DIR),
+                env=settings.proxy.get_subprocess_env(),
             )
-            logger.error(
-                f"  stdout: {result.stdout[:500] if result.stdout else '(empty)'}"
-            )
-            return f"分析出错: {result.stderr or result.stdout or 'unknown error'}"
 
-        output = result.stdout.strip()
-        logger.info(f"Claude analysis completed ({len(output)} chars)")
-        return output
+            if result.returncode != 0:
+                output_text = result.stderr or result.stdout or ""
+                is_auth_error = any(e in output_text for e in _AUTH_RETRY_ERRORS)
 
-    except subprocess.TimeoutExpired:
-        logger.error("Claude CLI timed out")
-        return "分析超时"
-    except FileNotFoundError:
-        logger.error("Claude CLI not found")
-        return "Claude CLI 未安装"
-    except Exception as e:
-        logger.error(f"Claude CLI failed: {e}")
-        return f"分析失败: {e}"
+                if is_auth_error and attempt < _retries:
+                    wait = 5 * (attempt + 1)
+                    logger.warning(
+                        f"Claude auth error (attempt {attempt + 1}/{_retries + 1}), "
+                        f"retrying in {wait}s: {output_text[:100]}"
+                    )
+                    import time
+
+                    time.sleep(wait)
+                    continue
+
+                logger.error(f"Claude CLI error (rc={result.returncode})")
+                logger.error(
+                    f"  stderr: {result.stderr[:500] if result.stderr else '(empty)'}"
+                )
+                logger.error(
+                    f"  stdout: {result.stdout[:500] if result.stdout else '(empty)'}"
+                )
+                return f"分析出错: {output_text or 'unknown error'}"
+
+            output = result.stdout.strip()
+            logger.info(f"Claude analysis completed ({len(output)} chars)")
+            return output
+
+        except subprocess.TimeoutExpired:
+            logger.error("Claude CLI timed out")
+            return "分析超时"
+        except FileNotFoundError:
+            logger.error("Claude CLI not found")
+            return "Claude CLI 未安装"
+        except Exception as e:
+            logger.error(f"Claude CLI failed: {e}")
+            return f"分析失败: {e}"
+
+    return "分析出错: auth retries exhausted"
 
 
 def _is_option_code(market: str, code: str) -> bool:
@@ -847,6 +887,11 @@ def run_post_market(market: str, max_workers: int = 3):
 
     logger.info(f"[3/4] 并行分析 {len(tasks)} 只股票 (max_workers={max_workers})...")
 
+    # Pre-flight auth check
+    if not _check_claude_auth():
+        logger.error("Claude CLI 未认证，跳过盘后分析。请执行 claude /login")
+        return
+
     # Parallel analysis with per-stock DingTalk push
     from services.dingtalk_service import create_dingtalk_service
 
@@ -1029,6 +1074,11 @@ def run_pre_market(market: str, max_workers: int = 3):
     logger.info(
         f"[4/5] 并行盘前分析 {len(tasks)} 只股票 (max_workers={max_workers})..."
     )
+
+    # Pre-flight auth check
+    if not _check_claude_auth():
+        logger.error("Claude CLI 未认证，跳过盘前分析。请执行 claude /login")
+        return
 
     # Parallel analysis
     from services.dingtalk_service import create_dingtalk_service
