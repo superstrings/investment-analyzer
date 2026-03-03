@@ -4,6 +4,9 @@
 #
 # Used by crontab for Claude CLI tasks that need proxy access.
 
+# Ensure HOME is set (cron may not provide it)
+export HOME="/Users/dyson"
+
 # Ensure asdf/node paths are available (cron has minimal PATH)
 export PATH="/Users/dyson/.asdf/shims:/Users/dyson/.asdf/installs/nodejs/22.11.0/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
 
