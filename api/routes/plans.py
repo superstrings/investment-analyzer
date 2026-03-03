@@ -8,8 +8,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from api.auth import get_current_user
+from api.dependencies import get_db, resolve_user
 from services.plan_service import create_plan_service
 
 router = APIRouter(tags=["plans"])
@@ -27,6 +29,7 @@ class CancelRequest(BaseModel):
 @router.get("/api/plans")
 async def api_plans(
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
     date_str: str = "",
     status: str = "",
     code: str = "",
@@ -35,14 +38,10 @@ async def api_plans(
     limit: int = 20,
 ):
     """Get trading plans with optional pagination."""
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
     svc = create_plan_service()
 

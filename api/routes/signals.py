@@ -30,6 +30,7 @@ class FeedbackRequest(BaseModel):
 @router.get("/api/signals")
 async def api_signals(
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
     market: str = "",
     signal_type: str = "",
     active_only: bool = True,
@@ -38,14 +39,10 @@ async def api_signals(
     limit: int = 20,
 ):
     """Get signals with optional pagination."""
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
     svc = create_signal_service()
 
@@ -102,16 +99,13 @@ async def api_signal_feedback(
     signal_id: int,
     body: FeedbackRequest,
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Record signal feedback."""
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
     svc = create_signal_service()
     feedback = svc.mark_acted_on(

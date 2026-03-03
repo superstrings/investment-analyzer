@@ -6,8 +6,10 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from api.auth import get_current_user
+from api.dependencies import get_db, resolve_user
 from services.watchlist_service import create_watchlist_service
 
 router = APIRouter(tags=["watchlist"])
@@ -31,18 +33,15 @@ class WatchlistUpdateRequest(BaseModel):
 @router.get("/api/watchlist")
 async def api_watchlist(
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
     active_only: bool = True,
     market: str = "",
 ):
     """Get watchlist items with latest prices and signal/plan counts."""
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
     svc = create_watchlist_service()
     is_active = True if active_only else None
@@ -55,16 +54,13 @@ async def api_watchlist(
 async def api_watchlist_add(
     body: WatchlistAddRequest,
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Add a new watchlist item."""
-    from db.database import get_session
-    from db.models import User
-
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
     svc = create_watchlist_service()
     result = svc.add_item(
@@ -115,41 +111,40 @@ async def api_watchlist_stock_signals(
     market: str,
     code: str,
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Get all signals (active + history) for a specific stock."""
-    from db.database import get_session
-    from db.models import Signal, User
+    from db.models import Signal
 
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
 
-        signals = (
-            session.query(Signal)
-            .filter_by(user_id=user.id, market=market, code=code)
-            .order_by(Signal.created_at.desc())
-            .all()
+    signals = (
+        db.query(Signal)
+        .filter_by(user_id=user.id, market=market, code=code)
+        .order_by(Signal.created_at.desc())
+        .all()
+    )
+
+    result = []
+    for s in signals:
+        result.append(
+            {
+                "id": s.id,
+                "type": s.signal_type,
+                "source": s.signal_source,
+                "score": float(s.score) if s.score else None,
+                "confidence": float(s.confidence) if s.confidence else None,
+                "trigger_price": float(s.trigger_price) if s.trigger_price else None,
+                "target_price": float(s.target_price) if s.target_price else None,
+                "stop_loss": float(s.stop_loss_price) if s.stop_loss_price else None,
+                "reason": s.reason or "",
+                "is_active": s.is_active,
+                "acted_on": s.acted_on,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
         )
-
-        result = []
-        for s in signals:
-            result.append(
-                {
-                    "id": s.id,
-                    "type": s.signal_type,
-                    "source": s.signal_source,
-                    "score": float(s.score) if s.score else None,
-                    "confidence": float(s.confidence) if s.confidence else None,
-                    "trigger_price": float(s.trigger_price) if s.trigger_price else None,
-                    "target_price": float(s.target_price) if s.target_price else None,
-                    "stop_loss": float(s.stop_loss_price) if s.stop_loss_price else None,
-                    "reason": s.reason or "",
-                    "is_active": s.is_active,
-                    "acted_on": s.acted_on,
-                    "created_at": s.created_at.isoformat() if s.created_at else None,
-                }
-            )
 
     return {"signals": result, "code": f"{market}.{code}"}
 
@@ -159,41 +154,40 @@ async def api_watchlist_stock_plans(
     market: str,
     code: str,
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Get all plans (pending + history) for a specific stock."""
-    from db.database import get_session
-    from db.models import TradingPlanRecord, User
+    from db.models import TradingPlanRecord
 
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
 
-        plans = (
-            session.query(TradingPlanRecord)
-            .filter_by(user_id=user.id, market=market, code=code)
-            .order_by(TradingPlanRecord.plan_date.desc())
-            .all()
+    plans = (
+        db.query(TradingPlanRecord)
+        .filter_by(user_id=user.id, market=market, code=code)
+        .order_by(TradingPlanRecord.plan_date.desc())
+        .all()
+    )
+
+    result = []
+    for p in plans:
+        result.append(
+            {
+                "id": p.id,
+                "action": p.action_type,
+                "priority": p.priority,
+                "status": p.status,
+                "plan_date": p.plan_date.isoformat(),
+                "entry_price": float(p.entry_price) if p.entry_price else None,
+                "stop_loss": float(p.stop_loss_price) if p.stop_loss_price else None,
+                "target_1": float(p.target_price_1) if p.target_price_1 else None,
+                "target_2": float(p.target_price_2) if p.target_price_2 else None,
+                "position_size": p.position_size or "",
+                "reason": p.reason or "",
+                "executed_at": p.executed_at.isoformat() if p.executed_at else None,
+                "execution_price": float(p.execution_price) if p.execution_price else None,
+            }
         )
-
-        result = []
-        for p in plans:
-            result.append(
-                {
-                    "id": p.id,
-                    "action": p.action_type,
-                    "priority": p.priority,
-                    "status": p.status,
-                    "plan_date": p.plan_date.isoformat(),
-                    "entry_price": float(p.entry_price) if p.entry_price else None,
-                    "stop_loss": float(p.stop_loss_price) if p.stop_loss_price else None,
-                    "target_1": float(p.target_price_1) if p.target_price_1 else None,
-                    "target_2": float(p.target_price_2) if p.target_price_2 else None,
-                    "position_size": p.position_size or "",
-                    "reason": p.reason or "",
-                    "executed_at": p.executed_at.isoformat() if p.executed_at else None,
-                    "execution_price": float(p.execution_price) if p.execution_price else None,
-                }
-            )
 
     return {"plans": result, "code": f"{market}.{code}"}

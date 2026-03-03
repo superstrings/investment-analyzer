@@ -5,6 +5,7 @@ Reads rates from DB (exchange_rates table). Supports manual refresh via open.er-
 """
 
 import logging
+import time
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -27,6 +28,17 @@ FALLBACK_RATES = {
     "CNY": Decimal("1"),
 }
 
+# Module-level rate cache (5-minute TTL)
+_rate_cache: dict[str, Decimal] = {}
+_rate_cache_time: float = 0
+_CACHE_TTL = 300  # seconds
+
+
+def _invalidate_cache():
+    global _rate_cache, _rate_cache_time
+    _rate_cache = {}
+    _rate_cache_time = 0
+
 
 class ExchangeRateService:
     """Service for currency exchange rate conversion. Reads from DB."""
@@ -34,33 +46,58 @@ class ExchangeRateService:
     def get_rate_to_cny(self, currency: str) -> Decimal:
         """
         Get exchange rate from currency to CNY.
-        Reads from DB; falls back to hardcoded rate if DB has no record.
+        Uses in-memory cache (5-min TTL), falls back to DB then hardcoded rate.
         """
         currency = currency.upper()
         if currency == "CNY":
             return Decimal("1")
 
-        from db.database import get_session
-        from db.models import ExchangeRate
+        global _rate_cache, _rate_cache_time
 
-        with get_session() as session:
-            row = (
-                session.query(ExchangeRate)
-                .filter_by(currency=currency)
-                .first()
-            )
-            if row:
-                return row.rate_to_cny
+        # Check cache
+        if _rate_cache and (time.monotonic() - _rate_cache_time) < _CACHE_TTL:
+            if currency in _rate_cache:
+                return _rate_cache[currency]
+
+        # Cache miss — load all rates from DB
+        self._load_rates_to_cache()
+
+        if currency in _rate_cache:
+            return _rate_cache[currency]
 
         fallback = FALLBACK_RATES.get(currency, Decimal("1"))
         logger.warning(f"No DB rate for {currency}, using fallback: {fallback}")
         return fallback
 
+    def _load_rates_to_cache(self):
+        """Load all rates from DB into cache in a single query."""
+        global _rate_cache, _rate_cache_time
+
+        from db.database import get_session
+        from db.models import ExchangeRate
+
+        with get_session() as session:
+            rows = (
+                session.query(ExchangeRate)
+                .filter(ExchangeRate.currency.in_(["USD", "HKD", "JPY"]))
+                .all()
+            )
+            _rate_cache = {r.currency: r.rate_to_cny for r in rows}
+            _rate_cache_time = time.monotonic()
+
     def get_all_rates(self) -> dict[str, Decimal]:
-        """Get all exchange rates to CNY."""
+        """Get all exchange rates to CNY (single query, cached)."""
+        global _rate_cache, _rate_cache_time
+
+        # If cache is fresh, use it directly
+        if not _rate_cache or (time.monotonic() - _rate_cache_time) >= _CACHE_TTL:
+            self._load_rates_to_cache()
+
         rates = {"CNY": Decimal("1")}
         for currency in ["USD", "HKD", "JPY"]:
-            rates[currency] = self.get_rate_to_cny(currency)
+            rates[currency] = _rate_cache.get(
+                currency, FALLBACK_RATES.get(currency, Decimal("1"))
+            )
         return rates
 
     def get_all_rates_with_time(self) -> list[dict]:
@@ -108,6 +145,8 @@ class ExchangeRateService:
             else:
                 errors.append(currency)
 
+        _invalidate_cache()
+
         if errors:
             return {
                 "success": len(results) > 0,
@@ -127,6 +166,7 @@ class ExchangeRateService:
         """Manually set a single exchange rate in DB."""
         currency = currency.upper()
         self._upsert_rate(currency, rate)
+        _invalidate_cache()
         logger.info(f"Manually set {currency}/CNY = {rate}")
 
     def _upsert_rate(self, currency: str, rate: Decimal) -> None:

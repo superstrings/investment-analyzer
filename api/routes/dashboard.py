@@ -2,13 +2,15 @@
 Dashboard summary API route.
 """
 
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
+from sqlalchemy.orm import Session
 
 from api.auth import get_current_user
+from api.dependencies import get_db, resolve_user
 
 router = APIRouter(tags=["dashboard"])
 
@@ -16,56 +18,55 @@ router = APIRouter(tags=["dashboard"])
 @router.get("/api/dashboard/summary")
 async def api_dashboard_summary(
     username: str = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
-    """Get dashboard summary data (positions + signals + plans)."""
-    from db.database import get_session
-    from db.models import Account, Position, User
+    """Get dashboard summary data (positions + signals + plans + trade counts)."""
+    from db.models import Account, Position, Trade
     from services.exchange_rate_service import create_exchange_rate_service
     from services.plan_service import create_plan_service
     from services.signal_service import create_signal_service
 
-    with get_session() as session:
-        user = session.query(User).filter_by(username=username).first()
-        if not user:
-            return {"error": "User not found"}
-        user_id = user.id
+    user = resolve_user(db, username)
+    if not user:
+        return {"error": "User not found"}
+    user_id = user.id
 
-        # Get latest snapshot positions (same logic as portfolio API)
-        account_ids = [
-            acc.id
-            for acc in session.query(Account).filter_by(user_id=user_id).all()
-        ]
+    # Get latest snapshot positions (same logic as portfolio API)
+    account_ids = [
+        acc.id
+        for acc in db.query(Account).filter_by(user_id=user_id).all()
+    ]
 
+    positions = []
+    if account_ids:
+        latest_dates = (
+            db.query(
+                Position.account_id,
+                func.max(Position.snapshot_date).label("max_date"),
+            )
+            .filter(Position.account_id.in_(account_ids))
+            .group_by(Position.account_id)
+            .subquery()
+        )
+        all_positions = (
+            db.query(Position)
+            .join(
+                latest_dates,
+                (Position.account_id == latest_dates.c.account_id)
+                & (Position.snapshot_date == latest_dates.c.max_date),
+            )
+            .order_by(Position.market, Position.pl_ratio.desc())
+            .all()
+        )
+
+        # Deduplicate by (market, code)
+        seen = set()
         positions = []
-        if account_ids:
-            latest_dates = (
-                session.query(
-                    Position.account_id,
-                    func.max(Position.snapshot_date).label("max_date"),
-                )
-                .filter(Position.account_id.in_(account_ids))
-                .group_by(Position.account_id)
-                .subquery()
-            )
-            all_positions = (
-                session.query(Position)
-                .join(
-                    latest_dates,
-                    (Position.account_id == latest_dates.c.account_id)
-                    & (Position.snapshot_date == latest_dates.c.max_date),
-                )
-                .order_by(Position.market, Position.pl_ratio.desc())
-                .all()
-            )
-
-            # Deduplicate by (market, code)
-            seen = set()
-            positions = []
-            for p in all_positions:
-                key = (p.market, p.code)
-                if key not in seen:
-                    seen.add(key)
-                    positions.append(p)
+        for p in all_positions:
+            key = (p.market, p.code)
+            if key not in seen:
+                seen.add(key)
+                positions.append(p)
 
     fx = create_exchange_rate_service()
 
@@ -106,6 +107,30 @@ async def api_dashboard_summary(
     # Exchange rates
     rates = fx.get_all_rates()
 
+    # Trade counts (YTD / MTD / WTD BUY counts)
+    trade_counts = {"ytd": 0, "mtd": 0, "wtd": 0}
+    if account_ids:
+        today = date.today()
+        year_start = date(today.year, 1, 1)
+        month_start = date(today.year, today.month, 1)
+        week_start = today - timedelta(days=today.weekday())
+
+        for label, start in [
+            ("ytd", year_start),
+            ("mtd", month_start),
+            ("wtd", week_start),
+        ]:
+            trade_counts[label] = (
+                db.query(func.count(Trade.id))
+                .filter(
+                    Trade.account_id.in_(account_ids),
+                    Trade.trd_side == "BUY",
+                    Trade.trade_time >= datetime.combine(start, datetime.min.time()),
+                )
+                .scalar()
+                or 0
+            )
+
     return {
         "portfolio": {
             "total_positions": len(positions),
@@ -132,6 +157,7 @@ async def api_dashboard_summary(
             "loss": accuracy.loss,
         },
         "exchange_rates": {k: float(v) for k, v in rates.items()},
+        "trade_counts": trade_counts,
     }
 
 

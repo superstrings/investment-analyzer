@@ -15,6 +15,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.middleware.gzip import GZipMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,27 @@ TEMPLATES_DIR = Path(__file__).parent / "templates"
 PUBLIC_PATHS = {"/login", "/docs", "/openapi.json", "/favicon.ico"}
 # DingTalk webhook doesn't use cookie auth (uses its own verification)
 PUBLIC_PREFIXES = ("/api/dingtalk", "/dingtalk/")
+
+
+# Cache-Control path rules: (path_prefix, cache_header_value)
+_CACHE_RULES = [
+    ("/api/exchange-rates", "private, max-age=300"),
+    ("/api/dashboard/summary", "private, max-age=30"),
+    ("/api/stock/", "private, max-age=60"),  # klines and stock detail
+]
+
+
+class CacheHeaderMiddleware(BaseHTTPMiddleware):
+    """Add Cache-Control headers to API responses."""
+
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        for prefix, value in _CACHE_RULES:
+            if path.startswith(prefix):
+                response.headers.setdefault("Cache-Control", value)
+                break
+        return response
 
 
 class AuthRedirectMiddleware(BaseHTTPMiddleware):
@@ -70,8 +92,10 @@ def create_app() -> FastAPI:
         version="0.2.0",
     )
 
-    # Auth middleware
+    # Middleware (order: last added = outermost)
     app.add_middleware(AuthRedirectMiddleware)
+    app.add_middleware(CacheHeaderMiddleware)
+    app.add_middleware(GZipMiddleware, minimum_size=500)
 
     # Templates
     templates = Jinja2Templates(directory=str(TEMPLATES_DIR))

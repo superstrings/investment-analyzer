@@ -131,7 +131,6 @@ function init() {
     currentYear = now.getFullYear();
     currentMonth = now.getMonth() + 1;
     document.getElementById('sync-year').value = currentYear;
-    loadCalendar();
 }
 
 function changeMonth(delta) {
@@ -331,6 +330,7 @@ async function refreshRates() {
 }
 
 init();
-loadRates();
+// Load calendar and rates in parallel
+Promise.all([loadCalendar(), loadRates()]);
 </script>
 {% endblock %}

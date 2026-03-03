@@ -748,7 +748,7 @@ async function loadAnalysisResult() {
 }
 
 initChart();
-loadStockData();
-loadAnalysisResult();
+// Load stock data and analysis result in parallel
+Promise.all([loadStockData(), loadAnalysisResult()]);
 </script>
 {% endblock %}

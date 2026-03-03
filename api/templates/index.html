@@ -4,7 +4,7 @@
 
 {% block content %}
 <div id="dashboard" class="space-y-4">
-    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
             <div class="text-xs text-gray-500 uppercase">总市值</div>
             <div id="total-val" class="text-xl font-bold mt-1">--</div>
@@ -20,6 +20,17 @@
         <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
             <div class="text-xs text-gray-500 uppercase">胜率</div>
             <div id="win-rate" class="text-xl font-bold mt-1">--</div>
+        </div>
+        <div class="bg-gray-900 rounded-lg p-4 border border-gray-800">
+            <div class="text-xs text-gray-500 uppercase">买入笔数</div>
+            <div id="trade-counts" class="mt-1">
+                <span id="trade-ytd" class="text-xl font-bold">--</span>
+                <span class="text-xs text-gray-500 ml-1">
+                    / <span id="trade-mtd" class="text-sm text-gray-300">--</span>
+                    / <span id="trade-wtd" class="text-sm text-gray-300">--</span>
+                </span>
+            </div>
+            <div class="text-[10px] text-gray-600 mt-0.5">年 / 月 / 周</div>
         </div>
     </div>
 
@@ -208,7 +219,13 @@ async function pushToDingTalk() {
 }
 
 async function loadDashboard() {
-    const data = await fetchData('/api/dashboard/summary');
+    const [data, pData, sData, plData] = await Promise.all([
+        fetchData('/api/dashboard/summary'),
+        fetchData('/api/portfolio'),
+        fetchData('/api/signals'),
+        fetchData('/api/plans'),
+    ]);
+
     const p = data.portfolio;
     document.getElementById('total-val').textContent = '¥' + formatNum(p.total_market_val);
     const plEl = document.getElementById('total-pl');
@@ -218,13 +235,15 @@ async function loadDashboard() {
     document.getElementById('win-rate').textContent =
         data.accuracy.win_rate > 0 ? data.accuracy.win_rate.toFixed(1) + '%' : '--';
 
-    const pData = await fetchData('/api/portfolio');
+    // Trade counts
+    if (data.trade_counts) {
+        document.getElementById('trade-ytd').textContent = data.trade_counts.ytd;
+        document.getElementById('trade-mtd').textContent = data.trade_counts.mtd;
+        document.getElementById('trade-wtd').textContent = data.trade_counts.wtd;
+    }
+
     renderList(document.getElementById('positions-list'), pData.positions, createPositionRow);
-
-    const sData = await fetchData('/api/signals');
     renderList(document.getElementById('signals-list'), sData.signals.slice(0, 5), createSignalRow);
-
-    const plData = await fetchData('/api/plans');
     renderList(document.getElementById('plans-list'), plData.plans, createPlanRow);
 }
 loadDashboard();
