@@ -467,6 +467,22 @@ def _save_analysis_output(
         logger.warning(f"  → 文件保存失败 {code}: {e}")
 
 
+def _ensure_data_synced(user_id: int) -> None:
+    """Sync positions and trades before analysis to ensure fresh data."""
+    try:
+        from services.sync_service import create_sync_service
+
+        svc = create_sync_service()
+        pos_result = svc.sync_positions(user_id)
+        trade_result = svc.sync_trades(user_id, days=7)
+        logger.info(
+            f"数据同步完成: 持仓 {pos_result.records_synced} 条, "
+            f"交易 {trade_result.records_synced} 条"
+        )
+    except Exception as e:
+        logger.warning(f"数据同步失败(继续分析): {e}")
+
+
 def _ensure_klines_synced(codes: list[str], kline_days: int = 5) -> None:
     """Quick sync klines for specific codes before analysis."""
     if not codes:
@@ -824,7 +840,11 @@ def run_post_market(market: str, max_workers: int = 3):
 
     user_id = get_user_id()
 
-    # Step 1: Get positions + watchlist (filter out options, indices, ETFs)
+    # Step 1: Sync positions + trades to ensure fresh data
+    logger.info(f"[1/5] 同步 {market_name} 持仓和交易数据...")
+    _ensure_data_synced(user_id)
+
+    # Step 2: Get positions + watchlist (filter out options, indices, ETFs)
     positions = _get_market_positions(user_id, market)
     stocks = [
         p
@@ -834,7 +854,7 @@ def run_post_market(market: str, max_workers: int = 3):
     ]
     skipped = len(positions) - len(stocks)
     logger.info(
-        f"[1/4] 获取 {market_name} 持仓: {len(positions)} 个 (分析 {len(stocks)}, 跳过 {skipped})"
+        f"[2/5] 获取 {market_name} 持仓: {len(positions)} 个 (分析 {len(stocks)}, 跳过 {skipped})"
     )
 
     watchlist = _get_market_watchlist(user_id, market)
@@ -847,16 +867,16 @@ def run_post_market(market: str, max_workers: int = 3):
         and not _should_skip_analysis(market, w["code"])
     ]
     logger.info(
-        f"[1/4] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})"
+        f"[2/5] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})"
     )
 
     if not stocks and not watchlist_stocks:
         logger.info("无股票持仓且无关注个股，跳过分析")
         return
 
-    # Step 2: Sync klines for all stocks before analysis
+    # Step 3: Sync klines for all stocks before analysis
     all_codes = [p["code"] for p in stocks] + [w["code"] for w in watchlist_stocks]
-    logger.info(f"[2/4] 同步 K 线 ({len(all_codes)} 只)...")
+    logger.info(f"[3/5] 同步 K 线 ({len(all_codes)} 只)...")
     _ensure_klines_synced(all_codes)
 
     # Refresh watchlist prices after kline sync (fixes price=0 for newly added stocks)
@@ -870,7 +890,7 @@ def run_post_market(market: str, max_workers: int = 3):
             f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
         )
 
-    # Step 3: Build unified task list
+    # Step 4: Build unified task list
     tasks = []
     for p in stocks:
         pl_pct = p["pl_ratio"] * 100
@@ -885,7 +905,7 @@ def run_post_market(market: str, max_workers: int = 3):
             {"code": w["code"], "name": w["name"], "info": info, "type": "watchlist"}
         )
 
-    logger.info(f"[3/4] 并行分析 {len(tasks)} 只股票 (max_workers={max_workers})...")
+    logger.info(f"[4/5] 并行分析 {len(tasks)} 只股票 (max_workers={max_workers})...")
 
     # Pre-flight auth check
     if not _check_claude_auth():
@@ -924,7 +944,7 @@ def run_post_market(market: str, max_workers: int = 3):
             _send_stock_dingtalk(dingtalk, market_name, result, user_id)
 
     # Step 4: Send summary message
-    logger.info(f"[4/4] 推送汇总...")
+    logger.info(f"[5/5] 推送汇总...")
     pos_results = [r for r in results if r["type"] == "position"]
     watch_results = [r for r in results if r["type"] == "watchlist"]
 
@@ -987,7 +1007,11 @@ def run_pre_market(market: str, max_workers: int = 3):
 
     user_id = get_user_id()
 
-    # Step 1: Get positions + watchlist (filter out options, indices, ETFs)
+    # Step 1: Sync positions + trades to ensure fresh data
+    logger.info(f"[1/6] 同步 {market_name} 持仓和交易数据...")
+    _ensure_data_synced(user_id)
+
+    # Step 2: Get positions + watchlist (filter out options, indices, ETFs)
     positions = _get_market_positions(user_id, market)
     stocks = [
         p
@@ -996,7 +1020,7 @@ def run_pre_market(market: str, max_workers: int = 3):
         and not _should_skip_analysis(market, p["code"])
     ]
     logger.info(
-        f"[1/5] 获取 {market_name} 持仓: {len(positions)} 个 (分析 {len(stocks)}, "
+        f"[2/6] 获取 {market_name} 持仓: {len(positions)} 个 (分析 {len(stocks)}, "
         f"跳过 {len(positions) - len(stocks)})"
     )
 
@@ -1010,16 +1034,16 @@ def run_pre_market(market: str, max_workers: int = 3):
         and not _should_skip_analysis(market, w["code"])
     ]
     logger.info(
-        f"[1/5] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})"
+        f"[2/6] 获取 {market_name} 关注: {len(watchlist)} 个 (去重后 {len(watchlist_stocks)})"
     )
 
     if not stocks and not watchlist_stocks:
         logger.info("无股票持仓且无关注个股，跳过盘前检查")
         return
 
-    # Step 2: Sync klines
+    # Step 3: Sync klines
     all_codes = [p["code"] for p in stocks] + [w["code"] for w in watchlist_stocks]
-    logger.info(f"[2/5] 同步 K 线 ({len(all_codes)} 只)...")
+    logger.info(f"[3/6] 同步 K 线 ({len(all_codes)} 只)...")
     _ensure_klines_synced(all_codes)
 
     # Refresh watchlist prices after kline sync
@@ -1033,13 +1057,13 @@ def run_pre_market(market: str, max_workers: int = 3):
             f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
         )
 
-    # Step 3: Fetch existing signals + plans from DB (no LLM needed)
-    logger.info(f"[3/5] 加载信号和计划...")
+    # Step 4: Fetch existing signals + plans from DB (no LLM needed)
+    logger.info(f"[4/6] 加载信号和计划...")
     signals_ctx = _get_market_signals_context(user_id, market)
     plans_ctx = _get_market_plans_context(user_id, market)
     logger.info(f"  信号 {len(signals_ctx)} 只, 计划 {len(plans_ctx)} 只")
 
-    # Step 4: Build unified task list with signal/plan context
+    # Step 5: Build unified task list with signal/plan context
     tasks = []
     for p in stocks:
         pl_pct = p["pl_ratio"] * 100
@@ -1072,7 +1096,7 @@ def run_pre_market(market: str, max_workers: int = 3):
         )
 
     logger.info(
-        f"[4/5] 并行盘前分析 {len(tasks)} 只股票 (max_workers={max_workers})..."
+        f"[5/6] 并行盘前分析 {len(tasks)} 只股票 (max_workers={max_workers})..."
     )
 
     # Pre-flight auth check
@@ -1112,7 +1136,7 @@ def run_pre_market(market: str, max_workers: int = 3):
             _send_stock_dingtalk(dingtalk, market_name, result, user_id)
 
     # Step 5: Send briefing summary via DingTalk
-    logger.info(f"[5/5] 推送盘前简报...")
+    logger.info(f"[6/6] 推送盘前简报...")
     pos_results = [r for r in results if r["type"] == "position"]
     watch_results = [r for r in results if r["type"] == "watchlist"]
 
