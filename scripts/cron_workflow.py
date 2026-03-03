@@ -71,11 +71,13 @@ def run_sync():
     logger.info("Starting data sync...")
 
     try:
+        from fetchers import FutuFetcher
         from services.sync_service import create_sync_service
 
         user_id = get_user_id()
-        svc = create_sync_service()
-        results = svc.sync_all(user_id, kline_days=30)
+        with FutuFetcher() as fetcher:
+            svc = create_sync_service(futu_fetcher=fetcher)
+            results = svc.sync_all(user_id, kline_days=30)
 
         for name, result in results.items():
             status = "OK" if result.success else "FAIL"
@@ -470,15 +472,17 @@ def _save_analysis_output(
 def _ensure_data_synced(user_id: int) -> None:
     """Sync positions and trades before analysis to ensure fresh data."""
     try:
+        from fetchers import FutuFetcher
         from services.sync_service import create_sync_service
 
-        svc = create_sync_service()
-        pos_result = svc.sync_positions(user_id)
-        trade_result = svc.sync_trades(user_id, days=7)
-        logger.info(
-            f"数据同步完成: 持仓 {pos_result.records_synced} 条, "
-            f"交易 {trade_result.records_synced} 条"
-        )
+        with FutuFetcher() as fetcher:
+            svc = create_sync_service(futu_fetcher=fetcher)
+            pos_result = svc.sync_positions(user_id)
+            trade_result = svc.sync_trades(user_id, days=7)
+            logger.info(
+                f"数据同步完成: 持仓 {pos_result.records_synced} 条, "
+                f"交易 {trade_result.records_synced} 条"
+            )
     except Exception as e:
         logger.warning(f"数据同步失败(继续分析): {e}")
 
