@@ -892,11 +892,23 @@ def run_post_market(market: str, max_workers: int = 3):
                 w["latest_price"], w["change_pct"] = refreshed[w["code"]]
         logger.info(f"  刷新 {len(watchlist_codes)} 只关注价格 (更新 {len(refreshed)} 只)")
 
+    # Refresh position close prices from kline (market_price may be after-hours)
+    position_codes = [p["code"] for p in stocks]
+    position_closes = _get_latest_prices(position_codes, market=market) if position_codes else {}
+
     # Step 4: Build unified task list
     tasks = []
     for p in stocks:
         pl_pct = p["pl_ratio"] * 100
-        info = f"数量{p['qty']:.0f}, 成本{p['cost_price']:.2f}, 现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+        close_price, day_chg = position_closes.get(p["code"], (0, 0))
+        if close_price > 0:
+            info = (
+                f"数量{p['qty']:.0f}, 成本{p['cost_price']:.2f}, "
+                f"收盘{close_price:.2f}({day_chg:+.2f}%), "
+                f"最新{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+            )
+        else:
+            info = f"数量{p['qty']:.0f}, 成本{p['cost_price']:.2f}, 现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
         tasks.append(
             {"code": p["code"], "name": p["name"], "info": info, "type": "position"}
         )
@@ -1063,14 +1075,26 @@ def run_pre_market(market: str, max_workers: int = 3):
     plans_ctx = _get_market_plans_context(user_id, market)
     logger.info(f"  信号 {len(signals_ctx)} 只, 计划 {len(plans_ctx)} 只")
 
+    # Refresh position close prices from kline (market_price may be after-hours)
+    position_codes = [p["code"] for p in stocks]
+    position_closes = _get_latest_prices(position_codes, market=market) if position_codes else {}
+
     # Step 5: Build unified task list with signal/plan context
     tasks = []
     for p in stocks:
         pl_pct = p["pl_ratio"] * 100
-        info = (
-            f"持仓{p['qty']:.0f}股, 成本{p['cost_price']:.2f}, "
-            f"现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
-        )
+        close_price, day_chg = position_closes.get(p["code"], (0, 0))
+        if close_price > 0:
+            info = (
+                f"持仓{p['qty']:.0f}股, 成本{p['cost_price']:.2f}, "
+                f"收盘{close_price:.2f}({day_chg:+.2f}%), "
+                f"最新{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+            )
+        else:
+            info = (
+                f"持仓{p['qty']:.0f}股, 成本{p['cost_price']:.2f}, "
+                f"现价{p['market_price']:.2f}, 盈亏{pl_pct:+.1f}%"
+            )
         tasks.append(
             {
                 "code": p["code"],
