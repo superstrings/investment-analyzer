@@ -113,23 +113,42 @@ def run_sync():
         sys.exit(1)
 
 
-def _check_claude_auth() -> bool:
-    """Check if Claude CLI is authenticated. Returns True if logged in."""
-    try:
-        result = subprocess.run(
-            ["claude", "auth", "status"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            env=settings.proxy.get_subprocess_env(),
-        )
-        if result.returncode == 0 and '"loggedIn": true' in result.stdout:
-            return True
-        logger.warning(f"Claude auth check failed: {result.stdout[:200]}")
-        return False
-    except Exception as e:
-        logger.warning(f"Claude auth check error: {e}")
-        return False
+def _check_claude_auth(retries: int = 3, delay: float = 3.0) -> bool:
+    """Check if Claude CLI is authenticated. Returns True if logged in.
+
+    Retries on failure to handle transient OAuth token refresh race conditions
+    when other Claude CLI instances are running concurrently.
+    """
+    for attempt in range(retries):
+        try:
+            result = subprocess.run(
+                ["claude", "auth", "status"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                env=settings.proxy.get_subprocess_env(),
+            )
+            if result.returncode == 0 and '"loggedIn": true' in result.stdout:
+                return True
+            if attempt < retries - 1:
+                logger.warning(
+                    f"Claude auth check attempt {attempt + 1}/{retries} failed, "
+                    f"retrying in {delay}s: {result.stdout[:100]}"
+                )
+                import time
+
+                time.sleep(delay)
+            else:
+                logger.warning(f"Claude auth check failed: {result.stdout[:200]}")
+        except Exception as e:
+            if attempt < retries - 1:
+                logger.warning(f"Claude auth check error (attempt {attempt + 1}): {e}")
+                import time
+
+                time.sleep(delay)
+            else:
+                logger.warning(f"Claude auth check error: {e}")
+    return False
 
 
 _AUTH_RETRY_ERRORS = ("Not logged in", "Failed to authenticate", "403")
@@ -924,6 +943,18 @@ def run_post_market(market: str, max_workers: int = 3):
     # Pre-flight auth check
     if not _check_claude_auth():
         logger.error("Claude CLI 未认证，跳过盘后分析。请执行 claude /login")
+        from services.dingtalk_service import create_dingtalk_service
+
+        try:
+            create_dingtalk_service().send_markdown(
+                f"{market_name}盘后分析失败",
+                f"## {market_name}盘后分析失败 ({date.today()})\n\n"
+                f"**原因**: Claude CLI 未认证\n\n"
+                f"请执行 `claude /login` 重新登录",
+                user_id=user_id,
+            )
+        except Exception:
+            pass
         return
 
     # Parallel analysis with per-stock DingTalk push
@@ -1126,6 +1157,18 @@ def run_pre_market(market: str, max_workers: int = 3):
     # Pre-flight auth check
     if not _check_claude_auth():
         logger.error("Claude CLI 未认证，跳过盘前分析。请执行 claude /login")
+        from services.dingtalk_service import create_dingtalk_service
+
+        try:
+            create_dingtalk_service().send_markdown(
+                f"{market_name}盘前分析失败",
+                f"## {market_name}盘前分析失败 ({date.today()})\n\n"
+                f"**原因**: Claude CLI 未认证 (重试3次均失败)\n\n"
+                f"请执行 `claude /login` 重新登录",
+                user_id=user_id,
+            )
+        except Exception:
+            pass
         return
 
     # Parallel analysis
