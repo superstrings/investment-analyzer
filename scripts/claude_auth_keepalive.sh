@@ -5,7 +5,7 @@
 # How it works:
 #   1. Calls `claude auth status` to check current login state
 #   2. If logged in, runs a minimal `claude -p` to trigger OAuth token refresh
-#   3. If not logged in, logs a warning (manual `claude /login` required)
+#   3. If not logged in, checks Keychain to distinguish service outage vs real expiry
 #   4. All results logged to logs/claude_auth.log
 #
 # Crontab entry (every 2 hours, 6am-11pm on weekdays):
@@ -35,6 +35,25 @@ log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
 }
 
+# Check if Keychain has a non-expired OAuth token.
+# Returns 0 if valid token exists, 1 otherwise.
+check_keychain_token() {
+    local creds
+    creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null) || return 1
+
+    # Extract expiresAt (milliseconds) and compare with current time
+    "$PROJECT_DIR/.venv/bin/python" -c "
+import json, sys, time
+try:
+    data = json.loads('''$creds''')
+    expires = data.get('claudeAiOauth', {}).get('expiresAt', 0)
+    now_ms = int(time.time() * 1000)
+    sys.exit(0 if expires > now_ms else 1)
+except:
+    sys.exit(1)
+" 2>/dev/null
+}
+
 # Step 1: Check auth status (local check, no network needed)
 AUTH_OUTPUT=$(claude auth status 2>&1) || true
 
@@ -48,11 +67,15 @@ if echo "$AUTH_OUTPUT" | grep -q '"loggedIn": true'; then
         log "AUTH_WARN - logged in but refresh returned empty"
     fi
 else
-    log "AUTH_FAIL - not logged in. Output: $AUTH_OUTPUT"
+    # Step 3: Distinguish service outage vs real auth expiry
+    if check_keychain_token; then
+        log "AUTH_WARN - claude auth status reports not logged in, but Keychain token still valid. Likely Claude service outage. Output: $AUTH_OUTPUT"
+    else
+        log "AUTH_FAIL - not logged in, Keychain token expired/missing. Output: $AUTH_OUTPUT"
 
-    # Send DingTalk alert
-    if [ -f "$PROJECT_DIR/.venv/bin/python" ]; then
-        "$PROJECT_DIR/.venv/bin/python" -c "
+        # Send DingTalk alert only for real auth expiry
+        if [ -f "$PROJECT_DIR/.venv/bin/python" ]; then
+            "$PROJECT_DIR/.venv/bin/python" -c "
 import sys; sys.path.insert(0, '$PROJECT_DIR')
 try:
     from services.dingtalk_service import create_dingtalk_service
@@ -60,5 +83,6 @@ try:
     d.send_markdown('Claude CLI 认证过期', '## Claude CLI 认证过期\n\n请在本机执行 \`claude /login\` 重新登录')
 except: pass
 " 2>/dev/null || true
+        fi
     fi
 fi
