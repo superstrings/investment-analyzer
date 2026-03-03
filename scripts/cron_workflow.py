@@ -883,16 +883,14 @@ def run_post_market(market: str, max_workers: int = 3):
     logger.info(f"[3/5] 同步 K 线 ({len(all_codes)} 只)...")
     _ensure_klines_synced(all_codes)
 
-    # Refresh watchlist prices after kline sync (fixes price=0 for newly added stocks)
-    zero_price_codes = [w["code"] for w in watchlist_stocks if w["latest_price"] == 0]
-    if zero_price_codes:
-        refreshed = _get_latest_prices(zero_price_codes, market=market)
+    # Refresh ALL watchlist prices after kline sync (prices were read before sync)
+    watchlist_codes = [w["code"] for w in watchlist_stocks]
+    if watchlist_codes:
+        refreshed = _get_latest_prices(watchlist_codes, market=market)
         for w in watchlist_stocks:
             if w["code"] in refreshed:
                 w["latest_price"], w["change_pct"] = refreshed[w["code"]]
-        logger.info(
-            f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
-        )
+        logger.info(f"  刷新 {len(watchlist_codes)} 只关注价格 (更新 {len(refreshed)} 只)")
 
     # Step 4: Build unified task list
     tasks = []
@@ -1050,16 +1048,14 @@ def run_pre_market(market: str, max_workers: int = 3):
     logger.info(f"[3/6] 同步 K 线 ({len(all_codes)} 只)...")
     _ensure_klines_synced(all_codes)
 
-    # Refresh watchlist prices after kline sync
-    zero_price_codes = [w["code"] for w in watchlist_stocks if w["latest_price"] == 0]
-    if zero_price_codes:
-        refreshed = _get_latest_prices(zero_price_codes, market=market)
+    # Refresh ALL watchlist prices after kline sync (prices were read before sync)
+    watchlist_codes = [w["code"] for w in watchlist_stocks]
+    if watchlist_codes:
+        refreshed = _get_latest_prices(watchlist_codes, market=market)
         for w in watchlist_stocks:
             if w["code"] in refreshed:
                 w["latest_price"], w["change_pct"] = refreshed[w["code"]]
-        logger.info(
-            f"  刷新 {len(zero_price_codes)} 只关注价格 (更新 {len(refreshed)} 只)"
-        )
+        logger.info(f"  刷新 {len(watchlist_codes)} 只关注价格 (更新 {len(refreshed)} 只)")
 
     # Step 4: Fetch existing signals + plans from DB (no LLM needed)
     logger.info(f"[4/6] 加载信号和计划...")
