@@ -17,19 +17,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 LOG_FILE="$PROJECT_DIR/logs/claude_auth.log"
 
-# Ensure HOME is set (cron may not provide it)
-export HOME="/Users/dyson"
-
-# Ensure PATH includes node/claude
-export PATH="/Users/dyson/.asdf/shims:/Users/dyson/.asdf/installs/nodejs/22.11.0/bin:/opt/homebrew/bin:/opt/homebrew/sbin:$PATH"
-
-# Proxy for claude.ai access
-export HTTP_PROXY="http://127.0.0.1:8118"
-export HTTPS_PROXY="http://127.0.0.1:8118"
-export NO_PROXY="localhost,127.0.0.1"
-
-# Allow running even if a Claude Code session is active
-unset CLAUDECODE
+# Source shared cron environment (sets HOME, PATH, proxy, etc.)
+source "$SCRIPT_DIR/run-with-proxy.sh"
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
@@ -38,20 +27,17 @@ log() {
 # Check if Keychain has a non-expired OAuth token.
 # Returns 0 if valid token exists, 1 otherwise.
 check_keychain_token() {
-    local creds
-    creds=$(security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null) || return 1
-
-    # Extract expiresAt (milliseconds) and compare with current time
-    "$PROJECT_DIR/.venv/bin/python" -c "
+    security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null \
+        | "$PROJECT_DIR/.venv/bin/python" -c "
 import json, sys, time
 try:
-    data = json.loads('''$creds''')
+    data = json.loads(sys.stdin.read())
     expires = data.get('claudeAiOauth', {}).get('expiresAt', 0)
     now_ms = int(time.time() * 1000)
     sys.exit(0 if expires > now_ms else 1)
 except:
     sys.exit(1)
-" 2>/dev/null
+"
 }
 
 # Step 1: Check auth status (local check, no network needed)
