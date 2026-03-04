@@ -48,6 +48,9 @@ logger = logging.getLogger(__name__)
 from config import settings  # noqa: E402
 from config.prompts import V12_FRAMEWORK_PROMPT  # noqa: E402
 
+# Resolve actual claude binary (bypass asdf shims which need shell function)
+from api.claude_runner import CLAUDE_BIN  # noqa: E402
+
 # Default user
 DEFAULT_USERNAME = "dyson"
 
@@ -122,7 +125,7 @@ def _check_claude_auth(retries: int = 3, delay: float = 3.0) -> bool:
     for attempt in range(retries):
         try:
             result = subprocess.run(
-                ["claude", "auth", "status"],
+                [CLAUDE_BIN, "auth", "status"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -164,7 +167,7 @@ def run_claude_prompt(prompt: str, model: str = None, _retries: int = 2) -> str:
     """
     logger.info("Running Claude CLI analysis...")
 
-    cmd = ["claude", "-p", prompt, "--output-format", "text"]
+    cmd = [CLAUDE_BIN, "-p", prompt, "--output-format", "text"]
     if model:
         cmd.extend(["--model", model])
 

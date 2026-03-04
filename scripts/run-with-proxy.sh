@@ -16,8 +16,8 @@ export USER="dyson"
 export LANG="en_US.UTF-8"
 export LC_ALL="en_US.UTF-8"
 
-# --- PATH: asdf (python/node), homebrew, system ---
-export PATH="/Users/dyson/.asdf/shims:/Users/dyson/.asdf/installs/nodejs/22.11.0/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin"
+# --- PATH: asdf real binaries (NOT shims - shims need asdf shell function), homebrew, system ---
+export PATH="/Users/dyson/.asdf/installs/nodejs/22.11.0/bin:/Users/dyson/.asdf/installs/python/3.12.7/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin"
 
 # --- Proxy for Claude CLI / web access ---
 export HTTP_PROXY="http://127.0.0.1:8118"

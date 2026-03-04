@@ -129,6 +129,22 @@ class ProxySettings:
     def get_subprocess_env(self) -> dict:
         """Get env dict with proxy for subprocess (e.g. Claude CLI)."""
         env = os.environ.copy()
+        # Ensure HOME is set (missing in cron/launchd environments)
+        home = env.get("HOME", os.path.expanduser("~"))
+        env["HOME"] = home
+        # Ensure asdf node path is in PATH (for claude CLI dependencies)
+        import glob as _glob
+
+        node_bins = sorted(
+            _glob.glob(os.path.join(home, ".asdf/installs/nodejs/*/bin")),
+            reverse=True,
+        )
+        path = env.get("PATH", "")
+        for p in node_bins[:1]:  # add latest version only
+            if p not in path:
+                path = p + ":" + path
+        env["PATH"] = path
+        # Proxy settings
         proxy = self.http_proxy
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
                      "http_proxy", "https_proxy", "all_proxy"):

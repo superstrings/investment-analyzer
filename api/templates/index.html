@@ -37,13 +37,7 @@
     <div class="bg-gray-900 rounded-lg border border-gray-800">
         <div class="px-4 py-3 border-b border-gray-800 flex justify-between items-center">
             <h2 class="font-semibold">持仓</h2>
-            <div class="flex items-center gap-2">
-                <button id="push-dingtalk-btn" onclick="pushToDingTalk()"
-                    class="text-xs bg-green-700 hover:bg-green-600 text-white px-2 py-0.5 rounded" title="推送到钉钉">
-                    📤 钉钉
-                </button>
-                <a href="/portfolio" class="text-xs text-blue-400">详情</a>
-            </div>
+            <a href="/portfolio" class="text-xs text-blue-400">详情</a>
         </div>
         <div id="positions-list" class="divide-y divide-gray-800">
             <div class="p-4 text-gray-500 text-sm">加载中...</div>
@@ -203,20 +197,6 @@ function createPlanRow(p) {
     return row;
 }
 
-async function pushToDingTalk() {
-    const btn = document.getElementById('push-dingtalk-btn');
-    btn.disabled = true;
-    btn.textContent = '发送中...';
-    try {
-        const res = await fetch('/api/dashboard/push-dingtalk', {method: 'POST'});
-        const data = await res.json();
-        btn.textContent = data.success ? '✓ 已发送' : '✗ 失败';
-        setTimeout(() => { btn.textContent = '📤 钉钉'; btn.disabled = false; }, 2000);
-    } catch (e) {
-        btn.textContent = '✗ 失败';
-        setTimeout(() => { btn.textContent = '📤 钉钉'; btn.disabled = false; }, 2000);
-    }
-}
 
 async function loadDashboard() {
     const [data, pData, sData, plData] = await Promise.all([

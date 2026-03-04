@@ -40,12 +40,18 @@ except:
 "
 }
 
+# Resolve actual claude binary (bypass asdf shim)
+CLAUDE_BIN="$(ls -1t "$HOME/.asdf/installs/nodejs"/*/bin/claude 2>/dev/null | head -1)"
+if [ -z "$CLAUDE_BIN" ]; then
+    CLAUDE_BIN="claude"  # fallback
+fi
+
 # Step 1: Check auth status (local check, no network needed)
-AUTH_OUTPUT=$(claude auth status 2>&1) || true
+AUTH_OUTPUT=$($CLAUDE_BIN auth status 2>&1) || true
 
 if echo "$AUTH_OUTPUT" | grep -q '"loggedIn": true'; then
     # Step 2: Trigger token refresh with a minimal prompt
-    REFRESH_OUTPUT=$(timeout 30 claude -p "ok" --output-format text --max-turns 1 2>&1) || true
+    REFRESH_OUTPUT=$(timeout 30 $CLAUDE_BIN -p "ok" --output-format text --max-turns 1 2>&1) || true
 
     if [ -n "$REFRESH_OUTPUT" ] && [ ${#REFRESH_OUTPUT} -gt 0 ]; then
         log "AUTH_OK - token refreshed (${#REFRESH_OUTPUT} chars)"

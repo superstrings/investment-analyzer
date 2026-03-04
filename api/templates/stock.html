@@ -233,8 +233,6 @@ function addTradeMarkers(trades, klines) {
 }
 
 function addSignalMarkers(signals, klines) {
-    // Get existing markers (trades) and add signal markers
-    const existing = candleSeries.markers ? [] : [];
     const dateSet = new Set(klines.map(k => k.time));
     const markers = [];
     signals.forEach(s => {
@@ -251,8 +249,6 @@ function addSignalMarkers(signals, klines) {
         }
     });
     if (markers.length > 0) {
-        // Merge with trade markers
-        const all = [...(candleSeries.markers || [])];
         // Re-get trade markers, then append signal markers
         const tradeMarkers = [];
         if (stockData && stockData.trades) {
