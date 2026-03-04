@@ -3,10 +3,9 @@
 # Designed to run via crontab every 2 hours to prevent token expiry.
 #
 # How it works:
-#   1. Calls `claude auth status` to check current login state
-#   2. If logged in, runs a minimal `claude -p` to trigger OAuth token refresh
-#   3. If not logged in, checks Keychain to distinguish service outage vs real expiry
-#   4. All results logged to logs/claude_auth.log
+#   1. Always tries `claude -p` to trigger OAuth token refresh (also auto-refreshes expired access tokens)
+#   2. If that fails, checks Keychain to distinguish service outage vs real expiry
+#   3. All results logged to logs/claude_auth.log
 #
 # Crontab entry (every 2 hours, 6am-11pm on weekdays):
 #   0 6,8,10,12,14,16,18,20,22 * * 1-5 cd /path/to/project && scripts/claude_auth_keepalive.sh
@@ -46,24 +45,20 @@ if [ -z "$CLAUDE_BIN" ]; then
     CLAUDE_BIN="claude"  # fallback
 fi
 
-# Step 1: Check auth status (local check, no network needed)
-AUTH_OUTPUT=$($CLAUDE_BIN auth status 2>&1) || true
+# Step 1: Try token refresh directly (works even with expired access token
+# as long as the refresh token is still valid)
+REFRESH_OUTPUT=$(timeout 30 $CLAUDE_BIN -p "ok" --output-format text --max-turns 1 2>&1) || true
 
-if echo "$AUTH_OUTPUT" | grep -q '"loggedIn": true'; then
-    # Step 2: Trigger token refresh with a minimal prompt
-    REFRESH_OUTPUT=$(timeout 30 $CLAUDE_BIN -p "ok" --output-format text --max-turns 1 2>&1) || true
-
-    if [ -n "$REFRESH_OUTPUT" ] && [ ${#REFRESH_OUTPUT} -gt 0 ]; then
-        log "AUTH_OK - token refreshed (${#REFRESH_OUTPUT} chars)"
-    else
-        log "AUTH_WARN - logged in but refresh returned empty"
-    fi
+if [ -n "$REFRESH_OUTPUT" ] && [ ${#REFRESH_OUTPUT} -gt 0 ]; then
+    log "AUTH_OK - token refreshed (${#REFRESH_OUTPUT} chars)"
 else
-    # Step 3: Distinguish service outage vs real auth expiry
+    # Step 2: Refresh failed - distinguish service outage vs real auth expiry
+    AUTH_OUTPUT=$($CLAUDE_BIN auth status 2>&1) || true
+
     if check_keychain_token; then
-        log "AUTH_WARN - claude auth status reports not logged in, but Keychain token still valid. Likely Claude service outage. Output: $AUTH_OUTPUT"
+        log "AUTH_WARN - refresh failed but Keychain token still valid. Likely Claude service outage. auth status: $AUTH_OUTPUT"
     else
-        log "AUTH_FAIL - not logged in, Keychain token expired/missing. Output: $AUTH_OUTPUT"
+        log "AUTH_FAIL - refresh failed and Keychain token expired/missing. auth status: $AUTH_OUTPUT"
 
         # Send DingTalk alert only for real auth expiry
         if [ -f "$PROJECT_DIR/.venv/bin/python" ]; then

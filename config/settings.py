@@ -144,6 +144,8 @@ class ProxySettings:
             if p not in path:
                 path = p + ":" + path
         env["PATH"] = path
+        # Remove CLAUDECODE so standalone Claude CLI uses its own OAuth auth
+        env.pop("CLAUDECODE", None)
         # Proxy settings
         proxy = self.http_proxy
         for key in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY",
