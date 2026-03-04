@@ -119,38 +119,62 @@ def run_sync():
 def _check_claude_auth(retries: int = 3, delay: float = 3.0) -> bool:
     """Check if Claude CLI is authenticated. Returns True if logged in.
 
-    Retries on failure to handle transient OAuth token refresh race conditions
-    when other Claude CLI instances are running concurrently.
+    First tries `auth status` (fast, local check). If that fails, attempts a
+    minimal `claude -p "ok"` call which triggers OAuth token auto-refresh when
+    the access token is expired but the refresh token is still valid.
     """
+    env = settings.proxy.get_subprocess_env()
+
+    # Fast path: check auth status directly
+    try:
+        result = subprocess.run(
+            [CLAUDE_BIN, "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            env=env,
+        )
+        if result.returncode == 0 and '"loggedIn": true' in result.stdout:
+            return True
+        logger.warning(f"Claude auth status reports not logged in: {result.stdout[:100]}")
+    except Exception as e:
+        logger.warning(f"Claude auth status check error: {e}")
+
+    # Slow path: try a real API call to trigger token auto-refresh
+    logger.info("Attempting token refresh via claude -p ...")
     for attempt in range(retries):
         try:
             result = subprocess.run(
-                [CLAUDE_BIN, "auth", "status"],
+                [CLAUDE_BIN, "-p", "ok", "--output-format", "text", "--max-turns", "1"],
                 capture_output=True,
                 text=True,
-                timeout=10,
-                env=settings.proxy.get_subprocess_env(),
+                timeout=30,
+                env=env,
             )
-            if result.returncode == 0 and '"loggedIn": true' in result.stdout:
+            if result.returncode == 0 and len(result.stdout.strip()) > 0:
+                logger.info("Token refresh succeeded")
                 return True
             if attempt < retries - 1:
                 logger.warning(
-                    f"Claude auth check attempt {attempt + 1}/{retries} failed, "
-                    f"retrying in {delay}s: {result.stdout[:100]}"
+                    f"Token refresh attempt {attempt + 1}/{retries} failed, "
+                    f"retrying in {delay}s"
                 )
                 import time
 
                 time.sleep(delay)
             else:
-                logger.warning(f"Claude auth check failed: {result.stdout[:200]}")
+                logger.warning(
+                    f"Token refresh failed after {retries} attempts: "
+                    f"{(result.stderr or result.stdout)[:200]}"
+                )
         except Exception as e:
             if attempt < retries - 1:
-                logger.warning(f"Claude auth check error (attempt {attempt + 1}): {e}")
+                logger.warning(f"Token refresh error (attempt {attempt + 1}): {e}")
                 import time
 
                 time.sleep(delay)
             else:
-                logger.warning(f"Claude auth check error: {e}")
+                logger.warning(f"Token refresh error: {e}")
     return False
 
 
