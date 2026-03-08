@@ -777,13 +777,35 @@ class SyncService:
             # Sync trades
             results["trades"] = self.sync_trades(user_id, days=trade_days, session=sess)
 
-            # Sync K-lines for positions and watchlist
+            # Sync K-lines for positions and watchlist (merged & deduplicated)
             if include_klines:
-                results["position_klines"] = self.sync_position_klines(
-                    user_id, days=kline_days, session=sess
-                )
-                results["watchlist_klines"] = self.sync_watchlist_klines(
-                    user_id, days=kline_days, session=sess
+                # Collect codes from positions
+                today = date.today()
+                positions = sess.scalars(
+                    select(Position)
+                    .join(Account)
+                    .where(
+                        and_(
+                            Account.user_id == user_id,
+                            Position.snapshot_date == today,
+                        )
+                    )
+                ).all()
+                all_codes = {f"{pos.market}.{pos.code}" for pos in positions}
+
+                # Collect codes from watchlist
+                watchlist_items = sess.scalars(
+                    select(WatchlistItem).where(
+                        and_(
+                            WatchlistItem.user_id == user_id,
+                            WatchlistItem.is_active == True,
+                        )
+                    )
+                ).all()
+                all_codes.update(item.full_code for item in watchlist_items)
+
+                results["klines"] = self.sync_klines(
+                    list(all_codes), days=kline_days, user_id=user_id, session=sess
                 )
 
             return results
