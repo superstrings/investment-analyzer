@@ -157,38 +157,41 @@ def calc_recent_change(df: pd.DataFrame, days: int = 20) -> float:
     return (end - start) / start * 100
 
 
+def load_watchlist_from_db():
+    """Load active watchlist stocks from database."""
+    from db.database import get_session
+    from db.models import WatchlistItem, User
+    from sqlalchemy import select
+
+    # Skip non-stock items (indices, forex, options)
+    skip_prefixes = (".", "800", "GAH", "ZJM", "CNC", "MET", "AMD2", "MRVL2")
+    skip_codes = {"USDCNH", "XAUUSD"}
+
+    stocks = []
+    with get_session() as s:
+        items = s.execute(
+            select(WatchlistItem).join(User)
+            .where(User.username == "dyson", WatchlistItem.is_active == True)
+            .order_by(WatchlistItem.market, WatchlistItem.code)
+        ).scalars().all()
+
+        for item in items:
+            code = item.code
+            # Skip indices, forex, options
+            if code in skip_codes:
+                continue
+            if any(code.startswith(p) for p in skip_prefixes):
+                continue
+            stocks.append((item.market, code, item.stock_name or code))
+
+    return stocks
+
+
 def main():
-    stocks = [
-        # HK
-        ("HK", "00175", "吉利汽车"),
-        ("HK", "00981", "中芯国际"),
-        ("HK", "01211", "比亚迪"),
-        ("HK", "01989", "广合科技"),
-        ("HK", "02171", "科济药业-B"),
-        ("HK", "02899", "紫金矿业"),
-        ("HK", "03750", "宁德时代"),
-        ("HK", "00100", "MINIMAX"),
-        ("HK", "02513", "智谱"),
-        ("HK", "06869", "长飞光纤"),
-        # US
-        ("US", "COHR", "Coherent"),
-        ("US", "LEGN", "传奇生物"),
-        ("US", "LITE", "Lumentum"),
-        ("US", "MRVL", "迈威尔科技"),
-        ("US", "MU", "美光"),
-        ("US", "NVDA", "英伟达"),
-        ("US", "TSM", "台积电"),
-        # A
-        ("A", "001270", "*ST铖昌"),
-        ("A", "002463", "沪电股份"),
-        ("A", "002475", "立讯精密"),
-        ("A", "300308", "中际旭创"),
-        ("A", "300394", "天孚通信"),
-        ("A", "300502", "新易盛"),
-        ("A", "600487", "亨通光电"),
-        ("A", "688270", "臻镭科技"),
-        ("A", "688498", "源杰科技"),
-    ]
+    stocks = load_watchlist_from_db()
+    if not stocks:
+        print("[ERROR] No watchlist stocks found in database")
+        return
 
     analyzer = StockAnalyzer()
     data_provider = DataProvider()
