@@ -158,6 +158,56 @@ class KlineFetcher:
             logger.error(f"Failed to fetch K-line for {code}: {e}")
             return KlineFetchResult.error(str(e))
 
+    def fetch_intraday(
+        self,
+        code: str,
+        ktype: str = "K_5M",
+        bars: int = 60,
+    ) -> pd.DataFrame:
+        """
+        Fetch intraday K-line data via Futu API. Returns raw DataFrame (not saved to DB).
+
+        Args:
+            code: Stock code with market prefix (e.g., "HK.00175", "US.MRVL")
+            ktype: K-line type string matching futu KLType (K_1M, K_3M, K_5M, K_15M, K_30M, K_60M)
+            bars: Number of bars to fetch (default 60 = 5 hours of 5-min bars)
+
+        Returns:
+            DataFrame with columns: trade_date(datetime), open, high, low, close, volume, amount, change_pct
+            Empty DataFrame on error.
+        """
+        from futu import RET_OK, AuType, KLType
+
+        market, pure_code = self._parse_code(code)
+        futu_code = self._to_futu_code(market, pure_code)
+        kl_type = getattr(KLType, ktype, KLType.K_5M)
+
+        try:
+            ctx = self._get_futu_ctx()
+            ret, df, _ = ctx.request_history_kline(
+                futu_code,
+                ktype=kl_type,
+                autype=AuType.QFQ,
+                max_count=bars,
+            )
+            if ret != RET_OK:
+                logger.warning(f"Futu intraday fetch failed for {futu_code}: {df}")
+                return pd.DataFrame()
+            if df.empty:
+                return pd.DataFrame()
+
+            df = self._standardize_futu_columns(df)
+            # Keep only the last N bars
+            if len(df) > bars:
+                df = df.tail(bars).reset_index(drop=True)
+
+            logger.info(f"Fetched {len(df)} {ktype} bars for {futu_code}")
+            return df
+
+        except Exception as e:
+            logger.warning(f"Intraday fetch error for {futu_code}: {e}")
+            return pd.DataFrame()
+
     def fetch_batch(
         self,
         codes: list[str],
