@@ -218,6 +218,36 @@ def main():
             # Raw scores from analyzer (0-100 scale)
             obv_raw = analysis.obv_analysis.score       # 0-100
             vcp_raw = analysis.vcp_analysis.overall_score  # 0-100
+            vcp_analysis = analysis.vcp_analysis
+
+            # Breakout bonus: if VCP detected contractions but validation
+            # failed because price already broke out above pivot, award
+            # partial VCP credit based on pattern_score + volume_score.
+            # This prevents penalizing stocks that have already confirmed
+            # a breakout (stage=BREAKOUT but detected=False).
+            if (
+                not vcp_analysis.detected
+                and vcp_analysis.contraction_count >= 2
+                and vcp_analysis.pattern_score > 40
+                and hasattr(vcp_analysis, 'stage')
+                and str(vcp_analysis.stage) == "VCPStage.BREAKOUT"
+            ):
+                # Award 60% of what the pattern_score would imply
+                breakout_score = (
+                    vcp_analysis.pattern_score * 0.4
+                    + vcp_analysis.volume_score * 0.3
+                    + vcp_analysis.timing_score * 0.3
+                ) * 0.6
+                vcp_raw = max(vcp_raw, breakout_score)
+
+            # OBV momentum bonus: if OBV trend is STRONG_UP and
+            # confirmation score is high, boost OBV score.
+            obv_analysis = analysis.obv_analysis
+            if (
+                str(obv_analysis.trend) == "OBVTrend.STRONG_UP"
+                and obv_analysis.confirmation_score > 50
+            ):
+                obv_raw = min(100, obv_raw * 1.15)  # +15% bonus
 
             # Convert to V12 sub-scores (each max 50)
             obv_v12 = obv_raw / 100 * 50   # 0-50
