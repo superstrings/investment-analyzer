@@ -1,10 +1,14 @@
 """
 V12 Technical Scoring for watchlist stocks.
 
-Uses skills/analyst/ OBV + VCP analysis framework.
-OBV score (0-50) + VCP score (0-50) -> Total V12 score (0-12)
+Two modes:
+- Standard V12: OBV (40%) + VCP (60%) -> 0-12 score
+- Short-Call SC-V12: OBV (70%) + VCP (10%) + Momentum (20%) -> 0-12 score
 
-Weekly K correction applied on top.
+Usage:
+  python scripts/v12_scoring.py             # Standard V12
+  python scripts/v12_scoring.py --sc        # Short-Call SC-V12
+  python scripts/v12_scoring.py --mode sc   # Same as --sc
 """
 
 import sys
@@ -12,6 +16,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+import argparse
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
@@ -157,6 +162,72 @@ def calc_recent_change(df: pd.DataFrame, days: int = 20) -> float:
     return (end - start) / start * 100
 
 
+def calc_momentum_score(df: pd.DataFrame) -> float:
+    """
+    Calculate momentum sub-score for SC-V12 (0-50).
+
+    Components:
+    - MA20 trend direction: 0-20
+    - Recent 20-day price change: 0-15
+    - Price vs MA20 position: 0-15
+    """
+    if df.empty or len(df) < 25:
+        return 0.0
+
+    close = df["Close"]
+    ma20 = close.rolling(20).mean()
+
+    if pd.isna(ma20.iloc[-1]) or pd.isna(ma20.iloc[-5]):
+        return 0.0
+
+    score = 0.0
+    latest_price = float(close.iloc[-1])
+    latest_ma20 = float(ma20.iloc[-1])
+    ma20_slope = float(ma20.iloc[-1]) - float(ma20.iloc[-5])
+
+    # MA20 trend direction (0-20)
+    if latest_price > latest_ma20 and ma20_slope > 0:
+        score += 20  # UP
+    elif ma20_slope > 0:
+        score += 10  # UP(below)
+    elif latest_price > latest_ma20 and ma20_slope < 0:
+        score += 10  # DOWN(above)
+    # else: DOWN = 0
+
+    # Recent 20-day price change (0-15)
+    change_20d = calc_recent_change(df, 20)
+    if change_20d > 20:
+        score += 15
+    elif change_20d > 10:
+        score += 10
+    elif change_20d > 0:
+        score += 5
+    # else: negative = 0
+
+    # Price vs MA20 position (0-15)
+    if latest_price > latest_ma20:
+        score += 15
+    else:
+        score += 5
+
+    return min(50, score)
+
+
+def calc_sc_v12(obv_raw: float, vcp_raw: float, momentum: float, weekly_corr: float) -> float:
+    """
+    Calculate Short-Call V12 score (0-12).
+
+    Weights: OBV 50% + VCP 40% + Momentum 10%
+    """
+    obv_sub = obv_raw / 100 * 50    # 0-50
+    vcp_sub = vcp_raw / 100 * 50    # 0-50
+    # momentum is already 0-50
+
+    weighted = obv_sub * 0.50 + vcp_sub * 0.40 + momentum * 0.10
+    total = weighted / 50 * 12 + weekly_corr
+    return max(0, min(12, total))
+
+
 def load_watchlist_from_db():
     """Load active watchlist stocks from database."""
     from db.database import get_session
@@ -187,7 +258,139 @@ def load_watchlist_from_db():
     return stocks
 
 
+def score_stock(analyzer, data_provider, market, code, name, mode="standard"):
+    """Score a single stock. Returns result dict or None on failure."""
+    df = data_provider.get_klines_df(market, code, days=200)
+    if df.empty or len(df) < 30:
+        print(f"[WARN] {market}.{code} ({name}): insufficient data ({len(df)} rows), skipping")
+        return {
+            "market": market, "code": code, "name": name,
+            "obv_score": 0, "vcp_score": 0, "momentum": 0,
+            "weekly_corr": 0, "total": 0, "signal": "N/A",
+            "ma20": "N/A", "price": 0, "change_20d": 0,
+        }
+
+    analysis = analyzer.analyze(df, market=market, code=code, name=name)
+
+    obv_raw = analysis.obv_analysis.score
+    vcp_raw = analysis.vcp_analysis.overall_score
+    vcp_analysis = analysis.vcp_analysis
+
+    # Breakout bonus
+    if (
+        not vcp_analysis.detected
+        and vcp_analysis.contraction_count >= 2
+        and vcp_analysis.pattern_score > 40
+        and hasattr(vcp_analysis, 'stage')
+        and str(vcp_analysis.stage) == "VCPStage.BREAKOUT"
+    ):
+        breakout_score = (
+            vcp_analysis.pattern_score * 0.4
+            + vcp_analysis.volume_score * 0.3
+            + vcp_analysis.timing_score * 0.3
+        ) * 0.6
+        vcp_raw = max(vcp_raw, breakout_score)
+
+    # OBV momentum bonus
+    obv_analysis = analysis.obv_analysis
+    if (
+        str(obv_analysis.trend) == "OBVTrend.STRONG_UP"
+        and obv_analysis.confirmation_score > 50
+    ):
+        obv_raw = min(100, obv_raw * 1.15)
+
+    weekly_corr = calc_weekly_correction(df)
+    ma20_trend = get_ma20_trend(df)
+    latest_price = float(df["Close"].iloc[-1])
+    change_20d = calc_recent_change(df, 20)
+
+    obv_v12 = obv_raw / 100 * 50
+    vcp_v12 = vcp_raw / 100 * 50
+
+    if mode == "sc":
+        momentum = calc_momentum_score(df)
+        total = calc_sc_v12(obv_raw, vcp_raw, momentum, weekly_corr)
+    else:
+        momentum = 0.0
+        total = (obv_v12 + vcp_v12) / 100 * 12 + weekly_corr
+        total = max(0, min(12, total))
+
+    signal = get_signal_label(total)
+
+    return {
+        "market": market, "code": code, "name": name,
+        "obv_score": obv_v12, "vcp_score": vcp_v12,
+        "momentum": momentum, "weekly_corr": weekly_corr,
+        "total": total, "signal": signal, "ma20": ma20_trend,
+        "price": latest_price, "change_20d": change_20d,
+    }
+
+
+def print_results(results, mode="standard"):
+    """Print scoring results table."""
+    results.sort(key=lambda x: x["total"], reverse=True)
+
+    is_sc = mode == "sc"
+    title = "SC-V12 Short-Call Scoring" if is_sc else "V12 Technical Scoring"
+
+    print()
+    print(f"{'='*130}")
+    print(f"{title} Report - {date.today()}")
+    if is_sc:
+        print(f"Weights: OBV 50% + VCP 40% + Momentum 10% | Threshold: >= 5.0")
+    print(f"{'='*130}")
+
+    if is_sc:
+        print(f"{'代码':<12} {'名称':<14} {'OBV/50':>8} {'VCP/50':>8} {'动量/50':>8} {'周K修正':>8} {'总分/12':>8} {'信号':<6} {'MA20趋势':<12} {'最新价':>10} {'近20日涨幅%':>12}")
+    else:
+        print(f"{'代码':<12} {'名称':<14} {'OBV/50':>8} {'VCP/50':>8} {'周K修正':>8} {'总分/12':>8} {'信号':<6} {'MA20趋势':<12} {'最新价':>10} {'近20日涨幅%':>12}")
+    print(f"{'-'*130}")
+
+    for r in results:
+        full_code = f"{r['market']}.{r['code']}"
+        if is_sc:
+            marker = " <<" if r['total'] >= 5.0 and r['ma20'] == 'UP' else ""
+            print(
+                f"{full_code:<12} {r['name']:<14} {r['obv_score']:>8.1f} {r['vcp_score']:>8.1f} "
+                f"{r['momentum']:>8.1f} {r['weekly_corr']:>+8.2f} {r['total']:>8.2f} {r['signal']:<6} "
+                f"{r['ma20']:<12} {r['price']:>10.2f} {r['change_20d']:>+12.2f}{marker}"
+            )
+        else:
+            print(
+                f"{full_code:<12} {r['name']:<14} {r['obv_score']:>8.1f} {r['vcp_score']:>8.1f} "
+                f"{r['weekly_corr']:>+8.2f} {r['total']:>8.2f} {r['signal']:<6} {r['ma20']:<12} "
+                f"{r['price']:>10.2f} {r['change_20d']:>+12.2f}"
+            )
+
+    print(f"{'-'*130}")
+    print(f"Total stocks: {len(results)}")
+
+    if is_sc:
+        qualified = [r for r in results if r['total'] >= 5.0 and r['ma20'] == 'UP']
+        print(f"Qualified for short-call (SC-V12 >= 5.0 + MA20 UP): {len(qualified)}")
+        if qualified:
+            picks = ", ".join(f"{r['market']}.{r['code']}({r['total']:.1f})" for r in qualified[:5])
+            print(f"  Top picks: {picks}")
+
+    print()
+    from collections import Counter
+    signal_counts = Counter(r["signal"] for r in results)
+    print("Signal distribution:")
+    for sig in ["极强", "强势", "中性", "转弱", "弱势", "N/A", "ERROR"]:
+        if sig in signal_counts:
+            print(f"  {sig}: {signal_counts[sig]}")
+    print()
+
+
 def main():
+    parser = argparse.ArgumentParser(description="V12 Technical Scoring")
+    parser.add_argument("--sc", action="store_true", help="Short-Call SC-V12 mode (OBV 70%%)")
+    parser.add_argument("--mode", choices=["standard", "sc"], default="standard",
+                        help="Scoring mode: standard (default) or sc (short-call)")
+    args = parser.parse_args()
+
+    mode = "sc" if args.sc else args.mode
+
     stocks = load_watchlist_from_db()
     if not stocks:
         print("[ERROR] No watchlist stocks found in database")
@@ -197,124 +400,20 @@ def main():
     data_provider = DataProvider()
 
     results = []
-
     for market, code, name in stocks:
         try:
-            # Fetch 200 days to have enough for weekly resampling
-            df = data_provider.get_klines_df(market, code, days=200)
-            if df.empty or len(df) < 30:
-                print(f"[WARN] {market}.{code} ({name}): insufficient data ({len(df)} rows), skipping")
-                results.append({
-                    "market": market, "code": code, "name": name,
-                    "obv_score": 0, "vcp_score": 0, "weekly_corr": 0,
-                    "total": 0, "signal": "N/A", "ma20": "N/A",
-                    "price": 0, "change_20d": 0,
-                })
-                continue
-
-            # Run analysis
-            analysis = analyzer.analyze(df, market=market, code=code, name=name)
-
-            # Raw scores from analyzer (0-100 scale)
-            obv_raw = analysis.obv_analysis.score       # 0-100
-            vcp_raw = analysis.vcp_analysis.overall_score  # 0-100
-            vcp_analysis = analysis.vcp_analysis
-
-            # Breakout bonus: if VCP detected contractions but validation
-            # failed because price already broke out above pivot, award
-            # partial VCP credit based on pattern_score + volume_score.
-            # This prevents penalizing stocks that have already confirmed
-            # a breakout (stage=BREAKOUT but detected=False).
-            if (
-                not vcp_analysis.detected
-                and vcp_analysis.contraction_count >= 2
-                and vcp_analysis.pattern_score > 40
-                and hasattr(vcp_analysis, 'stage')
-                and str(vcp_analysis.stage) == "VCPStage.BREAKOUT"
-            ):
-                # Award 60% of what the pattern_score would imply
-                breakout_score = (
-                    vcp_analysis.pattern_score * 0.4
-                    + vcp_analysis.volume_score * 0.3
-                    + vcp_analysis.timing_score * 0.3
-                ) * 0.6
-                vcp_raw = max(vcp_raw, breakout_score)
-
-            # OBV momentum bonus: if OBV trend is STRONG_UP and
-            # confirmation score is high, boost OBV score.
-            obv_analysis = analysis.obv_analysis
-            if (
-                str(obv_analysis.trend) == "OBVTrend.STRONG_UP"
-                and obv_analysis.confirmation_score > 50
-            ):
-                obv_raw = min(100, obv_raw * 1.15)  # +15% bonus
-
-            # Convert to V12 sub-scores (each max 50)
-            obv_v12 = obv_raw / 100 * 50   # 0-50
-            vcp_v12 = vcp_raw / 100 * 50   # 0-50
-
-            # Weekly K correction
-            weekly_corr = calc_weekly_correction(df)
-
-            # Total V12 score
-            total = (obv_v12 + vcp_v12) / 100 * 12 + weekly_corr
-
-            # Clamp to 0-12
-            total = max(0, min(12, total))
-
-            signal = get_signal_label(total)
-            ma20_trend = get_ma20_trend(df)
-            latest_price = float(df["Close"].iloc[-1])
-            change_20d = calc_recent_change(df, 20)
-
-            results.append({
-                "market": market, "code": code, "name": name,
-                "obv_score": obv_v12, "vcp_score": vcp_v12,
-                "weekly_corr": weekly_corr, "total": total,
-                "signal": signal, "ma20": ma20_trend,
-                "price": latest_price, "change_20d": change_20d,
-            })
-
+            result = score_stock(analyzer, data_provider, market, code, name, mode)
+            results.append(result)
         except Exception as e:
             print(f"[ERROR] {market}.{code} ({name}): {e}")
             results.append({
                 "market": market, "code": code, "name": name,
-                "obv_score": 0, "vcp_score": 0, "weekly_corr": 0,
-                "total": 0, "signal": "ERROR", "ma20": "N/A",
-                "price": 0, "change_20d": 0,
+                "obv_score": 0, "vcp_score": 0, "momentum": 0,
+                "weekly_corr": 0, "total": 0, "signal": "ERROR",
+                "ma20": "N/A", "price": 0, "change_20d": 0,
             })
 
-    # Sort by total score descending
-    results.sort(key=lambda x: x["total"], reverse=True)
-
-    # Print table
-    print()
-    print(f"{'='*120}")
-    print(f"V12 Technical Scoring Report - {date.today()}")
-    print(f"{'='*120}")
-    print(f"{'代码':<12} {'名称':<14} {'OBV/50':>8} {'VCP/50':>8} {'周K修正':>8} {'总分/12':>8} {'信号':<6} {'MA20趋势':<12} {'最新价':>10} {'近20日涨幅%':>12}")
-    print(f"{'-'*120}")
-
-    for r in results:
-        full_code = f"{r['market']}.{r['code']}"
-        print(
-            f"{full_code:<12} {r['name']:<14} {r['obv_score']:>8.1f} {r['vcp_score']:>8.1f} "
-            f"{r['weekly_corr']:>+8.2f} {r['total']:>8.2f} {r['signal']:<6} {r['ma20']:<12} "
-            f"{r['price']:>10.2f} {r['change_20d']:>+12.2f}"
-        )
-
-    print(f"{'-'*120}")
-    print(f"Total stocks: {len(results)}")
-    print()
-
-    # Summary by signal
-    from collections import Counter
-    signal_counts = Counter(r["signal"] for r in results)
-    print("Signal distribution:")
-    for sig in ["极强", "强势", "中性", "转弱", "弱势", "N/A", "ERROR"]:
-        if sig in signal_counts:
-            print(f"  {sig}: {signal_counts[sig]}")
-    print()
+    print_results(results, mode)
 
 
 if __name__ == "__main__":
